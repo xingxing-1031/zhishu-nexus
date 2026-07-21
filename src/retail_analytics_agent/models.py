@@ -20,12 +20,12 @@ class Order(BaseModel):
 
 
 class Product(BaseModel):
-    product_id: str= Field(min_length=1)
+    product_id: str = Field(min_length=1)
     name: str = Field(min_length=1)
     category: str = Field(min_length=1)
     unit_price: Decimal = Field(ge=0)
-                          
-                    
+
+
 class RefundStatus(StrEnum):
     REQUESTED = "requested"
     APPROVED = "approved"

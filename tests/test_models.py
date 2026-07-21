@@ -26,7 +26,7 @@ def test_order_accepts_valid_data() -> None:
     assert order.amount == Decimal("99.90")
     assert order.status is OrderStatus.PAID
 
-    
+
 def test_order_rejects_negative_amount() -> None:
     with pytest.raises(ValidationError):
         Order(
@@ -64,7 +64,7 @@ def test_order_rejects_unknown_status() -> None:
 
 
 def test_product_accepts_valid_data() -> None:
-    product=Product(
+    product = Product(
         product_id="001",
         name="phone",
         category="phones",
@@ -77,7 +77,7 @@ def test_product_accepts_valid_data() -> None:
     assert product.unit_price == Decimal("1000")
 
 
-def test_product_rejects_negative_unit_price()-> None:
+def test_product_rejects_negative_unit_price() -> None:
     with pytest.raises(ValidationError):
         Product(
             product_id="001",
@@ -87,8 +87,8 @@ def test_product_rejects_negative_unit_price()-> None:
         )
 
 
-def test_refund_accepts_valid_data()-> None:
-    refund=Refund(
+def test_refund_accepts_valid_data() -> None:
+    refund = Refund(
         refund_id="001",
         order_id="001",
         refund_amount="1",
@@ -101,14 +101,14 @@ def test_refund_accepts_valid_data()-> None:
     assert refund.status is RefundStatus.REQUESTED
 
 
-def test_refund_rejects_zero_amount()-> None:
+def test_refund_rejects_zero_amount() -> None:
     with pytest.raises(ValidationError):
         Refund(
             refund_id="001",
             order_id="001",
             refund_amount="0",
             reason="不想要了",
-            status="requested"
+            status="requested",
         )
 
 
