@@ -21,7 +21,8 @@
 | 2 | [Pydantic 与 pytest](02-pydantic-pytest.md) | 8 分钟 | 已学内容复习 |
 | 3 | [零售 ER 模型与核心 SQL](03-sql-er.md) | 10 分钟 | 已学内容复习 |
 | 4 | [FastAPI、HTTP 与接口测试](04-fastapi-http.md) | 8 分钟 | 已学内容复习 |
-| 5 | [PostgreSQL、Docker 与 pgvector](05-postgresql-docker.md) | 8 分钟 | W2-1 预习 |
+| 5 | [PostgreSQL、Docker 与 pgvector](05-postgresql-docker.md) | 8 分钟 | 已学内容复习 |
+| 6 | [FastAPI 业务查询服务主链路](06-fastapi-query-service.md) | 15 分钟 | W2-2 深度理解 |
 
 ## 复习节奏
 
