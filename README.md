@@ -4,11 +4,11 @@
 
 ## 当前状态
 
-- 当前计划任务：`W2-1` PostgreSQL 表结构、迁移和种子数据
-- 总体进度：`4 / 32` 个项目里程碑
-- 已完成：项目初始化、Pydantic 领域模型、零售 ER 模型、核心 SQL 练习和 FastAPI 基础接口
-- 自动化测试：`15 passed`
-- 当前边界：接口只完成健康检查和请求校验；尚未接入 PostgreSQL、真实 SQL 执行和 Agent 工作流
+- 当前计划任务：`W2-2` 订单、商品、退款和渠道统计查询
+- 总体进度：`5 / 32` 个项目里程碑
+- 已完成：项目初始化、领域模型、零售 ER 模型、核心 SQL、FastAPI 基础接口，以及 PostgreSQL 表结构、迁移和种子数据
+- 自动化验证：Python 回归测试 `15 passed`；数据库验收输出 `W2-1 database verification passed`
+- 当前边界：PostgreSQL 和真实 SQL 已验证，但 FastAPI 尚未连接数据库，也未实现安全查询服务和 Agent 工作流
 
 ## 手机学习
 
@@ -36,6 +36,14 @@
 - 使用 `order_items` 拆分订单与商品的多对多关系，并保存历史成交价快照。
 - 完成 11 个查询块，覆盖连接、筛选、聚合、去重计数、退款统计、空值处理、结果排序与行数限制等核心场景。
 - 设计说明见 [ER_MODEL.md](docs/ER_MODEL.md)，练习 SQL 见 [w1_3_join.sql](docs/sql/w1_3_join.sql)。
+
+### PostgreSQL 开发数据库
+
+- 使用 Docker Compose 运行 PostgreSQL 16 和 pgvector，数据库数据保存在命名数据卷中。
+- 使用版本化迁移创建 `orders`、`products`、`order_items`、`refunds` 四张表，以及金额、状态、外键和索引约束。
+- 使用可重复种子脚本导入 6 个商品、10 个订单、13 条订单明细和 6 条退款；重复执行后行数不变。
+- 在真实 PostgreSQL 中执行 11 个业务查询块，并验证订单总金额与明细计算结果一致。
+- 使用数据库验收脚本检查扩展、表、关键数据场景、金额一致性和非法状态拒绝。
 
 ### FastAPI 接口基础
 
@@ -71,10 +79,29 @@ python -m pip install -e ".[dev]"
 python -m pytest
 ```
 
+启动并验证本地数据库：
+
+```powershell
+Copy-Item .env.example .env
+docker compose up -d
+docker compose cp db/migrations/001_initial_schema.sql postgres:/tmp/001_initial_schema.sql
+docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U retail_user -d retail_analytics -f /tmp/001_initial_schema.sql
+docker compose cp db/seeds/001_demo_data.sql postgres:/tmp/001_demo_data.sql
+docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U retail_user -d retail_analytics -f /tmp/001_demo_data.sql
+docker compose cp db/verification/verify_w2_1.sql postgres:/tmp/verify_w2_1.sql
+docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U retail_user -d retail_analytics -f /tmp/verify_w2_1.sql
+```
+
+首次运行前请把 `.env` 中的示例密码改为本地密码。不要提交 `.env`，也不要使用 `docker compose down -v` 删除数据库数据卷。
+
 ## 目录结构
 
 ```text
 retail-analytics-agent/
+|-- db/
+|   |-- migrations/
+|   |-- seeds/
+|   `-- verification/
 |-- src/retail_analytics_agent/
 |   |-- __init__.py
 |   |-- app.py
@@ -88,16 +115,16 @@ retail-analytics-agent/
 |   |-- ER_MODEL.md
 |   |-- PROJECT_SCOPE.md
 |   `-- UPGRADE_BACKLOG.md
+|-- compose.yaml
 |-- pyproject.toml
 `-- README.md
 ```
 
 ## 下一阶段
 
-1. 使用 PostgreSQL 建表、迁移并导入可复现的种子数据。
-2. 将现有 SQL 放入真实数据库执行并保存验证证据。
-3. 实现订单、商品、退款和渠道统计查询接口。
-4. 实现只读 SQL 校验、查询限制和审计记录。
+1. 实现订单、商品、退款和渠道统计查询服务。
+2. 将 FastAPI 连接 PostgreSQL，并为查询结果补充接口测试。
+3. 实现只读 SQL 校验、查询限制和审计记录。
 
 ## 完成定义
 
