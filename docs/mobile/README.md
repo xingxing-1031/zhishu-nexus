@@ -23,6 +23,7 @@
 | 4 | [FastAPI、HTTP 与接口测试](04-fastapi-http.md) | 8 分钟 | 已学内容复习 |
 | 5 | [PostgreSQL、Docker 与 pgvector](05-postgresql-docker.md) | 8 分钟 | 已学内容复习 |
 | 6 | [FastAPI 业务查询服务主链路](06-fastapi-query-service.md) | 15 分钟 | W2-2 深度理解 |
+| 7 | [SQLGlot 与只读 SQL AST 校验](07-sqlglot-ast-safety.md) | 12 分钟 | W2-3 学习中 |
 
 ## 复习节奏
 
