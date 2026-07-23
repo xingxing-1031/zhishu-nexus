@@ -46,3 +46,28 @@ class AnalysisRequest(BaseModel):
     user_id: str = Field(min_length=1)
     question: str = Field(min_length=1)
     max_rows: int = Field(default=100, ge=1, le=1000)
+
+
+class ChannelSalesSummary(BaseModel):
+    channel: str = Field(min_length=1)
+    paid_order_count: int = Field(ge=0)
+    sales_amount: Decimal = Field(ge=0)
+
+
+class ProductSalesSummary(BaseModel):
+    product_id: str = Field(min_length=1)
+    product_name: str = Field(min_length=1)
+    units_sold: int = Field(ge=0)
+    sales_amount: Decimal = Field(ge=0)
+
+
+class RefundStatusSummary(BaseModel):
+    status: RefundStatus
+    refund_count: int = Field(ge=0)
+    refund_amount: Decimal = Field(ge=0)
+
+
+class OrderStatusSummary(BaseModel):
+    status: OrderStatus
+    order_count: int = Field(ge=0)
+    order_amount: Decimal = Field(ge=0)

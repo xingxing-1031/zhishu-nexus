@@ -4,11 +4,11 @@
 
 ## 当前状态
 
-- 当前计划任务：`W2-2` 订单、商品、退款和渠道统计查询
-- 总体进度：`5 / 32` 个项目里程碑
-- 已完成：项目初始化、领域模型、零售 ER 模型、核心 SQL、FastAPI 基础接口，以及 PostgreSQL 表结构、迁移和种子数据
-- 自动化验证：Python 回归测试 `15 passed`；数据库验收输出 `W2-1 database verification passed`
-- 当前边界：PostgreSQL 和真实 SQL 已验证，但 FastAPI 尚未连接数据库，也未实现安全查询服务和 Agent 工作流
+- 当前计划任务：`W2-3` SQLGlot 只读 SQL AST 校验
+- 总体进度：`6 / 32` 个项目里程碑
+- 已实现：项目初始化、领域模型、零售 ER 模型、核心 SQL、PostgreSQL 数据库、Python 连接层，以及订单、商品、退款和渠道四类 FastAPI 统计接口
+- 自动化验证：Python 回归测试 `38 passed`；四个统计接口连接真实 PostgreSQL 均返回 HTTP `200`
+- 当前边界：固定参数化业务查询已经接入 FastAPI；下一步实现 SQL AST 安全校验，完整安全查询服务和 Agent 工作流仍未完成
 
 ## 手机学习
 
