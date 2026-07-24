@@ -4,11 +4,11 @@
 
 ## 当前状态
 
-- 当前计划任务：`W2-4` 查询超时、行数限制、表字段白名单和审计测试
-- 总体进度：`7 / 32` 个项目里程碑
-- 已实现：项目初始化、领域模型、零售 ER 模型、核心 SQL、PostgreSQL 数据库、Python 连接层、四类 FastAPI 统计接口，以及 SQLGlot 只读 SQL AST 校验
-- 自动化验证：Python 回归测试 `51 passed`；SQLGlot 专项测试 `13 passed`；四个统计接口连接真实 PostgreSQL 均返回 HTTP `200`
-- 当前边界：固定参数化业务查询和第一层 SQL AST 结构校验已经完成；数据库只读权限、表字段白名单、查询超时、结果行数限制和完整审计仍未完成
+- 当前计划任务：`W3-1` 定义 AnalysisState、节点职责和条件边
+- 总体进度：`8 / 32` 个项目里程碑
+- 已实现：项目初始化、领域模型、零售 ER 模型、核心 SQL、PostgreSQL 数据库、四类 FastAPI 统计接口、SQLGlot AST 校验，以及带表字段白名单、强制行数、只读事务、查询超时和独立审计连接的安全查询服务
+- 自动化验证：Python 回归测试 `69 passed`；真实 PostgreSQL 安全查询与 `succeeded`/`rejected` 审计落库验收通过；四个固定统计接口均返回 HTTP `200`
+- 当前边界：不依赖大模型的安全数据查询服务已经完成；尚未接入自然语言生成 SQL、LangGraph 工作流和生产 PostgreSQL 独立只读账号
 
 ## 手机学习
 

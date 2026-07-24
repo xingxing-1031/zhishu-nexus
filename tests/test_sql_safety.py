@@ -3,6 +3,7 @@ from sqlglot import exp
 
 from retail_analytics_agent.sql_safety import (
     SQLSafetyError,
+    prepare_safe_sql,
     validate_read_only_sql,
 )
 
@@ -79,3 +80,84 @@ def test_validate_read_only_sql_rejects_write_hidden_in_cte() -> None:
 def test_validate_read_only_sql_rejects_empty_sql() -> None:
     with pytest.raises(SQLSafetyError, match="SQL must not be empty"):
         validate_read_only_sql("  \n  ")
+
+
+def test_prepare_safe_sql_allows_business_fields_and_adds_limit() -> None:
+    prepared = prepare_safe_sql(
+        "SELECT order_id, amount FROM orders ORDER BY amount DESC",
+        max_rows=25,
+    )
+
+    assert prepared.sql == (
+        "SELECT order_id, amount FROM orders ORDER BY amount DESC LIMIT 25"
+    )
+    assert prepared.tables == ("orders",)
+    assert prepared.max_rows == 25
+
+
+def test_prepare_safe_sql_preserves_smaller_limit() -> None:
+    prepared = prepare_safe_sql(
+        "SELECT order_id FROM orders LIMIT 5",
+        max_rows=20,
+    )
+
+    assert prepared.sql.endswith("LIMIT 5")
+
+
+def test_prepare_safe_sql_caps_larger_limit() -> None:
+    prepared = prepare_safe_sql(
+        "SELECT order_id FROM orders LIMIT 500",
+        max_rows=20,
+    )
+
+    assert prepared.sql.endswith("LIMIT 20")
+
+
+def test_prepare_safe_sql_allows_count_star_and_projection_alias() -> None:
+    prepared = prepare_safe_sql(
+        "SELECT channel, COUNT(*) AS order_count "
+        "FROM orders GROUP BY channel ORDER BY order_count DESC"
+    )
+
+    assert "COUNT(*) AS order_count" in prepared.sql
+
+
+def test_prepare_safe_sql_allows_approved_join_fields() -> None:
+    prepared = prepare_safe_sql(
+        "SELECT o.order_id, p.name "
+        "FROM orders AS o "
+        "JOIN order_items AS oi ON oi.order_id = o.order_id "
+        "JOIN products AS p ON p.product_id = oi.product_id"
+    )
+
+    assert prepared.tables == ("order_items", "orders", "products")
+
+
+@pytest.mark.parametrize(
+    ("sql", "message"),
+    [
+        ("SELECT order_id FROM company_salary", "table is not allowed"),
+        ("SELECT secret_note FROM orders", "column is not allowed"),
+        ("SELECT * FROM orders", "wildcard columns are not allowed"),
+        (
+            "SELECT order_id FROM private.orders",
+            "table is outside the allowed schema",
+        ),
+        ("SELECT pg_sleep(60)", "function is not allowed: pg_sleep"),
+    ],
+)
+def test_prepare_safe_sql_rejects_policy_violations(
+    sql: str,
+    message: str,
+) -> None:
+    with pytest.raises(SQLSafetyError, match=message):
+        prepare_safe_sql(sql)
+
+
+@pytest.mark.parametrize("max_rows", [0, 1001])
+def test_prepare_safe_sql_rejects_invalid_max_rows(max_rows: int) -> None:
+    with pytest.raises(
+        SQLSafetyError,
+        match="max_rows must be between 1 and 1000",
+    ):
+        prepare_safe_sql("SELECT order_id FROM orders", max_rows=max_rows)
