@@ -4,11 +4,11 @@
 
 ## 当前状态
 
-- 当前计划任务：`W3-1` 定义 AnalysisState、节点职责和条件边
-- 总体进度：`8 / 32` 个项目里程碑
-- 已实现：项目初始化、领域模型、零售 ER 模型、核心 SQL、PostgreSQL 数据库、四类 FastAPI 统计接口、SQLGlot AST 校验，以及带表字段白名单、强制行数、只读事务、查询超时和独立审计连接的安全查询服务
-- 自动化验证：Python 回归测试 `69 passed`；真实 PostgreSQL 安全查询与 `succeeded`/`rejected` 审计落库验收通过；四个固定统计接口均返回 HTTP `200`
-- 当前边界：不依赖大模型的安全数据查询服务已经完成；尚未接入自然语言生成 SQL、LangGraph 工作流和生产 PostgreSQL 独立只读账号
+- 当前计划任务：`W3-2` 使用 Pydantic 实现结构化分析计划
+- 总体进度：`9 / 32` 个项目里程碑
+- 已实现：项目初始化、领域模型、零售 ER 模型、核心 SQL、PostgreSQL 数据库、四类 FastAPI 统计接口、SQLGlot AST 校验、安全查询与审计服务，以及 LangGraph 单 Agent 多节点工作流骨架
+- 自动化验证：Python 回归测试 `79 passed`；真实 PostgreSQL 安全查询与 `succeeded`/`rejected` 审计落库验收通过；工作流专项测试覆盖成功、重试、失败和零行结果分支
+- 当前边界：工作流节点仍为可注入的假节点；尚未接入真实大模型、检索/校验/执行工具节点、Checkpointer 和生产 PostgreSQL 独立只读账号
 
 ## 手机学习
 
@@ -51,6 +51,14 @@
 - `POST /analysis/validate`：使用 `AnalysisRequest` 校验分析请求，并自动返回 200 或 422。
 - 使用 TestClient 验证路由、模型默认值、非法行数限制和 JSON 响应。
 - 第一轮代码审查处理了测试依赖弃用 warning，并在格式整理后完成 15 项回归测试。
+
+### LangGraph 工作流骨架
+
+- 使用 `AnalysisState` 保存单次分析任务的请求、计划、证据、SQL、执行结果、重试计数和轨迹。
+- 使用七个可注入节点组织计划、检索、SQL 生成、校验、执行、总结和失败处理。
+- 使用普通边固定主链路，使用条件边处理 SQL 重新生成、执行成功和执行失败。
+- 将零行查询结果视为成功，仅在 `execution_error` 存在时进入失败节点。
+- 使用固定输出的假节点验证图结构；当前不宣称已经接入大模型或真实工具节点。
 
 ## 项目范围
 
@@ -105,11 +113,13 @@ retail-analytics-agent/
 |-- src/retail_analytics_agent/
 |   |-- __init__.py
 |   |-- app.py
-|   `-- models.py
+|   |-- models.py
+|   `-- workflow.py
 |-- tests/
 |   |-- test_app.py
 |   |-- test_models.py
-|   `-- test_smoke.py
+|   |-- test_smoke.py
+|   `-- test_workflow.py
 |-- docs/
 |   |-- sql/
 |   |-- ER_MODEL.md
@@ -122,9 +132,9 @@ retail-analytics-agent/
 
 ## 下一阶段
 
-1. 实现订单、商品、退款和渠道统计查询服务。
-2. 将 FastAPI 连接 PostgreSQL，并为查询结果补充接口测试。
-3. 实现只读 SQL 校验、查询限制和审计记录。
+1. 使用 Pydantic 定义结构化分析计划。
+2. 将检索、安全校验和查询服务封装为真实工具节点。
+3. 接入 PostgreSQL Checkpointer 并验证任务中断恢复。
 
 ## 完成定义
 
