@@ -2,7 +2,7 @@ from collections.abc import Callable
 
 import pytest
 
-from retail_analytics_agent.models import AnalysisRequest
+from retail_analytics_agent.models import AnalysisPlan, AnalysisRequest
 from retail_analytics_agent.workflow import (
     EXECUTE_SQL_NODE,
     FAIL_NODE,
@@ -33,7 +33,21 @@ def _base_nodes(
 ) -> WorkflowNodes:
     def plan(state: AnalysisState) -> dict[str, object]:
         return {
-            "plan": {"metric": "channel_sales"},
+            "plan": AnalysisPlan(
+                analysis_goal="统计各渠道销售额",
+                metrics=["sales_amount"],
+                dimensions=["channel"],
+                filters=[
+                    {
+                        "field": "order_status",
+                        "operator": "equals",
+                        "value": "paid",
+                    }
+                ],
+                time_range={"days": 30},
+                sort=[{"field": "sales_amount", "direction": "descending"}],
+                limit=100,
+            ),
             "trace": ["plan"],
         }
 
@@ -114,6 +128,7 @@ def test_analysis_graph_follows_success_path() -> None:
     result = graph.invoke(create_initial_state(_request()))
 
     assert result["final_answer"] == "返回 1 行结果"
+    assert isinstance(result["plan"], AnalysisPlan)
     assert result["trace"] == [
         "plan",
         "retrieve",

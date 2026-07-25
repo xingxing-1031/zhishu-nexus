@@ -1,7 +1,8 @@
 from decimal import Decimal
 from enum import StrEnum
+from typing import Self
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class OrderStatus(StrEnum):
@@ -46,6 +47,106 @@ class AnalysisRequest(BaseModel):
     user_id: str = Field(min_length=1)
     question: str = Field(min_length=1)
     max_rows: int = Field(default=100, ge=1, le=1000)
+
+
+class AnalysisMetric(StrEnum):
+    SALES_AMOUNT = "sales_amount"
+    ORDER_COUNT = "order_count"
+    UNITS_SOLD = "units_sold"
+    REFUND_AMOUNT = "refund_amount"
+    REFUND_COUNT = "refund_count"
+    AVERAGE_ORDER_VALUE = "average_order_value"
+
+
+class AnalysisDimension(StrEnum):
+    CHANNEL = "channel"
+    PRODUCT = "product"
+    CATEGORY = "category"
+    ORDER_STATUS = "order_status"
+    REFUND_STATUS = "refund_status"
+    DAY = "day"
+
+
+class AnalysisFilterField(StrEnum):
+    CHANNEL = "channel"
+    ORDER_STATUS = "order_status"
+    PRODUCT_ID = "product_id"
+    CATEGORY = "category"
+    REFUND_STATUS = "refund_status"
+
+
+class AnalysisFilterOperator(StrEnum):
+    EQUALS = "equals"
+    IN = "in"
+
+
+class SortDirection(StrEnum):
+    ASCENDING = "ascending"
+    DESCENDING = "descending"
+
+
+class _StrictPlanModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
+PlanFilterValue = str | int | Decimal | bool
+
+
+class AnalysisFilter(_StrictPlanModel):
+    field: AnalysisFilterField
+    operator: AnalysisFilterOperator = AnalysisFilterOperator.EQUALS
+    value: PlanFilterValue | list[PlanFilterValue]
+
+    @model_validator(mode="after")
+    def validate_operator_value(self) -> Self:
+        value_is_list = isinstance(self.value, list)
+        if self.operator is AnalysisFilterOperator.IN:
+            if not value_is_list or not self.value:
+                raise ValueError("in operator requires a non-empty list value")
+        elif value_is_list:
+            raise ValueError("equals operator requires a scalar value")
+        return self
+
+
+class RelativeTimeRange(_StrictPlanModel):
+    days: int = Field(ge=1, le=365)
+
+
+class AnalysisSort(_StrictPlanModel):
+    field: AnalysisMetric | AnalysisDimension
+    direction: SortDirection = SortDirection.DESCENDING
+
+
+class AnalysisPlan(_StrictPlanModel):
+    analysis_goal: str = Field(min_length=1, max_length=500)
+    metrics: list[AnalysisMetric] = Field(min_length=1, max_length=5)
+    dimensions: list[AnalysisDimension] = Field(default_factory=list, max_length=5)
+    filters: list[AnalysisFilter] = Field(default_factory=list, max_length=10)
+    time_range: RelativeTimeRange | None = None
+    sort: list[AnalysisSort] = Field(default_factory=list, max_length=5)
+    limit: int = Field(default=100, ge=1, le=1000)
+
+    @model_validator(mode="after")
+    def validate_selected_fields(self) -> Self:
+        if len(set(self.metrics)) != len(self.metrics):
+            raise ValueError("metrics must not contain duplicates")
+        if len(set(self.dimensions)) != len(self.dimensions):
+            raise ValueError("dimensions must not contain duplicates")
+
+        selected_fields = {
+            item.value for item in [*self.metrics, *self.dimensions]
+        }
+        invalid_sort_fields = [
+            item.field.value
+            for item in self.sort
+            if item.field.value not in selected_fields
+        ]
+        if invalid_sort_fields:
+            raise ValueError(
+                "sort fields must be selected metrics or dimensions: "
+                + ", ".join(invalid_sort_fields)
+            )
+        return self
 
 
 class ChannelSalesSummary(BaseModel):

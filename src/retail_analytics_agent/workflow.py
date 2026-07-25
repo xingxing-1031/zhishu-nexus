@@ -5,7 +5,7 @@ from typing import Annotated, Protocol, TypedDict
 
 from langgraph.graph import END, START, StateGraph
 
-from retail_analytics_agent.models import AnalysisRequest
+from retail_analytics_agent.models import AnalysisPlan, AnalysisRequest
 
 
 class AnalysisState(TypedDict):
@@ -13,7 +13,7 @@ class AnalysisState(TypedDict):
     user_id: str
     question: str
     max_rows: int
-    plan: dict[str, object] | None
+    plan: AnalysisPlan | None
     retrieved_context: list[str]
     generated_sql: str | None
     sql_valid: bool | None
