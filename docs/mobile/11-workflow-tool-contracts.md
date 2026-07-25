@@ -122,3 +122,45 @@ SQLGlotValidationTool.validate()
 8. `source_id` 对可审计 Agent 有什么价值？
 9. 当前工具为什么不是 MCP？
 10. 当前测试为什么仍不能证明真实模型效果？
+
+## 9. 自测题标准答案
+
+### 1. Node、工具契约、适配器和底层实现分别负责什么？
+
+Node 读取和更新 State、组织工作流；工具契约规定方法的输入输出；适配器把统一契约连接到现有代码；底层实现真正完成 SQLGlot 校验、数据库查询、事务和审计。
+
+### 2. 为什么 `SQLValidationTool` 中的 `...` 不能完成校验？
+
+`SQLValidationTool` 是 `Protocol`，`...` 只表示这里没有具体方法实现。它只规定校验工具必须拥有怎样的 `validate()` 方法，真正功能由符合该契约的实现类提供。
+
+### 3. `SQLGlotValidationTool` 最终调用哪个函数完成 SQL 安全检查？
+
+它先调用 `prepare_audited_sql()`，该函数再调用 `prepare_safe_sql()`。真正使用 SQLGlot 解析 AST、检查只读结构、访问白名单和强制行数限制的是 `prepare_safe_sql()`。
+
+### 4. 为什么执行工具同时接收 `original_sql` 和 `prepared_sql`？
+
+`original_sql` 用于审计模型最初生成了什么，`prepared_sql` 是经过安全校验和行数限制后真正交给 PostgreSQL 的版本。两者同时保存可以比较模型输出与实际执行内容。
+
+### 5. `DELETE FROM orders` 被拒绝后，State 哪些字段变化？
+
+`prepared_sql=None`、`sql_valid=False`、`sql_validation_error` 保存拒绝原因、`retry_count` 增加 1，`trace` 追加 `validate_sql`。`generated_sql` 仍保留原始 SQL。条件边随后选择重新生成或进入失败节点。
+
+### 6. `rejected`、`failed` 和 `succeeded` 有什么区别？
+
+`rejected` 表示安全策略未通过，业务查询没有执行；`failed` 表示查询已经开始，但因超时或数据库错误没有正常完成；`succeeded` 表示查询正常完成并产生结果集。
+
+### 7. 为什么正常返回 0 行仍进入 `summarize`？
+
+零行表示查询正常完成，只是没有记录符合条件。此时 `execution_error=None`、`query_rows=[]`，所以进入 `summarize`；超时或数据库错误才进入 `fail`。
+
+### 8. `source_id` 对可审计 Agent 有什么价值？
+
+`source_id` 表示检索内容来自哪个指标定义、Schema 或业务规则。它让系统能够解释 SQL 的生成依据，在结果有争议时回溯知识来源，并定位错误的业务定义。
+
+### 9. 当前工具为什么不是 MCP？
+
+当前工具是同一 Python 项目内部直接调用的接口和适配器，没有通过 MCP 协议对外提供服务。只有需要让外部 Agent、客户端或进程统一调用时，才有必要再增加 MCP 层。
+
+### 10. 当前测试为什么仍不能证明真实模型效果？
+
+测试使用固定输入和假工具，可以证明契约、State 更新、条件分支、错误转换以及现有 SQL/数据库适配器正确，但尚未调用真实大模型和真实 RAG，因此不能证明自然语言理解、检索质量和 SQL 生成质量。
