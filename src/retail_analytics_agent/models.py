@@ -149,6 +149,13 @@ class AnalysisPlan(_StrictPlanModel):
         return self
 
 
+class RetrievalEvidence(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    source_id: str = Field(min_length=1)
+    content: str = Field(min_length=1)
+
+
 class ChannelSalesSummary(BaseModel):
     channel: str = Field(min_length=1)
     paid_order_count: int = Field(ge=0)

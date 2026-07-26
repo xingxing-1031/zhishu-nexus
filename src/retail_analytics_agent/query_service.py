@@ -33,6 +33,75 @@ class SafeQueryResult:
     audit: QueryAuditRecord
 
 
+def prepare_audited_sql(
+    audit_sink: AuditSink,
+    *,
+    request_id: str,
+    user_id: str,
+    sql: str,
+    max_rows: int = 100,
+) -> PreparedSQL:
+    """Prepare one generated query and audit policy rejections."""
+    started_at = perf_counter()
+
+    try:
+        return prepare_safe_sql(sql, max_rows=max_rows)
+    except (SQLSafetyError, ValueError) as exc:
+        audit = _build_audit(
+            request_id=request_id,
+            user_id=user_id,
+            original_sql=sql,
+            prepared=None,
+            status=QueryAuditStatus.REJECTED,
+            reason=str(exc),
+            row_count=None,
+            started_at=started_at,
+        )
+        audit_sink.record(audit)
+        raise
+
+
+def execute_prepared_query(
+    connection: DatabaseConnection,
+    audit_sink: AuditSink,
+    *,
+    request_id: str,
+    user_id: str,
+    original_sql: str,
+    prepared_sql: PreparedSQL,
+    statement_timeout_ms: int = 2_000,
+) -> SafeQueryResult:
+    """Execute an already validated query and preserve its original SQL."""
+    started_at = perf_counter()
+
+    try:
+        _validate_timeout(statement_timeout_ms)
+    except ValueError as exc:
+        audit = _build_audit(
+            request_id=request_id,
+            user_id=user_id,
+            original_sql=original_sql,
+            prepared=prepared_sql,
+            status=QueryAuditStatus.REJECTED,
+            reason=str(exc),
+            row_count=None,
+            started_at=started_at,
+        )
+        audit_sink.record(audit)
+        raise
+
+    return _execute_prepared_query(
+        connection,
+        audit_sink,
+        request_id=request_id,
+        user_id=user_id,
+        original_sql=original_sql,
+        prepared=prepared_sql,
+        statement_timeout_ms=statement_timeout_ms,
+        started_at=started_at,
+    )
+
+
 def execute_safe_query(
     connection: DatabaseConnection,
     audit_sink: AuditSink,
@@ -64,6 +133,29 @@ def execute_safe_query(
         audit_sink.record(audit)
         raise
 
+    return _execute_prepared_query(
+        connection,
+        audit_sink,
+        request_id=request_id,
+        user_id=user_id,
+        original_sql=sql,
+        prepared=prepared,
+        statement_timeout_ms=statement_timeout_ms,
+        started_at=started_at,
+    )
+
+
+def _execute_prepared_query(
+    connection: DatabaseConnection,
+    audit_sink: AuditSink,
+    *,
+    request_id: str,
+    user_id: str,
+    original_sql: str,
+    prepared: PreparedSQL,
+    statement_timeout_ms: int,
+    started_at: float,
+) -> SafeQueryResult:
     try:
         connection.execute(SET_TRANSACTION_READ_ONLY_SQL)
         connection.execute(
@@ -77,7 +169,7 @@ def execute_safe_query(
         audit = _build_audit(
             request_id=request_id,
             user_id=user_id,
-            original_sql=sql,
+            original_sql=original_sql,
             prepared=prepared,
             status=QueryAuditStatus.FAILED,
             reason=f"{type(exc).__name__}: {exc}",
@@ -90,7 +182,7 @@ def execute_safe_query(
     audit = _build_audit(
         request_id=request_id,
         user_id=user_id,
-        original_sql=sql,
+        original_sql=original_sql,
         prepared=prepared,
         status=QueryAuditStatus.SUCCEEDED,
         reason=None,

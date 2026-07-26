@@ -2,7 +2,11 @@ from collections.abc import Callable
 
 import pytest
 
-from retail_analytics_agent.models import AnalysisPlan, AnalysisRequest
+from retail_analytics_agent.models import (
+    AnalysisPlan,
+    AnalysisRequest,
+    RetrievalEvidence,
+)
 from retail_analytics_agent.workflow import (
     EXECUTE_SQL_NODE,
     FAIL_NODE,
@@ -53,7 +57,12 @@ def _base_nodes(
 
     def retrieve(state: AnalysisState) -> dict[str, object]:
         return {
-            "retrieved_context": ["orders.channel", "orders.amount"],
+            "retrieved_context": [
+                RetrievalEvidence(
+                    source_id="schema.orders",
+                    content="orders.channel, orders.amount",
+                )
+            ],
             "trace": ["retrieve"],
         }
 
@@ -113,6 +122,7 @@ def test_create_initial_state_sets_request_and_workflow_defaults() -> None:
     assert state["retry_count"] == 0
     assert state["max_retries"] == 3
     assert state["generated_sql"] is None
+    assert state["prepared_sql"] is None
     assert state["query_rows"] == []
     assert state["trace"] == []
 
