@@ -27,6 +27,7 @@
 | 8 | [安全查询的四道执行防线](08-safe-query-guardrails.md) | 15 分钟 | W2-4 已完成 |
 | 9 | [LangGraph 的 State、Node 与 Edge](09-langgraph-state-nodes-edges.md) | 15 分钟 | W3-1 已完成 |
 | 10 | [Pydantic 结构化分析计划](10-structured-analysis-plan.md) | 15 分钟 | W3-2 已完成 |
+| 11 | [工作流工具契约](11-workflow-tool-contracts.md) | 15 分钟 | W3-3 已完成 |
 
 ## 复习节奏
 
