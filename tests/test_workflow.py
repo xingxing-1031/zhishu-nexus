@@ -1,6 +1,7 @@
 from collections.abc import Callable
 
 import pytest
+from langgraph.checkpoint.memory import InMemorySaver
 
 from retail_analytics_agent.models import (
     AnalysisPlan,
@@ -16,6 +17,7 @@ from retail_analytics_agent.workflow import (
     WorkflowNodes,
     build_analysis_graph,
     create_initial_state,
+    create_thread_config,
     route_after_sql_execution,
     route_after_sql_validation,
 )
@@ -132,6 +134,17 @@ def test_create_initial_state_rejects_negative_max_retries() -> None:
         create_initial_state(_request(), max_retries=-1)
 
 
+def test_create_thread_config_uses_stable_workflow_identity() -> None:
+    assert create_thread_config("REQ-001") == {
+        "configurable": {"thread_id": "REQ-001"}
+    }
+
+
+def test_create_thread_config_rejects_empty_identity() -> None:
+    with pytest.raises(ValueError, match="thread_id must not be empty"):
+        create_thread_config("   ")
+
+
 def test_analysis_graph_follows_success_path() -> None:
     graph = build_analysis_graph(_base_nodes())
 
@@ -147,6 +160,62 @@ def test_analysis_graph_follows_success_path() -> None:
         "execute_sql",
         "summarize",
     ]
+
+
+def test_checkpoint_resume_continues_without_repeating_completed_nodes() -> None:
+    checkpointer = InMemorySaver()
+    graph = build_analysis_graph(
+        _base_nodes(),
+        checkpointer=checkpointer,
+        interrupt_before=[EXECUTE_SQL_NODE],
+    )
+    config = create_thread_config("REQ-CHECKPOINT-001")
+
+    interrupted = graph.invoke(create_initial_state(_request()), config)
+
+    assert interrupted["final_answer"] is None
+    assert interrupted["trace"] == [
+        "plan",
+        "retrieve",
+        "generate_sql",
+        "validate_sql",
+    ]
+    assert graph.get_state(config).next == (EXECUTE_SQL_NODE,)
+
+    resumed = graph.invoke(None, config)
+
+    assert resumed["final_answer"] == "返回 1 行结果"
+    assert resumed["trace"] == [
+        "plan",
+        "retrieve",
+        "generate_sql",
+        "validate_sql",
+        "execute_sql",
+        "summarize",
+    ]
+
+
+def test_checkpoint_threads_keep_independent_request_state() -> None:
+    checkpointer = InMemorySaver()
+    graph = build_analysis_graph(_base_nodes(), checkpointer=checkpointer)
+    first_config = create_thread_config("REQ-THREAD-001")
+    second_config = create_thread_config("REQ-THREAD-002")
+    second_request = AnalysisRequest(
+        request_id="REQ-002",
+        user_id="USER-001",
+        question="最近7天商品销量是多少？",
+        max_rows=10,
+    )
+
+    graph.invoke(create_initial_state(_request()), first_config)
+    graph.invoke(create_initial_state(second_request), second_config)
+
+    first_state = graph.get_state(first_config).values
+    second_state = graph.get_state(second_config).values
+    assert first_state["request_id"] == "REQ-001"
+    assert first_state["question"] == "最近30天各渠道销售额是多少？"
+    assert second_state["request_id"] == "REQ-002"
+    assert second_state["question"] == "最近7天商品销量是多少？"
 
 
 def test_analysis_graph_retries_sql_then_succeeds() -> None:

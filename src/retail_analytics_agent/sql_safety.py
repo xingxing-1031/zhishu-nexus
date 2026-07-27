@@ -1,5 +1,4 @@
-from dataclasses import dataclass
-
+from pydantic import BaseModel, ConfigDict, Field
 from sqlglot import exp, parse
 from sqlglot.errors import ParseError
 
@@ -70,11 +69,12 @@ _FORBIDDEN_FUNCTIONS = frozenset(
 MAX_QUERY_ROWS = 1000
 
 
-@dataclass(frozen=True, slots=True)
-class PreparedSQL:
+class PreparedSQL(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
     sql: str
     tables: tuple[str, ...]
-    max_rows: int
+    max_rows: int = Field(ge=1, le=MAX_QUERY_ROWS)
 
 
 def validate_read_only_sql(sql: str) -> exp.Expression:

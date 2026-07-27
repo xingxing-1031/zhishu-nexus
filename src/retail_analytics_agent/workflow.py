@@ -3,6 +3,8 @@ from dataclasses import dataclass
 from operator import add
 from typing import Annotated, Protocol, TypedDict
 
+from langchain_core.runnables import RunnableConfig
+from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph import END, START, StateGraph
 
 from retail_analytics_agent.models import (
@@ -44,7 +46,11 @@ AnalysisNode = Callable[[AnalysisState], AnalysisStateUpdate]
 
 
 class CompiledAnalysisGraph(Protocol):
-    def invoke(self, state: AnalysisState) -> AnalysisState: ...
+    def invoke(
+        self,
+        state: AnalysisState | None,
+        config: RunnableConfig | None = None,
+    ) -> AnalysisState: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -93,6 +99,13 @@ def create_initial_state(
         max_retries=max_retries,
         trace=[],
     )
+
+
+def create_thread_config(thread_id: str) -> RunnableConfig:
+    if not thread_id.strip():
+        raise ValueError("thread_id must not be empty")
+
+    return {"configurable": {"thread_id": thread_id}}
 
 
 def create_retrieve_node(tool: RetrievalTool) -> AnalysisNode:
@@ -195,7 +208,12 @@ def route_after_sql_execution(state: AnalysisState) -> str:
     return SUMMARIZE_NODE
 
 
-def build_analysis_graph(nodes: WorkflowNodes) -> CompiledAnalysisGraph:
+def build_analysis_graph(
+    nodes: WorkflowNodes,
+    *,
+    checkpointer: BaseCheckpointSaver[object] | None = None,
+    interrupt_before: list[str] | None = None,
+) -> CompiledAnalysisGraph:
     graph = StateGraph(AnalysisState)
 
     graph.add_node(PLAN_NODE, nodes.plan)
@@ -230,4 +248,7 @@ def build_analysis_graph(nodes: WorkflowNodes) -> CompiledAnalysisGraph:
     graph.add_edge(SUMMARIZE_NODE, END)
     graph.add_edge(FAIL_NODE, END)
 
-    return graph.compile()
+    return graph.compile(
+        checkpointer=checkpointer,
+        interrupt_before=interrupt_before,
+    )
