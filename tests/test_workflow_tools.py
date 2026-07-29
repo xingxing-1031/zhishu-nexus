@@ -21,6 +21,8 @@ from retail_analytics_agent.workflow import (
     create_sql_validation_node,
 )
 from retail_analytics_agent.workflow_tools import (
+    CatalogRetrievalTool,
+    CatalogRetrievalToolError,
     SQLExecutionToolError,
     SQLGlotValidationTool,
     SQLValidationToolError,
@@ -89,6 +91,116 @@ def test_retrieve_node_requires_a_validated_plan() -> None:
         match="analysis plan is required before retrieval",
     ):
         create_retrieve_node(Mock())(state)
+
+
+def test_catalog_retrieval_returns_product_sales_evidence() -> None:
+    plan = AnalysisPlan(
+        analysis_goal="按商品统计销售额",
+        metrics=["sales_amount"],
+        dimensions=["product"],
+    )
+
+    evidence = CatalogRetrievalTool().retrieve(plan)
+
+    assert [item.source_id for item in evidence] == [
+        "metric.sales_amount.v1",
+        "schema.orders",
+        "schema.products",
+        "schema.order_items",
+        "schema.join.orders.order_items",
+        "schema.join.products.order_items",
+    ]
+
+
+def test_catalog_retrieval_returns_only_refund_status_evidence() -> None:
+    plan = AnalysisPlan(
+        analysis_goal="按退款状态统计退款金额",
+        metrics=["refund_amount"],
+        dimensions=["refund_status"],
+    )
+
+    evidence = CatalogRetrievalTool().retrieve(plan)
+
+    assert [item.source_id for item in evidence] == [
+        "metric.refund_amount.v1",
+        "schema.refunds",
+    ]
+
+
+def test_catalog_retrieval_deduplicates_shared_schema_evidence() -> None:
+    plan = AnalysisPlan(
+        analysis_goal="按渠道统计销售额和销量",
+        metrics=["sales_amount", "units_sold"],
+        dimensions=["channel"],
+    )
+
+    evidence = CatalogRetrievalTool().retrieve(plan)
+    source_ids = [item.source_id for item in evidence]
+
+    assert source_ids == [
+        "metric.sales_amount.v1",
+        "metric.units_sold.v1",
+        "schema.orders",
+        "schema.order_items",
+        "schema.join.orders.order_items",
+    ]
+    assert len(source_ids) == len(set(source_ids))
+
+
+def test_catalog_retrieval_uses_filter_tables_and_approved_join_path() -> None:
+    plan = AnalysisPlan(
+        analysis_goal="统计指定商品的订单数",
+        metrics=["order_count"],
+        filters=[
+            {
+                "field": "product_id",
+                "operator": "equals",
+                "value": "P001",
+            }
+        ],
+    )
+
+    evidence = CatalogRetrievalTool().retrieve(plan)
+
+    assert [item.source_id for item in evidence] == [
+        "metric.order_count.v1",
+        "schema.orders",
+        "schema.products",
+        "schema.order_items",
+        "schema.join.orders.order_items",
+        "schema.join.products.order_items",
+    ]
+
+
+def test_catalog_retrieval_rejects_unsupported_metric_dimension() -> None:
+    plan = AnalysisPlan(
+        analysis_goal="按商品统计退款金额",
+        metrics=["refund_amount"],
+        dimensions=["product"],
+    )
+
+    with pytest.raises(
+        CatalogRetrievalToolError,
+        match="refund_amount does not support dimensions: product",
+    ):
+        CatalogRetrievalTool().retrieve(plan)
+
+
+def test_real_catalog_retrieval_node_writes_evidence_to_state() -> None:
+    state = create_initial_state(_request())
+    state["plan"] = _plan()
+
+    update = create_retrieve_node(CatalogRetrievalTool())(state)
+
+    assert [
+        item.source_id for item in update["retrieved_context"]
+    ] == [
+        "metric.sales_amount.v1",
+        "schema.orders",
+        "schema.order_items",
+        "schema.join.orders.order_items",
+    ]
+    assert update["trace"] == ["retrieve"]
 
 
 def test_validation_node_stores_prepared_sql() -> None:

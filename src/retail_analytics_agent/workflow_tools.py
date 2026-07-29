@@ -1,9 +1,22 @@
+from collections import deque
 from dataclasses import dataclass
 from typing import Protocol
 
 from retail_analytics_agent.audit import AuditSink
 from retail_analytics_agent.database import DatabaseConnection
-from retail_analytics_agent.models import AnalysisPlan, RetrievalEvidence
+from retail_analytics_agent.knowledge import (
+    DEFAULT_METRIC_CATALOG,
+    DEFAULT_SCHEMA_CATALOG,
+    MetricCatalog,
+    MetricDefinition,
+    SchemaCatalog,
+)
+from retail_analytics_agent.models import (
+    AnalysisDimension,
+    AnalysisFilterField,
+    AnalysisPlan,
+    RetrievalEvidence,
+)
 from retail_analytics_agent.query_service import (
     SafeQueryResult,
     execute_prepared_query,
@@ -18,6 +31,10 @@ class SQLValidationToolError(ValueError):
 
 class SQLExecutionToolError(RuntimeError):
     """Stable workflow-facing error for database execution failures."""
+
+
+class CatalogRetrievalToolError(ValueError):
+    """Stable workflow-facing error for unsupported catalog retrieval."""
 
 
 class RetrievalTool(Protocol):
@@ -44,6 +61,149 @@ class SQLExecutionTool(Protocol):
         original_sql: str,
         prepared_sql: PreparedSQL,
     ) -> SafeQueryResult: ...
+
+
+_DIMENSION_TABLES = {
+    AnalysisDimension.CHANNEL: "orders",
+    AnalysisDimension.PRODUCT: "products",
+    AnalysisDimension.CATEGORY: "products",
+    AnalysisDimension.ORDER_STATUS: "orders",
+    AnalysisDimension.REFUND_STATUS: "refunds",
+}
+
+_FILTER_TABLES = {
+    AnalysisFilterField.CHANNEL: "orders",
+    AnalysisFilterField.ORDER_STATUS: "orders",
+    AnalysisFilterField.PRODUCT_ID: "products",
+    AnalysisFilterField.CATEGORY: "products",
+    AnalysisFilterField.REFUND_STATUS: "refunds",
+}
+
+
+@dataclass(frozen=True, slots=True)
+class CatalogRetrievalTool:
+    """Retrieve the minimum catalog evidence required by an analysis plan."""
+
+    metric_catalog: MetricCatalog = DEFAULT_METRIC_CATALOG
+    schema_catalog: SchemaCatalog = DEFAULT_SCHEMA_CATALOG
+
+    def retrieve(self, plan: AnalysisPlan) -> list[RetrievalEvidence]:
+        metric_definitions = [
+            self.metric_catalog.get(metric) for metric in plan.metrics
+        ]
+        self._validate_dimensions(plan, metric_definitions)
+
+        required_tables = {
+            table_name
+            for definition in metric_definitions
+            for table_name in definition.source_tables
+        }
+        required_tables.update(
+            _DIMENSION_TABLES[dimension]
+            for dimension in plan.dimensions
+            if dimension in _DIMENSION_TABLES
+        )
+        required_tables.update(
+            _FILTER_TABLES[item.field]
+            for item in plan.filters
+            if item.field in _FILTER_TABLES
+        )
+
+        join_indexes = self._find_required_join_indexes(required_tables)
+        selected_tables = set(required_tables)
+        for index in join_indexes:
+            join = self.schema_catalog.joins[index]
+            selected_tables.update((join.left_table, join.right_table))
+
+        evidence = [
+            definition.to_evidence() for definition in metric_definitions
+        ]
+        evidence.extend(
+            table.to_evidence()
+            for table in self.schema_catalog.tables
+            if table.table_name in selected_tables
+        )
+        evidence.extend(
+            join.to_evidence()
+            for index, join in enumerate(self.schema_catalog.joins)
+            if index in join_indexes
+        )
+        return evidence
+
+    def _validate_dimensions(
+        self,
+        plan: AnalysisPlan,
+        metric_definitions: list[MetricDefinition],
+    ) -> None:
+        for definition in metric_definitions:
+            unsupported = set(plan.dimensions) - set(
+                definition.supported_dimensions
+            )
+            if unsupported:
+                names = ", ".join(sorted(item.value for item in unsupported))
+                raise CatalogRetrievalToolError(
+                    f"metric {definition.metric.value} does not support "
+                    f"dimensions: {names}"
+                )
+
+    def _find_required_join_indexes(self, required_tables: set[str]) -> set[int]:
+        if not required_tables:
+            return set()
+
+        known_tables = {
+            table.table_name for table in self.schema_catalog.tables
+        }
+        unknown_tables = required_tables - known_tables
+        if unknown_tables:
+            raise CatalogRetrievalToolError(
+                "schema tables not found: " + ", ".join(sorted(unknown_tables))
+            )
+
+        table_order = [
+            table.table_name
+            for table in self.schema_catalog.tables
+            if table.table_name in required_tables
+        ]
+        connected = {table_order[0]}
+        selected_joins: set[int] = set()
+
+        for target in table_order[1:]:
+            if target in connected:
+                continue
+            path = self._shortest_join_path(connected, target)
+            if path is None:
+                raise CatalogRetrievalToolError(
+                    f"no approved join path to schema table: {target}"
+                )
+            for index in path:
+                join = self.schema_catalog.joins[index]
+                selected_joins.add(index)
+                connected.update((join.left_table, join.right_table))
+
+        return selected_joins
+
+    def _shortest_join_path(
+        self,
+        connected: set[str],
+        target: str,
+    ) -> list[int] | None:
+        queue = deque((table_name, []) for table_name in connected)
+        visited = set(connected)
+        while queue:
+            table_name, path = queue.popleft()
+            if table_name == target:
+                return path
+            for index, join in enumerate(self.schema_catalog.joins):
+                if join.left_table == table_name:
+                    neighbor = join.right_table
+                elif join.right_table == table_name:
+                    neighbor = join.left_table
+                else:
+                    continue
+                if neighbor not in visited:
+                    visited.add(neighbor)
+                    queue.append((neighbor, [*path, index]))
+        return None
 
 
 @dataclass(slots=True)
