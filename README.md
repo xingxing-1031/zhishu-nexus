@@ -4,11 +4,11 @@
 
 ## 当前状态
 
-- 当前计划任务：`W3-3` 封装检索、校验和执行工具契约
-- 总体进度：`10 / 32` 个项目里程碑
-- 已实现：项目初始化、领域模型、零售 ER 模型、核心 SQL、PostgreSQL 数据库、四类 FastAPI 统计接口、SQLGlot AST 校验、安全查询与审计服务、LangGraph 工作流骨架，以及 Pydantic 结构化分析计划
-- 自动化验证：Python 回归测试 `95 passed`；真实 PostgreSQL 安全查询与 `succeeded`/`rejected` 审计落库验收通过；分析计划测试覆盖枚举、字段边界、跨字段规则和 State 传递
-- 当前边界：计划与其他工作流节点仍为可注入的假节点；尚未接入真实大模型、检索/校验/执行工具节点、Checkpointer 和生产 PostgreSQL 独立只读账号
+- 当前计划任务：`W4-2` 按分析计划检索指标、Schema 和关联证据
+- 总体进度：`13 / 32` 个项目里程碑
+- 已实现：PostgreSQL 业务库与统计接口、SQLGlot 只读安全校验、查询审计、LangGraph 工作流、结构化分析计划、工具适配器、PostgreSQL Checkpointer，以及版本化指标和 Schema 目录
+- 自动化验证：Python 回归测试 `115 passed`；真实 PostgreSQL 指标验收覆盖 6 个业务指标；跨连接 Checkpointer 恢复、安全查询和审计验收均已通过
+- 当前边界：指标和 Schema 目录尚未接入真实检索节点；真实大模型、端到端 SQL 生成、生产 PostgreSQL 独立只读账号和完整评测集尚未完成
 
 ## 手机学习
 
@@ -67,6 +67,14 @@
 - 使用跨字段规则校验筛选操作和值类型、重复指标/维度以及排序字段来源。
 - 将 `AnalysisState.plan` 从任意字典升级为 `AnalysisPlan | None`。
 - 保留 Pydantic 计划校验与 SQLGlot 执行安全校验之间的独立边界。
+
+### 指标与 Schema 知识目录
+
+- 使用版本化 `MetricDefinition` 记录 6 个指标的业务含义、公式、来源字段、固定筛选和支持维度。
+- 使用 `SchemaCatalog` 记录 4 张业务表的字段、主键和 3 条允许 JOIN 关系。
+- 为指标、表和关联生成稳定 `source_id`，支持后续检索证据和审计回溯。
+- 使用固定种子数据在真实 PostgreSQL 中验证销售额、订单数、销售件数、退款金额、退款笔数和平均订单金额。
+- 当前目录是 W4-2 检索的数据源，尚未实现关键词、向量或混合检索。
 
 ## 项目范围
 
