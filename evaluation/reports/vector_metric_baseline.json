@@ -1,0 +1,199 @@
+{
+  "suite_id": "metric-query-retrieval-v1",
+  "top_k": 5,
+  "case_count": 11,
+  "positive_case_count": 10,
+  "empty_case_count": 1,
+  "mean_precision_at_k": 0.22000000000000003,
+  "mean_recall_at_k": 1.0,
+  "exact_match_rate": 0.0,
+  "empty_query_accuracy": 0.0,
+  "results": [
+    {
+      "case_id": "aov-exact",
+      "query": "客单价",
+      "expected_metrics": [
+        "average_order_value"
+      ],
+      "actual_metrics": [
+        "average_order_value",
+        "sales_amount",
+        "units_sold",
+        "order_count",
+        "refund_amount"
+      ],
+      "precision_at_k": 0.2,
+      "recall_at_k": 1.0,
+      "exact_match": false
+    },
+    {
+      "case_id": "aov-paraphrase",
+      "query": "每张单子平均花了多少钱",
+      "expected_metrics": [
+        "average_order_value"
+      ],
+      "actual_metrics": [
+        "average_order_value",
+        "sales_amount",
+        "order_count",
+        "units_sold",
+        "refund_amount"
+      ],
+      "precision_at_k": 0.2,
+      "recall_at_k": 1.0,
+      "exact_match": false
+    },
+    {
+      "case_id": "sales-exact",
+      "query": "各渠道销售额",
+      "expected_metrics": [
+        "sales_amount"
+      ],
+      "actual_metrics": [
+        "sales_amount",
+        "units_sold",
+        "order_count",
+        "average_order_value",
+        "refund_count"
+      ],
+      "precision_at_k": 0.2,
+      "recall_at_k": 1.0,
+      "exact_match": false
+    },
+    {
+      "case_id": "sales-paraphrase",
+      "query": "最近卖了多少钱",
+      "expected_metrics": [
+        "sales_amount"
+      ],
+      "actual_metrics": [
+        "sales_amount",
+        "units_sold",
+        "average_order_value",
+        "refund_amount",
+        "order_count"
+      ],
+      "precision_at_k": 0.2,
+      "recall_at_k": 1.0,
+      "exact_match": false
+    },
+    {
+      "case_id": "units-exact",
+      "query": "各商品销量",
+      "expected_metrics": [
+        "units_sold"
+      ],
+      "actual_metrics": [
+        "sales_amount",
+        "units_sold",
+        "order_count",
+        "average_order_value",
+        "refund_count"
+      ],
+      "precision_at_k": 0.2,
+      "recall_at_k": 1.0,
+      "exact_match": false
+    },
+    {
+      "case_id": "units-paraphrase",
+      "query": "总共卖出去多少件",
+      "expected_metrics": [
+        "units_sold"
+      ],
+      "actual_metrics": [
+        "units_sold",
+        "sales_amount",
+        "order_count",
+        "average_order_value",
+        "refund_amount"
+      ],
+      "precision_at_k": 0.2,
+      "recall_at_k": 1.0,
+      "exact_match": false
+    },
+    {
+      "case_id": "orders-exact",
+      "query": "每个渠道的订单量",
+      "expected_metrics": [
+        "order_count"
+      ],
+      "actual_metrics": [
+        "order_count",
+        "units_sold",
+        "sales_amount",
+        "average_order_value",
+        "refund_count"
+      ],
+      "precision_at_k": 0.2,
+      "recall_at_k": 1.0,
+      "exact_match": false
+    },
+    {
+      "case_id": "refund-amount-exact",
+      "query": "退款金额",
+      "expected_metrics": [
+        "refund_amount"
+      ],
+      "actual_metrics": [
+        "refund_amount",
+        "refund_count",
+        "average_order_value",
+        "order_count",
+        "sales_amount"
+      ],
+      "precision_at_k": 0.2,
+      "recall_at_k": 1.0,
+      "exact_match": false
+    },
+    {
+      "case_id": "refund-count-paraphrase",
+      "query": "一共有多少笔退款",
+      "expected_metrics": [
+        "refund_count"
+      ],
+      "actual_metrics": [
+        "refund_count",
+        "refund_amount",
+        "order_count",
+        "units_sold",
+        "average_order_value"
+      ],
+      "precision_at_k": 0.2,
+      "recall_at_k": 1.0,
+      "exact_match": false
+    },
+    {
+      "case_id": "refund-multi-metric",
+      "query": "退款金额和退款笔数",
+      "expected_metrics": [
+        "refund_amount",
+        "refund_count"
+      ],
+      "actual_metrics": [
+        "refund_count",
+        "refund_amount",
+        "order_count",
+        "average_order_value",
+        "units_sold"
+      ],
+      "precision_at_k": 0.4,
+      "recall_at_k": 1.0,
+      "exact_match": false
+    },
+    {
+      "case_id": "out-of-domain-weather",
+      "query": "今天天气怎么样",
+      "expected_metrics": [],
+      "actual_metrics": [
+        "order_count",
+        "refund_amount",
+        "units_sold",
+        "sales_amount",
+        "refund_count"
+      ],
+      "precision_at_k": null,
+      "recall_at_k": null,
+      "exact_match": false
+    }
+  ]
+}

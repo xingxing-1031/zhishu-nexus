@@ -19,6 +19,7 @@ def test_sales_metric_contains_business_formula_and_source() -> None:
 
     assert definition.source_id == "metric.sales_amount.v1"
     assert definition.formula == "SUM(order_items.quantity * order_items.unit_price)"
+    assert "成交金额" in definition.aliases
     assert "orders.status" in definition.source_columns
     assert definition.fixed_filters[0].value == "paid"
     assert AnalysisDimension.CHANNEL in definition.supported_dimensions
@@ -26,6 +27,8 @@ def test_sales_metric_contains_business_formula_and_source() -> None:
     evidence = definition.to_evidence()
     assert evidence.source_id == "metric.sales_amount.v1"
     assert "paid" in evidence.content
+    assert "orders.status equals paid" in evidence.content
+    assert "Aliases: 销售额, 销售金额, 成交金额" in evidence.content
     assert "order_items.unit_price" in evidence.content
 
 

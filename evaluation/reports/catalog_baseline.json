@@ -1,0 +1,232 @@
+{
+  "suite_id": "catalog-retrieval-v1",
+  "case_count": 12,
+  "evidence_case_count": 9,
+  "rejection_case_count": 3,
+  "mean_precision": 1.0,
+  "mean_recall": 1.0,
+  "exact_match_rate": 1.0,
+  "rejection_accuracy": 1.0,
+  "results": [
+    {
+      "case_id": "sales-by-channel",
+      "expected_source_ids": [
+        "metric.sales_amount.v1",
+        "schema.orders",
+        "schema.order_items",
+        "schema.join.orders.order_items"
+      ],
+      "actual_source_ids": [
+        "metric.sales_amount.v1",
+        "schema.orders",
+        "schema.order_items",
+        "schema.join.orders.order_items"
+      ],
+      "precision": 1.0,
+      "recall": 1.0,
+      "exact_match": true,
+      "expected_rejection": false,
+      "actual_rejection": false,
+      "error": null
+    },
+    {
+      "case_id": "sales-by-product",
+      "expected_source_ids": [
+        "metric.sales_amount.v1",
+        "schema.orders",
+        "schema.products",
+        "schema.order_items",
+        "schema.join.orders.order_items",
+        "schema.join.products.order_items"
+      ],
+      "actual_source_ids": [
+        "metric.sales_amount.v1",
+        "schema.orders",
+        "schema.products",
+        "schema.order_items",
+        "schema.join.orders.order_items",
+        "schema.join.products.order_items"
+      ],
+      "precision": 1.0,
+      "recall": 1.0,
+      "exact_match": true,
+      "expected_rejection": false,
+      "actual_rejection": false,
+      "error": null
+    },
+    {
+      "case_id": "units-by-category",
+      "expected_source_ids": [
+        "metric.units_sold.v1",
+        "schema.orders",
+        "schema.products",
+        "schema.order_items",
+        "schema.join.orders.order_items",
+        "schema.join.products.order_items"
+      ],
+      "actual_source_ids": [
+        "metric.units_sold.v1",
+        "schema.orders",
+        "schema.products",
+        "schema.order_items",
+        "schema.join.orders.order_items",
+        "schema.join.products.order_items"
+      ],
+      "precision": 1.0,
+      "recall": 1.0,
+      "exact_match": true,
+      "expected_rejection": false,
+      "actual_rejection": false,
+      "error": null
+    },
+    {
+      "case_id": "total-order-count",
+      "expected_source_ids": [
+        "metric.order_count.v1",
+        "schema.orders"
+      ],
+      "actual_source_ids": [
+        "metric.order_count.v1",
+        "schema.orders"
+      ],
+      "precision": 1.0,
+      "recall": 1.0,
+      "exact_match": true,
+      "expected_rejection": false,
+      "actual_rejection": false,
+      "error": null
+    },
+    {
+      "case_id": "average-order-value-by-channel",
+      "expected_source_ids": [
+        "metric.average_order_value.v1",
+        "schema.orders"
+      ],
+      "actual_source_ids": [
+        "metric.average_order_value.v1",
+        "schema.orders"
+      ],
+      "precision": 1.0,
+      "recall": 1.0,
+      "exact_match": true,
+      "expected_rejection": false,
+      "actual_rejection": false,
+      "error": null
+    },
+    {
+      "case_id": "refund-amount-by-status",
+      "expected_source_ids": [
+        "metric.refund_amount.v1",
+        "schema.refunds"
+      ],
+      "actual_source_ids": [
+        "metric.refund_amount.v1",
+        "schema.refunds"
+      ],
+      "precision": 1.0,
+      "recall": 1.0,
+      "exact_match": true,
+      "expected_rejection": false,
+      "actual_rejection": false,
+      "error": null
+    },
+    {
+      "case_id": "refund-count-by-day",
+      "expected_source_ids": [
+        "metric.refund_count.v1",
+        "schema.refunds"
+      ],
+      "actual_source_ids": [
+        "metric.refund_count.v1",
+        "schema.refunds"
+      ],
+      "precision": 1.0,
+      "recall": 1.0,
+      "exact_match": true,
+      "expected_rejection": false,
+      "actual_rejection": false,
+      "error": null
+    },
+    {
+      "case_id": "sales-and-units-by-channel",
+      "expected_source_ids": [
+        "metric.sales_amount.v1",
+        "metric.units_sold.v1",
+        "schema.orders",
+        "schema.order_items",
+        "schema.join.orders.order_items"
+      ],
+      "actual_source_ids": [
+        "metric.sales_amount.v1",
+        "metric.units_sold.v1",
+        "schema.orders",
+        "schema.order_items",
+        "schema.join.orders.order_items"
+      ],
+      "precision": 1.0,
+      "recall": 1.0,
+      "exact_match": true,
+      "expected_rejection": false,
+      "actual_rejection": false,
+      "error": null
+    },
+    {
+      "case_id": "order-count-filtered-by-product",
+      "expected_source_ids": [
+        "metric.order_count.v1",
+        "schema.orders",
+        "schema.products",
+        "schema.order_items",
+        "schema.join.orders.order_items",
+        "schema.join.products.order_items"
+      ],
+      "actual_source_ids": [
+        "metric.order_count.v1",
+        "schema.orders",
+        "schema.products",
+        "schema.order_items",
+        "schema.join.orders.order_items",
+        "schema.join.products.order_items"
+      ],
+      "precision": 1.0,
+      "recall": 1.0,
+      "exact_match": true,
+      "expected_rejection": false,
+      "actual_rejection": false,
+      "error": null
+    },
+    {
+      "case_id": "reject-refund-amount-by-product",
+      "expected_source_ids": [],
+      "actual_source_ids": [],
+      "precision": null,
+      "recall": null,
+      "exact_match": true,
+      "expected_rejection": true,
+      "actual_rejection": true,
+      "error": "metric refund_amount does not support dimensions: product"
+    },
+    {
+      "case_id": "reject-order-count-by-product",
+      "expected_source_ids": [],
+      "actual_source_ids": [],
+      "precision": null,
+      "recall": null,
+      "exact_match": true,
+      "expected_rejection": true,
+      "actual_rejection": true,
+      "error": "metric order_count does not support dimensions: product"
+    },
+    {
+      "case_id": "reject-sales-by-refund-status",
+      "expected_source_ids": [],
+      "actual_source_ids": [],
+      "precision": null,
+      "recall": null,
+      "exact_match": true,
+      "expected_rejection": true,
+      "actual_rejection": true,
+      "error": "metric sales_amount does not support dimensions: refund_status"
+    }
+  ]
+}

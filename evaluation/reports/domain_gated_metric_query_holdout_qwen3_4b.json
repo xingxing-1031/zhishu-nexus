@@ -1,0 +1,261 @@
+{
+  "suite_id": "metric-query-final-holdout-v1",
+  "top_k": 5,
+  "case_count": 20,
+  "positive_case_count": 12,
+  "empty_case_count": 8,
+  "mean_precision_at_k": 1.0,
+  "mean_recall_at_k": 1.0,
+  "exact_match_rate": 0.85,
+  "empty_query_accuracy": 0.625,
+  "results": [
+    {
+      "case_id": "holdout-sales-revenue",
+      "query": "帮我汇总不同平台的营收",
+      "expected_metrics": [
+        "sales_amount"
+      ],
+      "actual_metrics": [
+        "sales_amount"
+      ],
+      "precision_at_k": 1.0,
+      "recall_at_k": 1.0,
+      "exact_match": true
+    },
+    {
+      "case_id": "holdout-sales-daily",
+      "query": "每天卖货的金额是多少",
+      "expected_metrics": [
+        "sales_amount"
+      ],
+      "actual_metrics": [
+        "sales_amount"
+      ],
+      "precision_at_k": 1.0,
+      "recall_at_k": 1.0,
+      "exact_match": true
+    },
+    {
+      "case_id": "holdout-orders-produced",
+      "query": "这段时间一共出了多少单",
+      "expected_metrics": [
+        "order_count"
+      ],
+      "actual_metrics": [
+        "order_count"
+      ],
+      "precision_at_k": 1.0,
+      "recall_at_k": 1.0,
+      "exact_match": true
+    },
+    {
+      "case_id": "holdout-orders-paid",
+      "query": "有多少单完成了付款",
+      "expected_metrics": [
+        "order_count"
+      ],
+      "actual_metrics": [
+        "order_count"
+      ],
+      "precision_at_k": 1.0,
+      "recall_at_k": 1.0,
+      "exact_match": true
+    },
+    {
+      "case_id": "holdout-units-total",
+      "query": "售出的商品总数量",
+      "expected_metrics": [
+        "units_sold"
+      ],
+      "actual_metrics": [
+        "units_sold"
+      ],
+      "precision_at_k": 1.0,
+      "recall_at_k": 1.0,
+      "exact_match": true
+    },
+    {
+      "case_id": "holdout-refund-total",
+      "query": "累计退回的款项有多少",
+      "expected_metrics": [
+        "refund_amount"
+      ],
+      "actual_metrics": [
+        "refund_amount"
+      ],
+      "precision_at_k": 1.0,
+      "recall_at_k": 1.0,
+      "exact_match": true
+    },
+    {
+      "case_id": "holdout-refund-events",
+      "query": "总共发生了几次退款",
+      "expected_metrics": [
+        "refund_count"
+      ],
+      "actual_metrics": [
+        "refund_count"
+      ],
+      "precision_at_k": 1.0,
+      "recall_at_k": 1.0,
+      "exact_match": true
+    },
+    {
+      "case_id": "holdout-aov-contribution",
+      "query": "每个订单平均贡献多少收入",
+      "expected_metrics": [
+        "average_order_value"
+      ],
+      "actual_metrics": [
+        "average_order_value"
+      ],
+      "precision_at_k": 1.0,
+      "recall_at_k": 1.0,
+      "exact_match": true
+    },
+    {
+      "case_id": "holdout-aov-average",
+      "query": "平均一单是多少钱",
+      "expected_metrics": [
+        "average_order_value"
+      ],
+      "actual_metrics": [
+        "average_order_value"
+      ],
+      "precision_at_k": 1.0,
+      "recall_at_k": 1.0,
+      "exact_match": true
+    },
+    {
+      "case_id": "holdout-sales-orders",
+      "query": "成交总额和订单数量都告诉我",
+      "expected_metrics": [
+        "sales_amount",
+        "order_count"
+      ],
+      "actual_metrics": [
+        "order_count",
+        "sales_amount"
+      ],
+      "precision_at_k": 1.0,
+      "recall_at_k": 1.0,
+      "exact_match": true
+    },
+    {
+      "case_id": "holdout-refund-pair",
+      "query": "我想同时看退款总额以及退款次数",
+      "expected_metrics": [
+        "refund_amount",
+        "refund_count"
+      ],
+      "actual_metrics": [
+        "refund_amount",
+        "refund_count"
+      ],
+      "precision_at_k": 1.0,
+      "recall_at_k": 1.0,
+      "exact_match": true
+    },
+    {
+      "case_id": "holdout-units-sales",
+      "query": "售出的件数与成交金额分别是多少",
+      "expected_metrics": [
+        "units_sold",
+        "sales_amount"
+      ],
+      "actual_metrics": [
+        "sales_amount",
+        "units_sold"
+      ],
+      "precision_at_k": 1.0,
+      "recall_at_k": 1.0,
+      "exact_match": true
+    },
+    {
+      "case_id": "holdout-unsupported-stock",
+      "query": "哪些商品的库存快没了",
+      "expected_metrics": [],
+      "actual_metrics": [],
+      "precision_at_k": null,
+      "recall_at_k": null,
+      "exact_match": true
+    },
+    {
+      "case_id": "holdout-unsupported-customer",
+      "query": "购买用户主要来自哪些年龄段",
+      "expected_metrics": [],
+      "actual_metrics": [],
+      "precision_at_k": null,
+      "recall_at_k": null,
+      "exact_match": true
+    },
+    {
+      "case_id": "holdout-unsupported-shipping",
+      "query": "还有多少订单没有发货",
+      "expected_metrics": [],
+      "actual_metrics": [
+        "order_count"
+      ],
+      "precision_at_k": null,
+      "recall_at_k": null,
+      "exact_match": false
+    },
+    {
+      "case_id": "holdout-unsupported-weather",
+      "query": "上海周末的气温是多少",
+      "expected_metrics": [],
+      "actual_metrics": [],
+      "precision_at_k": null,
+      "recall_at_k": null,
+      "exact_match": true
+    },
+    {
+      "case_id": "holdout-unsupported-writing",
+      "query": "写一句商品促销文案",
+      "expected_metrics": [],
+      "actual_metrics": [],
+      "precision_at_k": null,
+      "recall_at_k": null,
+      "exact_match": true
+    },
+    {
+      "case_id": "holdout-unsupported-price",
+      "query": "耳机现在卖什么价格",
+      "expected_metrics": [],
+      "actual_metrics": [
+        "sales_amount",
+        "units_sold",
+        "average_order_value",
+        "refund_amount",
+        "order_count"
+      ],
+      "precision_at_k": null,
+      "recall_at_k": null,
+      "exact_match": false
+    },
+    {
+      "case_id": "holdout-unsupported-profit",
+      "query": "我们的毛利润是多少",
+      "expected_metrics": [],
+      "actual_metrics": [
+        "average_order_value",
+        "sales_amount",
+        "units_sold",
+        "order_count",
+        "refund_amount"
+      ],
+      "precision_at_k": null,
+      "recall_at_k": null,
+      "exact_match": false
+    },
+    {
+      "case_id": "holdout-unsupported-complaint",
+      "query": "客户投诉最多的原因是什么",
+      "expected_metrics": [],
+      "actual_metrics": [],
+      "precision_at_k": null,
+      "recall_at_k": null,
+      "exact_match": true
+    }
+  ]
+}

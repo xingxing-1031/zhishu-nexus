@@ -1,0 +1,69 @@
+{
+  "suite_id": "catalog-retrieval-v1",
+  "cases": [
+    {
+      "case_id": "sales-by-channel",
+      "plan": {"analysis_goal": "按渠道统计销售额", "metrics": ["sales_amount"], "dimensions": ["channel"]},
+      "expected_source_ids": ["metric.sales_amount.v1", "schema.orders", "schema.order_items", "schema.join.orders.order_items"]
+    },
+    {
+      "case_id": "sales-by-product",
+      "plan": {"analysis_goal": "按商品统计销售额", "metrics": ["sales_amount"], "dimensions": ["product"]},
+      "expected_source_ids": ["metric.sales_amount.v1", "schema.orders", "schema.products", "schema.order_items", "schema.join.orders.order_items", "schema.join.products.order_items"]
+    },
+    {
+      "case_id": "units-by-category",
+      "plan": {"analysis_goal": "按商品类别统计销售件数", "metrics": ["units_sold"], "dimensions": ["category"]},
+      "expected_source_ids": ["metric.units_sold.v1", "schema.orders", "schema.products", "schema.order_items", "schema.join.orders.order_items", "schema.join.products.order_items"]
+    },
+    {
+      "case_id": "total-order-count",
+      "plan": {"analysis_goal": "统计已支付订单总数", "metrics": ["order_count"]},
+      "expected_source_ids": ["metric.order_count.v1", "schema.orders"]
+    },
+    {
+      "case_id": "average-order-value-by-channel",
+      "plan": {"analysis_goal": "按渠道统计平均订单金额", "metrics": ["average_order_value"], "dimensions": ["channel"]},
+      "expected_source_ids": ["metric.average_order_value.v1", "schema.orders"]
+    },
+    {
+      "case_id": "refund-amount-by-status",
+      "plan": {"analysis_goal": "按退款状态统计退款金额", "metrics": ["refund_amount"], "dimensions": ["refund_status"]},
+      "expected_source_ids": ["metric.refund_amount.v1", "schema.refunds"]
+    },
+    {
+      "case_id": "refund-count-by-day",
+      "plan": {"analysis_goal": "按天统计退款笔数", "metrics": ["refund_count"], "dimensions": ["day"]},
+      "expected_source_ids": ["metric.refund_count.v1", "schema.refunds"]
+    },
+    {
+      "case_id": "sales-and-units-by-channel",
+      "plan": {"analysis_goal": "按渠道统计销售额和销售件数", "metrics": ["sales_amount", "units_sold"], "dimensions": ["channel"]},
+      "expected_source_ids": ["metric.sales_amount.v1", "metric.units_sold.v1", "schema.orders", "schema.order_items", "schema.join.orders.order_items"]
+    },
+    {
+      "case_id": "order-count-filtered-by-product",
+      "plan": {
+        "analysis_goal": "统计指定商品出现的订单数",
+        "metrics": ["order_count"],
+        "filters": [{"field": "product_id", "operator": "equals", "value": "P001"}]
+      },
+      "expected_source_ids": ["metric.order_count.v1", "schema.orders", "schema.products", "schema.order_items", "schema.join.orders.order_items", "schema.join.products.order_items"]
+    },
+    {
+      "case_id": "reject-refund-amount-by-product",
+      "plan": {"analysis_goal": "按商品统计退款金额", "metrics": ["refund_amount"], "dimensions": ["product"]},
+      "expect_rejection": true
+    },
+    {
+      "case_id": "reject-order-count-by-product",
+      "plan": {"analysis_goal": "按商品统计订单数", "metrics": ["order_count"], "dimensions": ["product"]},
+      "expect_rejection": true
+    },
+    {
+      "case_id": "reject-sales-by-refund-status",
+      "plan": {"analysis_goal": "按退款状态统计销售额", "metrics": ["sales_amount"], "dimensions": ["refund_status"]},
+      "expect_rejection": true
+    }
+  ]
+}

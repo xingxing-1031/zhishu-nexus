@@ -14,6 +14,15 @@ from retail_analytics_agent.models import (
 )
 
 
+_FILTER_SOURCE_COLUMNS = {
+    AnalysisFilterField.CHANNEL: "orders.channel",
+    AnalysisFilterField.ORDER_STATUS: "orders.status",
+    AnalysisFilterField.PRODUCT_ID: "products.product_id",
+    AnalysisFilterField.CATEGORY: "products.category",
+    AnalysisFilterField.REFUND_STATUS: "refunds.status",
+}
+
+
 class MetricDefinition(BaseModel):
     """Versioned business definition used to ground plan and SQL generation."""
 
@@ -22,6 +31,7 @@ class MetricDefinition(BaseModel):
     metric: AnalysisMetric
     version: str = Field(pattern=r"^v[1-9][0-9]*$")
     display_name: str = Field(min_length=1)
+    aliases: tuple[str, ...] = ()
     description: str = Field(min_length=1)
     formula: str = Field(min_length=1)
     source_tables: tuple[str, ...] = Field(min_length=1)
@@ -35,6 +45,11 @@ class MetricDefinition(BaseModel):
             raise ValueError("source_tables must not contain duplicates")
         if len(set(self.source_columns)) != len(self.source_columns):
             raise ValueError("source_columns must not contain duplicates")
+        normalized_aliases = [item.strip().casefold() for item in self.aliases]
+        if any(not item for item in normalized_aliases):
+            raise ValueError("aliases must not contain empty values")
+        if len(set(normalized_aliases)) != len(normalized_aliases):
+            raise ValueError("aliases must not contain duplicates")
         if len(set(self.supported_dimensions)) != len(self.supported_dimensions):
             raise ValueError("supported_dimensions must not contain duplicates")
         return self
@@ -45,14 +60,17 @@ class MetricDefinition(BaseModel):
 
     def to_evidence(self) -> RetrievalEvidence:
         filters = ", ".join(
-            f"{item.field.value} {item.operator.value} {item.value}"
+            f"{_FILTER_SOURCE_COLUMNS[item.field]} "
+            f"{item.operator.value} {item.value}"
             for item in self.fixed_filters
         ) or "none"
         dimensions = ", ".join(
             item.value for item in self.supported_dimensions
         ) or "none"
+        aliases = ", ".join(self.aliases) or "none"
         content = (
             f"{self.display_name} ({self.version}): {self.description}. "
+            f"Aliases: {aliases}. "
             f"Formula: {self.formula}. "
             f"Source tables: {', '.join(self.source_tables)}. "
             f"Source columns: {', '.join(self.source_columns)}. "
@@ -198,6 +216,7 @@ DEFAULT_METRIC_CATALOG = MetricCatalog(
             metric=AnalysisMetric.SALES_AMOUNT,
             version="v1",
             display_name="销售额",
+            aliases=("销售额", "销售金额", "成交金额"),
             description="已支付订单中订单明细成交价乘以数量的总和",
             formula="SUM(order_items.quantity * order_items.unit_price)",
             source_tables=("orders", "order_items"),
@@ -224,6 +243,7 @@ DEFAULT_METRIC_CATALOG = MetricCatalog(
             metric=AnalysisMetric.ORDER_COUNT,
             version="v1",
             display_name="订单数",
+            aliases=("订单数", "订单量"),
             description="已支付订单的去重订单数量",
             formula="COUNT(DISTINCT orders.order_id)",
             source_tables=("orders",),
@@ -240,6 +260,7 @@ DEFAULT_METRIC_CATALOG = MetricCatalog(
             metric=AnalysisMetric.UNITS_SOLD,
             version="v1",
             display_name="销售件数",
+            aliases=("销售件数", "销量"),
             description="已支付订单明细中的商品数量总和",
             formula="SUM(order_items.quantity)",
             source_tables=("orders", "order_items"),
@@ -261,6 +282,7 @@ DEFAULT_METRIC_CATALOG = MetricCatalog(
             metric=AnalysisMetric.REFUND_AMOUNT,
             version="v1",
             display_name="退款金额",
+            aliases=("退款金额",),
             description="退款记录中的退款金额总和，不默认排除任何退款状态",
             formula="SUM(refunds.refund_amount)",
             source_tables=("refunds",),
@@ -274,6 +296,7 @@ DEFAULT_METRIC_CATALOG = MetricCatalog(
             metric=AnalysisMetric.REFUND_COUNT,
             version="v1",
             display_name="退款笔数",
+            aliases=("退款笔数", "退款单数"),
             description="退款记录的去重退款编号数量",
             formula="COUNT(DISTINCT refunds.refund_id)",
             source_tables=("refunds",),
@@ -287,6 +310,7 @@ DEFAULT_METRIC_CATALOG = MetricCatalog(
             metric=AnalysisMetric.AVERAGE_ORDER_VALUE,
             version="v1",
             display_name="平均订单金额",
+            aliases=("平均订单金额", "客单价"),
             description="已支付订单金额除以已支付去重订单数",
             formula=(
                 "SUM(orders.amount) / "

@@ -1,0 +1,25 @@
+{
+  "suite_id": "metric-query-final-holdout-v1",
+  "cases": [
+    {"case_id": "holdout-sales-revenue", "query": "帮我汇总不同平台的营收", "expected_metrics": ["sales_amount"]},
+    {"case_id": "holdout-sales-daily", "query": "每天卖货的金额是多少", "expected_metrics": ["sales_amount"]},
+    {"case_id": "holdout-orders-produced", "query": "这段时间一共出了多少单", "expected_metrics": ["order_count"]},
+    {"case_id": "holdout-orders-paid", "query": "有多少单完成了付款", "expected_metrics": ["order_count"]},
+    {"case_id": "holdout-units-total", "query": "售出的商品总数量", "expected_metrics": ["units_sold"]},
+    {"case_id": "holdout-refund-total", "query": "累计退回的款项有多少", "expected_metrics": ["refund_amount"]},
+    {"case_id": "holdout-refund-events", "query": "总共发生了几次退款", "expected_metrics": ["refund_count"]},
+    {"case_id": "holdout-aov-contribution", "query": "每个订单平均贡献多少收入", "expected_metrics": ["average_order_value"]},
+    {"case_id": "holdout-aov-average", "query": "平均一单是多少钱", "expected_metrics": ["average_order_value"]},
+    {"case_id": "holdout-sales-orders", "query": "成交总额和订单数量都告诉我", "expected_metrics": ["sales_amount", "order_count"]},
+    {"case_id": "holdout-refund-pair", "query": "我想同时看退款总额以及退款次数", "expected_metrics": ["refund_amount", "refund_count"]},
+    {"case_id": "holdout-units-sales", "query": "售出的件数与成交金额分别是多少", "expected_metrics": ["units_sold", "sales_amount"]},
+    {"case_id": "holdout-unsupported-stock", "query": "哪些商品的库存快没了", "expected_metrics": []},
+    {"case_id": "holdout-unsupported-customer", "query": "购买用户主要来自哪些年龄段", "expected_metrics": []},
+    {"case_id": "holdout-unsupported-shipping", "query": "还有多少订单没有发货", "expected_metrics": []},
+    {"case_id": "holdout-unsupported-weather", "query": "上海周末的气温是多少", "expected_metrics": []},
+    {"case_id": "holdout-unsupported-writing", "query": "写一句商品促销文案", "expected_metrics": []},
+    {"case_id": "holdout-unsupported-price", "query": "耳机现在卖什么价格", "expected_metrics": []},
+    {"case_id": "holdout-unsupported-profit", "query": "我们的毛利润是多少", "expected_metrics": []},
+    {"case_id": "holdout-unsupported-complaint", "query": "客户投诉最多的原因是什么", "expected_metrics": []}
+  ]
+}

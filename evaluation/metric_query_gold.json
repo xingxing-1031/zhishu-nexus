@@ -1,0 +1,16 @@
+{
+  "suite_id": "metric-query-retrieval-v1",
+  "cases": [
+    {"case_id": "aov-exact", "query": "客单价", "expected_metrics": ["average_order_value"]},
+    {"case_id": "aov-paraphrase", "query": "每张单子平均花了多少钱", "expected_metrics": ["average_order_value"]},
+    {"case_id": "sales-exact", "query": "各渠道销售额", "expected_metrics": ["sales_amount"]},
+    {"case_id": "sales-paraphrase", "query": "最近卖了多少钱", "expected_metrics": ["sales_amount"]},
+    {"case_id": "units-exact", "query": "各商品销量", "expected_metrics": ["units_sold"]},
+    {"case_id": "units-paraphrase", "query": "总共卖出去多少件", "expected_metrics": ["units_sold"]},
+    {"case_id": "orders-exact", "query": "每个渠道的订单量", "expected_metrics": ["order_count"]},
+    {"case_id": "refund-amount-exact", "query": "退款金额", "expected_metrics": ["refund_amount"]},
+    {"case_id": "refund-count-paraphrase", "query": "一共有多少笔退款", "expected_metrics": ["refund_count"]},
+    {"case_id": "refund-multi-metric", "query": "退款金额和退款笔数", "expected_metrics": ["refund_amount", "refund_count"]},
+    {"case_id": "out-of-domain-weather", "query": "今天天气怎么样", "expected_metrics": []}
+  ]
+}

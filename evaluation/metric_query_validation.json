@@ -1,0 +1,17 @@
+{
+  "suite_id": "metric-query-threshold-validation-v1",
+  "cases": [
+    {"case_id": "sales-platform-paraphrase", "query": "各个平台一共成交了多少钱", "expected_metrics": ["sales_amount"]},
+    {"case_id": "aov-spend-paraphrase", "query": "平均每笔订单消费多少", "expected_metrics": ["average_order_value"]},
+    {"case_id": "units-product-paraphrase", "query": "总共售出了多少个商品", "expected_metrics": ["units_sold"]},
+    {"case_id": "orders-paid-paraphrase", "query": "有多少个已经付款的订单", "expected_metrics": ["order_count"]},
+    {"case_id": "refund-money-paraphrase", "query": "一共退回了多少钱", "expected_metrics": ["refund_amount"]},
+    {"case_id": "refund-record-paraphrase", "query": "有几条退款记录", "expected_metrics": ["refund_count"]},
+    {"case_id": "unsupported-weather", "query": "重庆明天会下雨吗", "expected_metrics": []},
+    {"case_id": "unsupported-writing", "query": "帮我写一封请假邮件", "expected_metrics": []},
+    {"case_id": "unsupported-programming", "query": "Python 应该怎么安装", "expected_metrics": []},
+    {"case_id": "unsupported-movie", "query": "推荐一部适合周末看的电影", "expected_metrics": []},
+    {"case_id": "unsupported-inventory", "query": "仓库里还剩多少库存", "expected_metrics": []},
+    {"case_id": "unsupported-customer-data", "query": "查询购买者的手机号码", "expected_metrics": []}
+  ]
+}
