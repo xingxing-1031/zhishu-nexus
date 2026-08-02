@@ -30,6 +30,8 @@
 | 11 | [工作流工具契约](11-workflow-tool-contracts.md) | 15 分钟 | W3-3 已完成 |
 | 12 | [PostgreSQL Checkpointer 与中断恢复](12-postgres-checkpointer.md) | 15 分钟 | W3-4 已完成 |
 | 13 | [指标字典与 Schema 目录](13-metric-schema-catalog.md) | 18 分钟 | W4-1 已完成 |
+| 14 | [按分析计划检索业务证据](14-catalog-retrieval.md) | 18 分钟 | W4-2 已完成 |
+| 15 | [向量检索、混合召回与重排](15-vector-hybrid-reranking.md) | 22 分钟 | W4-3 已完成 |
 
 ## 复习节奏
 
