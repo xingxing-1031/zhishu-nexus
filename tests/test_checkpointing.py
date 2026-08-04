@@ -7,7 +7,11 @@ from retail_analytics_agent.checkpointing import (
     create_checkpoint_serializer,
     open_postgres_checkpointer,
 )
-from retail_analytics_agent.models import AnalysisPlan, RetrievalEvidence
+from retail_analytics_agent.models import (
+    AnalysisPlan,
+    ChartSpec,
+    RetrievalEvidence,
+)
 from retail_analytics_agent.settings import Settings
 from retail_analytics_agent.sql_safety import PreparedSQL
 
@@ -67,6 +71,12 @@ def test_checkpoint_serializer_restores_registered_state_types() -> None:
             source_id="metric.sales_amount",
             content="paid orders.amount",
         ),
+        ChartSpec(
+            chart_type="bar",
+            title="各渠道销售额",
+            x_field="channel",
+            y_fields=("sales_amount",),
+        ),
         PreparedSQL(
             sql="SELECT order_id FROM orders LIMIT 10",
             tables=("orders",),
@@ -79,4 +89,5 @@ def test_checkpoint_serializer_restores_registered_state_types() -> None:
     assert restored == values
     assert isinstance(restored[0], AnalysisPlan)
     assert isinstance(restored[1], RetrievalEvidence)
-    assert isinstance(restored[2], PreparedSQL)
+    assert isinstance(restored[2], ChartSpec)
+    assert isinstance(restored[3], PreparedSQL)

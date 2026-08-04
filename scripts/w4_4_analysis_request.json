@@ -1,0 +1,6 @@
+{
+  "request_id": "REQ-W4-4-SSE-001",
+  "user_id": "W4-4-VERIFIER",
+  "question": "最近30天各渠道销售额是多少？",
+  "max_rows": 10
+}

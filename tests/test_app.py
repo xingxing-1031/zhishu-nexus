@@ -3,8 +3,11 @@ from unittest.mock import Mock
 
 from fastapi.testclient import TestClient
 
+from retail_analytics_agent.analysis_service import get_analysis_runner
 from retail_analytics_agent.app import app
 from retail_analytics_agent.database import get_database_connection
+from retail_analytics_agent.model_adapters import ModelInvocationError
+from retail_analytics_agent.models import AnalysisResponse, AnalysisStreamEvent
 
 
 client = TestClient(app)
@@ -49,6 +52,141 @@ def test_validate_analysis_request_rejects_too_many_rows() -> None:
 
     assert error["loc"] == ["body", "max_rows"]
     assert error["type"] == "less_than_equal"
+
+
+def test_run_analysis_invokes_complete_workflow_runner() -> None:
+    runner = Mock()
+    runner.run.return_value = AnalysisResponse(
+        request_id="REQ-RUN-001",
+        answer="最近30天，京东渠道销售额为 11300.00 元。",
+        plan={
+            "analysis_goal": "各渠道销售额",
+            "metrics": ["sales_amount"],
+            "dimensions": ["channel"],
+            "time_range": {"days": 30},
+            "limit": 10,
+        },
+        rows=[{"channel": "京东", "sales_amount": "11300.00"}],
+        chart_spec={
+            "chart_type": "bar",
+            "title": "各渠道销售额",
+            "x_field": "channel",
+            "y_fields": ["sales_amount"],
+        },
+        evidence_source_ids=(
+            "metric.sales_amount.v1",
+            "schema.orders",
+        ),
+        retry_count=0,
+        trace=(
+            "plan",
+            "retrieve",
+            "generate_sql",
+            "validate_sql",
+            "execute_sql",
+            "summarize",
+        ),
+    )
+    app.dependency_overrides[get_analysis_runner] = lambda: runner
+
+    try:
+        response = client.post(
+            "/analysis/run",
+            json={
+                "request_id": "REQ-RUN-001",
+                "user_id": "USER-001",
+                "question": "最近30天各渠道销售额是多少？",
+                "max_rows": 10,
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.json()["chart_spec"] == {
+        "chart_type": "bar",
+        "title": "各渠道销售额",
+        "x_field": "channel",
+        "y_fields": ["sales_amount"],
+    }
+    runner.run.assert_called_once()
+
+
+def test_run_analysis_returns_502_when_model_is_unavailable() -> None:
+    runner = Mock()
+    runner.run.side_effect = ModelInvocationError("Ollama unavailable")
+    app.dependency_overrides[get_analysis_runner] = lambda: runner
+
+    try:
+        response = client.post(
+            "/analysis/run",
+            json={
+                "request_id": "REQ-RUN-002",
+                "user_id": "USER-001",
+                "question": "查询销售额",
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 502
+    assert response.json() == {"detail": "Ollama unavailable"}
+
+
+def test_stream_analysis_returns_sse_status_and_result_events() -> None:
+    runner = Mock()
+    runner.stream.return_value = [
+        AnalysisStreamEvent(
+            event="status",
+            node="plan",
+            message="正在理解分析问题",
+        ),
+        AnalysisStreamEvent(
+            event="result",
+            message="分析完成",
+            response=AnalysisResponse(
+                request_id="REQ-STREAM-001",
+                answer="京东渠道销售额为 11300.00 元。",
+                plan={
+                    "analysis_goal": "各渠道销售额",
+                    "metrics": ["sales_amount"],
+                    "dimensions": ["channel"],
+                },
+                rows=[
+                    {"channel": "京东", "sales_amount": "11300.00"}
+                ],
+                chart_spec={
+                    "chart_type": "bar",
+                    "title": "各渠道销售额",
+                    "x_field": "channel",
+                    "y_fields": ["sales_amount"],
+                },
+                evidence_source_ids=("metric.sales_amount.v1",),
+                retry_count=0,
+                trace=("plan", "summarize"),
+            ),
+        ),
+    ]
+    app.dependency_overrides[get_analysis_runner] = lambda: runner
+
+    try:
+        response = client.post(
+            "/analysis/stream",
+            json={
+                "request_id": "REQ-STREAM-001",
+                "user_id": "USER-001",
+                "question": "查询各渠道销售额",
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/event-stream")
+    assert "event: status\n" in response.text
+    assert '"node":"plan"' in response.text
+    assert "event: result\n" in response.text
+    assert "京东渠道销售额为 11300.00 元" in response.text
 
 
 def test_channel_sales_summary_returns_query_results() -> None:

@@ -10,6 +10,9 @@ class Settings(BaseSettings):
     postgres_password: SecretStr
     postgres_host: str = "127.0.0.1"
     postgres_port: int = 5432
+    ollama_base_url: str = "http://127.0.0.1:11434"
+    ollama_model: str = "qwen3:4b"
+    ollama_timeout_seconds: float = 120
 
     model_config = SettingsConfigDict(
         env_file=".env",

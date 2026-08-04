@@ -126,6 +126,7 @@ def test_create_initial_state_sets_request_and_workflow_defaults() -> None:
     assert state["generated_sql"] is None
     assert state["prepared_sql"] is None
     assert state["query_rows"] == []
+    assert state["chart_spec"] is None
     assert state["trace"] == []
 
 

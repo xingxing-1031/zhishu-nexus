@@ -1,18 +1,27 @@
 from typing import Annotated
 
-from fastapi import Depends, FastAPI, Query
+from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi.responses import StreamingResponse
 
+from retail_analytics_agent.analysis_service import (
+    AnalysisRunError,
+    AnalysisRunner,
+    get_analysis_runner,
+)
 from retail_analytics_agent.database import (
     DatabaseConnection,
     get_database_connection,
 )
 from retail_analytics_agent.models import (
     AnalysisRequest,
+    AnalysisResponse,
+    AnalysisStreamEvent,
     ChannelSalesSummary,
     OrderStatusSummary,
     ProductSalesSummary,
     RefundStatusSummary,
 )
+from retail_analytics_agent.model_adapters import ModelInvocationError
 from retail_analytics_agent.queries import (
     get_channel_sales_summary,
     get_order_status_summary,
@@ -37,6 +46,51 @@ def validate_analysis_request(
     request: AnalysisRequest,
 ) -> AnalysisRequest:
     return request
+
+
+@app.post("/analysis/run", response_model=AnalysisResponse)
+def run_analysis(
+    request: AnalysisRequest,
+    runner: Annotated[AnalysisRunner, Depends(get_analysis_runner)],
+) -> AnalysisResponse:
+    try:
+        return runner.run(request)
+    except ModelInvocationError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except AnalysisRunError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+def _encode_analysis_events(
+    runner: AnalysisRunner,
+    request: AnalysisRequest,
+):
+    try:
+        for event in runner.stream(request):
+            yield f"event: {event.event.value}\ndata: {event.model_dump_json()}\n\n"
+    except Exception as exc:
+        event = AnalysisStreamEvent(
+            event="error",
+            message=str(exc),
+        )
+        yield f"event: error\ndata: {event.model_dump_json()}\n\n"
+
+
+@app.post("/analysis/stream")
+def stream_analysis(
+    request: AnalysisRequest,
+    runner: Annotated[AnalysisRunner, Depends(get_analysis_runner)],
+) -> StreamingResponse:
+    return StreamingResponse(
+        _encode_analysis_events(runner, request),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @app.get(

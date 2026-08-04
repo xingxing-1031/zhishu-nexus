@@ -1,6 +1,6 @@
 from decimal import Decimal
 from enum import StrEnum
-from typing import Self
+from typing import Any, Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -154,6 +154,49 @@ class RetrievalEvidence(BaseModel):
 
     source_id: str = Field(min_length=1)
     content: str = Field(min_length=1)
+
+
+class ChartType(StrEnum):
+    BAR = "bar"
+    LINE = "line"
+    KPI = "kpi"
+
+
+class ChartSpec(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    chart_type: ChartType
+    title: str = Field(min_length=1)
+    x_field: str | None = None
+    y_fields: tuple[str, ...] = Field(min_length=1)
+
+
+class AnalysisResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    request_id: str = Field(min_length=1)
+    answer: str = Field(min_length=1)
+    plan: AnalysisPlan
+    rows: list[dict[str, Any]]
+    chart_spec: ChartSpec | None
+    evidence_source_ids: tuple[str, ...]
+    retry_count: int = Field(ge=0)
+    trace: tuple[str, ...]
+
+
+class AnalysisEventType(StrEnum):
+    STATUS = "status"
+    RESULT = "result"
+    ERROR = "error"
+
+
+class AnalysisStreamEvent(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    event: AnalysisEventType
+    node: str | None = None
+    message: str = Field(min_length=1)
+    response: AnalysisResponse | None = None
 
 
 class ChannelSalesSummary(BaseModel):
