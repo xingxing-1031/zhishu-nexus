@@ -17,6 +17,7 @@ from retail_analytics_agent.workflow import (
     create_summarize_node,
     create_workflow_nodes,
 )
+from retail_analytics_agent.sql_safety import prepare_safe_sql
 
 
 def _state():
@@ -146,7 +147,9 @@ def test_workflow_node_factory_wires_complete_success_path() -> None:
     sql_generator = Mock()
     sql_generator.generate.return_value = "SELECT channel FROM orders"
     validation_tool = Mock()
-    validation_tool.validate.return_value = Mock()
+    validation_tool.validate.return_value = prepare_safe_sql(
+        "SELECT channel FROM orders"
+    )
     execution_tool = Mock()
     execution_tool.execute.return_value = Mock(
         rows=[{"channel": "jd", "sales_amount": "9000.00"}]
@@ -158,6 +161,7 @@ def test_workflow_node_factory_wires_complete_success_path() -> None:
         retrieval_tool=retrieval_tool,
         sql_generator=sql_generator,
         validation_tool=validation_tool,
+        approval_audit_sink=Mock(),
         execution_tool=execution_tool,
         summarizer=summarizer,
     )
@@ -176,6 +180,7 @@ def test_workflow_node_factory_wires_complete_success_path() -> None:
         "retrieve",
         "generate_sql",
         "validate_sql",
+        "assess_risk",
         "execute_sql",
         "summarize",
     ]

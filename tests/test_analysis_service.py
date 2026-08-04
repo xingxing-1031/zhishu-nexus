@@ -9,10 +9,15 @@ from retail_analytics_agent.analysis_service import (
 from retail_analytics_agent.models import (
     AccessContext,
     AccessRole,
+    ApprovalResolutionRequest,
+    ApprovalRequiredResponse,
+    ApprovalStatus,
     AnalysisPlan,
     AnalysisRequest,
     ChartSpec,
+    QueryRisk,
 )
+from retail_analytics_agent.sql_safety import prepare_safe_sql
 from retail_analytics_agent.workflow import create_initial_state
 
 
@@ -27,6 +32,43 @@ def _request() -> AnalysisRequest:
 
 def _access_context() -> AccessContext:
     return AccessContext(user_id="USER-001", role=AccessRole.ANALYST)
+
+
+def _admin_context() -> AccessContext:
+    return AccessContext(user_id="ADMIN-001", role=AccessRole.ADMIN)
+
+
+def _pending_state():
+    state = create_initial_state(
+        AnalysisRequest(
+            request_id="REQ-PENDING-001",
+            user_id="ADMIN-001",
+            question="查询退款原因",
+            max_rows=10,
+        ),
+        access_context=_admin_context(),
+    )
+    state.update(
+        {
+            "prepared_sql": prepare_safe_sql(
+                "SELECT reason FROM refunds LIMIT 10",
+                max_rows=10,
+                access_role=AccessRole.ADMIN,
+            ),
+            "sql_valid": True,
+            "query_risk": QueryRisk(
+                requires_approval=True,
+                reasons=(
+                    "query reads sensitive columns: refunds.reason",
+                ),
+                sensitive_columns=("refunds.reason",),
+                result_limit=10,
+            ),
+            "approval_status": ApprovalStatus.PENDING,
+            "trace": ["plan", "validate_sql", "assess_risk"],
+        }
+    )
+    return state
 
 
 def _successful_state():
@@ -111,3 +153,111 @@ def test_runner_streams_node_statuses_then_public_result() -> None:
     assert events[-1].response is not None
     assert events[-1].response.request_id == "REQ-SERVICE-001"
     graph.stream.assert_called_once()
+
+
+def test_runner_returns_pending_approval_outcome() -> None:
+    graph = Mock()
+    graph.invoke.return_value = _pending_state()
+    runner = LangGraphAnalysisRunner(graph)
+    request = AnalysisRequest(
+        request_id="REQ-PENDING-001",
+        user_id="ADMIN-001",
+        question="查询退款原因",
+        max_rows=10,
+    )
+
+    outcome = runner.run(request, _admin_context())
+
+    assert isinstance(outcome, ApprovalRequiredResponse)
+    assert outcome.status is ApprovalStatus.PENDING
+    assert outcome.sensitive_columns == ("refunds.reason",)
+
+
+def test_runner_resumes_pending_approval_with_trusted_admin() -> None:
+    graph = Mock()
+    graph.get_state.return_value = Mock(
+        values=_pending_state(),
+        next=("request_approval",),
+    )
+    completed = _successful_state()
+    completed["request_id"] = "REQ-PENDING-001"
+    completed["user_id"] = "ADMIN-001"
+    completed["access_role"] = AccessRole.ADMIN
+    completed["approval_status"] = ApprovalStatus.APPROVED
+    completed["reviewed_by"] = "ADMIN-REVIEWER"
+    graph.invoke.return_value = completed
+    runner = LangGraphAnalysisRunner(graph)
+
+    outcome = runner.resume_approval(
+        "REQ-PENDING-001",
+        ApprovalResolutionRequest(decision="approve"),
+        AccessContext(
+            user_id="ADMIN-REVIEWER",
+            role=AccessRole.ADMIN,
+        ),
+    )
+
+    assert outcome.request_id == "REQ-PENDING-001"
+    graph.get_state.assert_called_once()
+    graph.invoke.assert_called_once()
+
+
+def test_runner_refuses_analyst_approval_resolution() -> None:
+    with pytest.raises(
+        PermissionError,
+        match="only an admin can resolve approvals",
+    ):
+        LangGraphAnalysisRunner(Mock()).resume_approval(
+            "REQ-PENDING-001",
+            ApprovalResolutionRequest(decision="approve"),
+            _access_context(),
+        )
+
+
+def test_runner_stream_surfaces_pending_approval_event() -> None:
+    graph = Mock()
+    graph.stream.return_value = [_pending_state()]
+    request = AnalysisRequest(
+        request_id="REQ-PENDING-001",
+        user_id="ADMIN-001",
+        question="查询退款原因",
+        max_rows=10,
+    )
+
+    events = list(
+        LangGraphAnalysisRunner(graph).stream(request, _admin_context())
+    )
+
+    assert events[-1].event.value == "approval_required"
+    assert events[-1].approval is not None
+    assert events[-1].approval.request_id == "REQ-PENDING-001"
+
+
+def test_runner_reads_persisted_pending_status_for_requester() -> None:
+    graph = Mock()
+    graph.get_state.return_value = Mock(values=_pending_state())
+
+    outcome = LangGraphAnalysisRunner(graph).get_status(
+        "REQ-PENDING-001",
+        _admin_context(),
+    )
+
+    assert isinstance(outcome, ApprovalRequiredResponse)
+    assert outcome.status is ApprovalStatus.PENDING
+
+
+def test_runner_hides_another_users_request_from_analyst() -> None:
+    graph = Mock()
+    graph.get_state.return_value = Mock(values=_pending_state())
+
+    with pytest.raises(
+        PermissionError,
+        match="analysis request belongs to another user",
+    ):
+        LangGraphAnalysisRunner(graph).get_status(
+            "REQ-PENDING-001",
+            AccessContext(
+                user_id="USER-OTHER",
+                role=AccessRole.ANALYST,
+            ),
+        )

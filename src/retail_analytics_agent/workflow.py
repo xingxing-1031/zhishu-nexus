@@ -6,15 +6,27 @@ from typing import Annotated, Protocol, TypedDict
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph import END, START, StateGraph
+from langgraph.types import Command, interrupt
 
+from retail_analytics_agent.approval import (
+    ApprovalAuditRecord,
+    ApprovalAuditSink,
+    ApprovalAuditStatus,
+    TrustedApprovalResolution,
+    approval_status_for_risk,
+    assess_query_risk,
+)
 from retail_analytics_agent.charting import build_chart_spec
 from retail_analytics_agent.models import (
     AccessContext,
     AccessRole,
+    ApprovalDecision,
+    ApprovalStatus,
     AnalysisPlan,
     AnalysisRequest,
     ChartSpec,
     RetrievalEvidence,
+    QueryRisk,
 )
 from retail_analytics_agent.model_adapters import (
     AnalysisPlanner,
@@ -43,6 +55,10 @@ class AnalysisState(TypedDict):
     prepared_sql: PreparedSQL | None
     sql_valid: bool | None
     sql_validation_error: str | None
+    query_risk: QueryRisk | None
+    approval_status: ApprovalStatus
+    reviewed_by: str | None
+    approval_reason: str | None
     query_rows: list[dict[str, object]]
     execution_error: str | None
     final_answer: str | None
@@ -59,16 +75,19 @@ AnalysisNode = Callable[[AnalysisState], AnalysisStateUpdate]
 class CompiledAnalysisGraph(Protocol):
     def invoke(
         self,
-        state: AnalysisState | None,
+        state: AnalysisState | Command | None,
         config: RunnableConfig | None = None,
     ) -> AnalysisState: ...
 
     def stream(
         self,
         state: AnalysisState,
+        config: RunnableConfig | None = None,
         *,
         stream_mode: str,
     ) -> Iterator[AnalysisState]: ...
+
+    def get_state(self, config: RunnableConfig): ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -77,6 +96,8 @@ class WorkflowNodes:
     retrieve: AnalysisNode
     generate_sql: AnalysisNode
     validate_sql: AnalysisNode
+    assess_risk: AnalysisNode
+    request_approval: AnalysisNode
     execute_sql: AnalysisNode
     summarize: AnalysisNode
     fail: AnalysisNode
@@ -86,6 +107,8 @@ PLAN_NODE = "plan"
 RETRIEVE_NODE = "retrieve"
 GENERATE_SQL_NODE = "generate_sql"
 VALIDATE_SQL_NODE = "validate_sql"
+ASSESS_RISK_NODE = "assess_risk"
+REQUEST_APPROVAL_NODE = "request_approval"
 EXECUTE_SQL_NODE = "execute_sql"
 SUMMARIZE_NODE = "summarize"
 FAIL_NODE = "fail"
@@ -116,6 +139,10 @@ def create_initial_state(
         prepared_sql=None,
         sql_valid=None,
         sql_validation_error=None,
+        query_risk=None,
+        approval_status=ApprovalStatus.NOT_REQUIRED,
+        reviewed_by=None,
+        approval_reason=None,
         query_rows=[],
         execution_error=None,
         final_answer=None,
@@ -182,6 +209,10 @@ def create_sql_generation_node(model: SQLGenerator) -> AnalysisNode:
             ),
             "prepared_sql": None,
             "sql_valid": None,
+            "query_risk": None,
+            "approval_status": ApprovalStatus.NOT_REQUIRED,
+            "reviewed_by": None,
+            "approval_reason": None,
             "trace": [GENERATE_SQL_NODE],
         }
 
@@ -225,6 +256,92 @@ def create_sql_validation_node(tool: SQLValidationTool) -> AnalysisNode:
         }
 
     return validate_sql
+
+
+def create_query_risk_node(
+    audit_sink: ApprovalAuditSink,
+) -> AnalysisNode:
+    def assess_risk(state: AnalysisState) -> AnalysisStateUpdate:
+        prepared_sql = state["prepared_sql"]
+        if prepared_sql is None:
+            raise ValueError("validated SQL is required before risk assessment")
+
+        risk = assess_query_risk(prepared_sql)
+        status = approval_status_for_risk(risk)
+        if status is ApprovalStatus.PENDING:
+            audit_sink.record(
+                ApprovalAuditRecord(
+                    request_id=state["request_id"],
+                    requester_id=state["user_id"],
+                    access_role=state["access_role"],
+                    sql=prepared_sql.sql,
+                    status=ApprovalAuditStatus.PENDING,
+                    reasons=risk.reasons,
+                )
+            )
+        return {
+            "query_risk": risk,
+            "approval_status": status,
+            "trace": [ASSESS_RISK_NODE],
+        }
+
+    return assess_risk
+
+
+def create_approval_node(
+    audit_sink: ApprovalAuditSink,
+) -> AnalysisNode:
+    def request_approval(state: AnalysisState) -> AnalysisStateUpdate:
+        prepared_sql = state["prepared_sql"]
+        risk = state["query_risk"]
+        if prepared_sql is None or risk is None or not risk.requires_approval:
+            raise ValueError("approval is only valid for a high-risk query")
+
+        raw_resolution = interrupt(
+            {
+                "request_id": state["request_id"],
+                "sql": prepared_sql.sql,
+                "reasons": list(risk.reasons),
+                "sensitive_columns": list(risk.sensitive_columns),
+                "result_limit": risk.result_limit,
+            }
+        )
+        resolution = TrustedApprovalResolution.model_validate(raw_resolution)
+        decision = resolution.decision
+        reason = resolution.reason.strip() if resolution.reason else None
+        if resolution.reviewer_role is not AccessRole.ADMIN:
+            decision = ApprovalDecision.REJECT
+            reason = "approval requires an admin reviewer"
+
+        status = (
+            ApprovalStatus.APPROVED
+            if decision is ApprovalDecision.APPROVE
+            else ApprovalStatus.REJECTED
+        )
+        audit_sink.record(
+            ApprovalAuditRecord(
+                request_id=state["request_id"],
+                requester_id=state["user_id"],
+                access_role=state["access_role"],
+                sql=prepared_sql.sql,
+                status=(
+                    ApprovalAuditStatus.APPROVED
+                    if status is ApprovalStatus.APPROVED
+                    else ApprovalAuditStatus.REJECTED
+                ),
+                reasons=risk.reasons,
+                reviewer_id=resolution.reviewer_id,
+                decision_reason=reason,
+            )
+        )
+        return {
+            "approval_status": status,
+            "reviewed_by": resolution.reviewer_id,
+            "approval_reason": reason,
+            "trace": [REQUEST_APPROVAL_NODE],
+        }
+
+    return request_approval
 
 
 def create_sql_execution_node(tool: SQLExecutionTool) -> AnalysisNode:
@@ -286,6 +403,7 @@ def create_fail_node() -> AnalysisNode:
     def fail(state: AnalysisState) -> AnalysisStateUpdate:
         reason = (
             state["execution_error"]
+            or state["approval_reason"]
             or state["sql_validation_error"]
             or "unknown workflow error"
         )
@@ -303,6 +421,7 @@ def create_workflow_nodes(
     retrieval_tool: RetrievalTool,
     sql_generator: SQLGenerator,
     validation_tool: SQLValidationTool,
+    approval_audit_sink: ApprovalAuditSink,
     execution_tool: SQLExecutionTool,
     summarizer: ResultSummarizer,
 ) -> WorkflowNodes:
@@ -311,6 +430,8 @@ def create_workflow_nodes(
         retrieve=create_retrieve_node(retrieval_tool),
         generate_sql=create_sql_generation_node(sql_generator),
         validate_sql=create_sql_validation_node(validation_tool),
+        assess_risk=create_query_risk_node(approval_audit_sink),
+        request_approval=create_approval_node(approval_audit_sink),
         execute_sql=create_sql_execution_node(execution_tool),
         summarize=create_summarize_node(summarizer),
         fail=create_fail_node(),
@@ -319,9 +440,21 @@ def create_workflow_nodes(
 
 def route_after_sql_validation(state: AnalysisState) -> str:
     if state["sql_valid"] is True:
-        return EXECUTE_SQL_NODE
+        return ASSESS_RISK_NODE
     if state["retry_count"] <= state["max_retries"]:
         return GENERATE_SQL_NODE
+    return FAIL_NODE
+
+
+def route_after_risk_assessment(state: AnalysisState) -> str:
+    if state["approval_status"] is ApprovalStatus.PENDING:
+        return REQUEST_APPROVAL_NODE
+    return EXECUTE_SQL_NODE
+
+
+def route_after_approval(state: AnalysisState) -> str:
+    if state["approval_status"] is ApprovalStatus.APPROVED:
+        return EXECUTE_SQL_NODE
     return FAIL_NODE
 
 
@@ -343,6 +476,8 @@ def build_analysis_graph(
     graph.add_node(RETRIEVE_NODE, nodes.retrieve)
     graph.add_node(GENERATE_SQL_NODE, nodes.generate_sql)
     graph.add_node(VALIDATE_SQL_NODE, nodes.validate_sql)
+    graph.add_node(ASSESS_RISK_NODE, nodes.assess_risk)
+    graph.add_node(REQUEST_APPROVAL_NODE, nodes.request_approval)
     graph.add_node(EXECUTE_SQL_NODE, nodes.execute_sql)
     graph.add_node(SUMMARIZE_NODE, nodes.summarize)
     graph.add_node(FAIL_NODE, nodes.fail)
@@ -355,8 +490,24 @@ def build_analysis_graph(
         VALIDATE_SQL_NODE,
         route_after_sql_validation,
         {
-            EXECUTE_SQL_NODE: EXECUTE_SQL_NODE,
+            ASSESS_RISK_NODE: ASSESS_RISK_NODE,
             GENERATE_SQL_NODE: GENERATE_SQL_NODE,
+            FAIL_NODE: FAIL_NODE,
+        },
+    )
+    graph.add_conditional_edges(
+        ASSESS_RISK_NODE,
+        route_after_risk_assessment,
+        {
+            REQUEST_APPROVAL_NODE: REQUEST_APPROVAL_NODE,
+            EXECUTE_SQL_NODE: EXECUTE_SQL_NODE,
+        },
+    )
+    graph.add_conditional_edges(
+        REQUEST_APPROVAL_NODE,
+        route_after_approval,
+        {
+            EXECUTE_SQL_NODE: EXECUTE_SQL_NODE,
             FAIL_NODE: FAIL_NODE,
         },
     )

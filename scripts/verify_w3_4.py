@@ -2,9 +2,11 @@ from uuid import uuid4
 
 from retail_analytics_agent.checkpointing import open_postgres_checkpointer
 from retail_analytics_agent.models import (
+    ApprovalStatus,
     AnalysisPlan,
     AnalysisRequest,
     RetrievalEvidence,
+    QueryRisk,
 )
 from retail_analytics_agent.sql_safety import prepare_safe_sql
 from retail_analytics_agent.workflow import (
@@ -75,6 +77,19 @@ def _verification_nodes() -> WorkflowNodes:
             "trace": ["execute_sql"],
         }
 
+    def assess_risk(state: AnalysisState) -> dict[str, object]:
+        return {
+            "query_risk": QueryRisk(
+                requires_approval=False,
+                result_limit=10,
+            ),
+            "approval_status": ApprovalStatus.NOT_REQUIRED,
+            "trace": ["assess_risk"],
+        }
+
+    def request_approval(state: AnalysisState) -> dict[str, object]:
+        raise AssertionError("verification query must not request approval")
+
     def summarize(state: AnalysisState) -> dict[str, object]:
         return {
             "final_answer": f"返回 {len(state['query_rows'])} 行结果",
@@ -89,6 +104,8 @@ def _verification_nodes() -> WorkflowNodes:
         retrieve=retrieve,
         generate_sql=generate_sql,
         validate_sql=validate_sql,
+        assess_risk=assess_risk,
+        request_approval=request_approval,
         execute_sql=execute_sql,
         summarize=summarize,
         fail=fail,
@@ -117,7 +134,7 @@ def main() -> None:
         )
         if interrupted_graph.get_state(config).next != (EXECUTE_SQL_NODE,):
             raise AssertionError("workflow did not pause before execute_sql")
-        if interrupted["trace"][-1] != "validate_sql":
+        if interrupted["trace"][-1] != "assess_risk":
             raise AssertionError("workflow paused at the wrong state boundary")
 
     with open_postgres_checkpointer() as checkpointer:
@@ -135,6 +152,7 @@ def main() -> None:
         "retrieve",
         "generate_sql",
         "validate_sql",
+        "assess_risk",
         "execute_sql",
         "summarize",
     ]

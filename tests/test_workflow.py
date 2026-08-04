@@ -1,15 +1,21 @@
 from collections.abc import Callable
+from unittest.mock import Mock
 
 import pytest
 from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.types import Command
 
+from retail_analytics_agent.approval import ApprovalAuditStatus
 from retail_analytics_agent.models import (
     AccessContext,
     AccessRole,
+    ApprovalStatus,
     AnalysisPlan,
     AnalysisRequest,
     RetrievalEvidence,
+    QueryRisk,
 )
+from retail_analytics_agent.sql_safety import prepare_safe_sql
 from retail_analytics_agent.workflow import (
     EXECUTE_SQL_NODE,
     FAIL_NODE,
@@ -19,6 +25,8 @@ from retail_analytics_agent.workflow import (
     WorkflowNodes,
     build_analysis_graph,
     create_initial_state,
+    create_approval_node,
+    create_query_risk_node,
     create_thread_config,
     route_after_sql_execution,
     route_after_sql_validation,
@@ -38,6 +46,8 @@ def _base_nodes(
     *,
     validate_sql: Callable[[AnalysisState], dict[str, object]] | None = None,
     execute_sql: Callable[[AnalysisState], dict[str, object]] | None = None,
+    assess_risk: Callable[[AnalysisState], dict[str, object]] | None = None,
+    request_approval: Callable[[AnalysisState], dict[str, object]] | None = None,
 ) -> WorkflowNodes:
     def plan(state: AnalysisState) -> dict[str, object]:
         return {
@@ -93,6 +103,19 @@ def _base_nodes(
             "trace": ["execute_sql"],
         }
 
+    def default_assess_risk(state: AnalysisState) -> dict[str, object]:
+        return {
+            "query_risk": QueryRisk(
+                requires_approval=False,
+                result_limit=100,
+            ),
+            "approval_status": ApprovalStatus.NOT_REQUIRED,
+            "trace": ["assess_risk"],
+        }
+
+    def default_request_approval(state: AnalysisState) -> dict[str, object]:
+        raise AssertionError("low-risk test query must not request approval")
+
     def summarize(state: AnalysisState) -> dict[str, object]:
         return {
             "final_answer": f"返回 {len(state['query_rows'])} 行结果",
@@ -100,7 +123,11 @@ def _base_nodes(
         }
 
     def fail(state: AnalysisState) -> dict[str, object]:
-        reason = state["execution_error"] or state["sql_validation_error"]
+        reason = (
+            state["execution_error"]
+            or state["approval_reason"]
+            or state["sql_validation_error"]
+        )
         return {
             "final_answer": f"分析失败：{reason}",
             "trace": ["fail"],
@@ -111,6 +138,8 @@ def _base_nodes(
         retrieve=retrieve,
         generate_sql=generate_sql,
         validate_sql=validate_sql or default_validate_sql,
+        assess_risk=assess_risk or default_assess_risk,
+        request_approval=request_approval or default_request_approval,
         execute_sql=execute_sql or default_execute_sql,
         summarize=summarize,
         fail=fail,
@@ -173,6 +202,7 @@ def test_analysis_graph_follows_success_path() -> None:
         "retrieve",
         "generate_sql",
         "validate_sql",
+        "assess_risk",
         "execute_sql",
         "summarize",
     ]
@@ -195,6 +225,7 @@ def test_checkpoint_resume_continues_without_repeating_completed_nodes() -> None
         "retrieve",
         "generate_sql",
         "validate_sql",
+        "assess_risk",
     ]
     assert graph.get_state(config).next == (EXECUTE_SQL_NODE,)
 
@@ -206,6 +237,7 @@ def test_checkpoint_resume_continues_without_repeating_completed_nodes() -> None
         "retrieve",
         "generate_sql",
         "validate_sql",
+        "assess_risk",
         "execute_sql",
         "summarize",
     ]
@@ -232,6 +264,114 @@ def test_checkpoint_threads_keep_independent_request_state() -> None:
     assert first_state["question"] == "最近30天各渠道销售额是多少？"
     assert second_state["request_id"] == "REQ-002"
     assert second_state["question"] == "最近7天商品销量是多少？"
+
+
+def test_sensitive_query_pauses_then_resumes_same_prepared_sql() -> None:
+    audit_sink = Mock()
+
+    def validate_sql(state: AnalysisState) -> dict[str, object]:
+        return {
+            "prepared_sql": prepare_safe_sql(
+                "SELECT reason FROM refunds LIMIT 10",
+                max_rows=10,
+                access_role=AccessRole.ADMIN,
+            ),
+            "sql_valid": True,
+            "sql_validation_error": None,
+            "trace": ["validate_sql"],
+        }
+
+    nodes = _base_nodes(
+        validate_sql=validate_sql,
+        assess_risk=create_query_risk_node(audit_sink),
+        request_approval=create_approval_node(audit_sink),
+    )
+    graph = build_analysis_graph(nodes, checkpointer=InMemorySaver())
+    config = create_thread_config("REQ-HITL-APPROVE")
+    state = create_initial_state(
+        _request(),
+        access_context=AccessContext(
+            user_id="USER-001",
+            role=AccessRole.ADMIN,
+        ),
+    )
+
+    interrupted = graph.invoke(state, config)
+
+    assert interrupted["approval_status"] is ApprovalStatus.PENDING
+    assert graph.get_state(config).next == ("request_approval",)
+    assert interrupted["trace"][-1] == "assess_risk"
+    pending_audit = audit_sink.record.call_args_list[0].args[0]
+    assert pending_audit.status is ApprovalAuditStatus.PENDING
+
+    resumed = graph.invoke(
+        Command(
+            resume={
+                "decision": "approve",
+                "reviewer_id": "ADMIN-REVIEWER",
+                "reviewer_role": "admin",
+            }
+        ),
+        config,
+    )
+
+    assert resumed["approval_status"] is ApprovalStatus.APPROVED
+    assert resumed["reviewed_by"] == "ADMIN-REVIEWER"
+    assert resumed["trace"].count("generate_sql") == 1
+    assert resumed["trace"][-3:] == [
+        "request_approval",
+        "execute_sql",
+        "summarize",
+    ]
+    approved_audit = audit_sink.record.call_args_list[1].args[0]
+    assert approved_audit.status is ApprovalAuditStatus.APPROVED
+
+
+def test_rejected_approval_ends_without_database_execution() -> None:
+    audit_sink = Mock()
+
+    def validate_sql(state: AnalysisState) -> dict[str, object]:
+        return {
+            "prepared_sql": prepare_safe_sql(
+                "SELECT order_id FROM orders",
+                max_rows=101,
+            ),
+            "sql_valid": True,
+            "sql_validation_error": None,
+            "trace": ["validate_sql"],
+        }
+
+    def execute_sql(state: AnalysisState) -> dict[str, object]:
+        raise AssertionError("rejected query must not execute")
+
+    graph = build_analysis_graph(
+        _base_nodes(
+            validate_sql=validate_sql,
+            assess_risk=create_query_risk_node(audit_sink),
+            request_approval=create_approval_node(audit_sink),
+            execute_sql=execute_sql,
+        ),
+        checkpointer=InMemorySaver(),
+    )
+    config = create_thread_config("REQ-HITL-REJECT")
+    graph.invoke(create_initial_state(_request()), config)
+
+    rejected = graph.invoke(
+        Command(
+            resume={
+                "decision": "reject",
+                "reason": "result is too broad",
+                "reviewer_id": "ADMIN-REVIEWER",
+                "reviewer_role": "admin",
+            }
+        ),
+        config,
+    )
+
+    assert rejected["approval_status"] is ApprovalStatus.REJECTED
+    assert rejected["final_answer"] == "分析失败：result is too broad"
+    assert "execute_sql" not in rejected["trace"]
+    assert rejected["trace"][-2:] == ["request_approval", "fail"]
 
 
 def test_analysis_graph_retries_sql_then_succeeds() -> None:
@@ -336,7 +476,7 @@ def test_validation_router_uses_state_instead_of_result_truthiness() -> None:
     state = create_initial_state(_request(), max_retries=1)
 
     state["sql_valid"] = True
-    assert route_after_sql_validation(state) == EXECUTE_SQL_NODE
+    assert route_after_sql_validation(state) == "assess_risk"
 
     state["sql_valid"] = False
     state["retry_count"] = 0

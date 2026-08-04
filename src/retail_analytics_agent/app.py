@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, HTTPException, Query, Response
 from fastapi.responses import StreamingResponse
 
 from retail_analytics_agent.access_control import get_access_context
@@ -15,9 +15,13 @@ from retail_analytics_agent.database import (
 )
 from retail_analytics_agent.models import (
     AccessContext,
+    AccessRole,
     AnalysisRequest,
+    AnalysisOutcome,
     AnalysisResponse,
     AnalysisStreamEvent,
+    ApprovalRequiredResponse,
+    ApprovalResolutionRequest,
     ChannelSalesSummary,
     OrderStatusSummary,
     ProductSalesSummary,
@@ -50,9 +54,10 @@ def validate_analysis_request(
     return request
 
 
-@app.post("/analysis/run", response_model=AnalysisResponse)
+@app.post("/analysis/run", response_model=AnalysisOutcome)
 def run_analysis(
     request: AnalysisRequest,
+    response: Response,
     runner: Annotated[AnalysisRunner, Depends(get_analysis_runner)],
     access_context: Annotated[AccessContext, Depends(get_access_context)],
 ) -> AnalysisResponse:
@@ -62,13 +67,60 @@ def run_analysis(
             detail="request user_id does not match authenticated user",
         )
     try:
-        return runner.run(request, access_context)
+        result = runner.run(request, access_context)
+        if isinstance(result, ApprovalRequiredResponse):
+            response.status_code = 202
+        return result
     except ModelInvocationError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except AnalysisRunError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@app.post(
+    "/analysis/{request_id}/approval",
+    response_model=AnalysisOutcome,
+)
+def resolve_analysis_approval(
+    request_id: str,
+    resolution: ApprovalResolutionRequest,
+    runner: Annotated[AnalysisRunner, Depends(get_analysis_runner)],
+    access_context: Annotated[AccessContext, Depends(get_access_context)],
+) -> AnalysisOutcome:
+    if access_context.role is not AccessRole.ADMIN:
+        raise HTTPException(
+            status_code=403,
+            detail="only an admin can resolve approvals",
+        )
+    try:
+        return runner.resume_approval(
+            request_id,
+            resolution,
+            access_context,
+        )
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.get(
+    "/analysis/{request_id}",
+    response_model=AnalysisOutcome,
+)
+def read_analysis_status(
+    request_id: str,
+    runner: Annotated[AnalysisRunner, Depends(get_analysis_runner)],
+    access_context: Annotated[AccessContext, Depends(get_access_context)],
+) -> AnalysisOutcome:
+    try:
+        return runner.get_status(request_id, access_context)
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 def _encode_analysis_events(

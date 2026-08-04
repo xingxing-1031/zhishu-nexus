@@ -9,6 +9,8 @@ from psycopg.rows import dict_row
 
 from retail_analytics_agent.models import (
     AccessRole,
+    ApprovalDecision,
+    ApprovalStatus,
     AnalysisDimension,
     AnalysisFilter,
     AnalysisFilterField,
@@ -20,6 +22,7 @@ from retail_analytics_agent.models import (
     ChartType,
     RelativeTimeRange,
     RetrievalEvidence,
+    QueryRisk,
     SortDirection,
 )
 from retail_analytics_agent.settings import Settings, get_settings
@@ -28,6 +31,8 @@ from retail_analytics_agent.sql_safety import PreparedSQL
 
 _CHECKPOINT_TYPES = (
     AccessRole,
+    ApprovalDecision,
+    ApprovalStatus,
     AnalysisDimension,
     AnalysisFilter,
     AnalysisFilterField,
@@ -39,6 +44,7 @@ _CHECKPOINT_TYPES = (
     ChartType,
     RelativeTimeRange,
     RetrievalEvidence,
+    QueryRisk,
     SortDirection,
     PreparedSQL,
 )

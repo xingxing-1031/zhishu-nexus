@@ -90,7 +90,7 @@
 -> 输出结论、SQL、指标口径和数据来源
 ```
 
-当前仓库尚未实现完整 Agent 链路。范围与非目标见 [PROJECT_SCOPE.md](docs/PROJECT_SCOPE.md)，后续工程任务见 [UPGRADE_BACKLOG.md](docs/UPGRADE_BACKLOG.md)。
+当前仓库已实现自然语言到安全 SQL、真实查询、结果解释、权限控制和可恢复审批链路。范围与非目标见 [PROJECT_SCOPE.md](docs/PROJECT_SCOPE.md)，后续工程任务见 [UPGRADE_BACKLOG.md](docs/UPGRADE_BACKLOG.md)。
 
 ## 本地运行
 
@@ -110,6 +110,12 @@ Copy-Item .env.example .env
 docker compose up -d
 docker compose cp db/migrations/001_initial_schema.sql postgres:/tmp/001_initial_schema.sql
 docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U retail_user -d retail_analytics -f /tmp/001_initial_schema.sql
+docker compose cp db/migrations/002_query_audit_logs.sql postgres:/tmp/002_query_audit_logs.sql
+docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U retail_user -d retail_analytics -f /tmp/002_query_audit_logs.sql
+docker compose cp db/migrations/003_knowledge_chunks.sql postgres:/tmp/003_knowledge_chunks.sql
+docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U retail_user -d retail_analytics -f /tmp/003_knowledge_chunks.sql
+docker compose cp db/migrations/004_query_approval_logs.sql postgres:/tmp/004_query_approval_logs.sql
+docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U retail_user -d retail_analytics -f /tmp/004_query_approval_logs.sql
 docker compose cp db/seeds/001_demo_data.sql postgres:/tmp/001_demo_data.sql
 docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U retail_user -d retail_analytics -f /tmp/001_demo_data.sql
 docker compose cp db/verification/verify_w2_1.sql postgres:/tmp/verify_w2_1.sql

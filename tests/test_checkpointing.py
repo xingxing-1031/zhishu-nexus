@@ -9,9 +9,11 @@ from retail_analytics_agent.checkpointing import (
 )
 from retail_analytics_agent.models import (
     AccessRole,
+    ApprovalStatus,
     AnalysisPlan,
     ChartSpec,
     RetrievalEvidence,
+    QueryRisk,
 )
 from retail_analytics_agent.settings import Settings
 from retail_analytics_agent.sql_safety import PreparedSQL
@@ -64,6 +66,13 @@ def test_checkpoint_serializer_restores_registered_state_types() -> None:
     serializer = create_checkpoint_serializer()
     values = [
         AccessRole.ADMIN,
+        ApprovalStatus.PENDING,
+        QueryRisk(
+            requires_approval=True,
+            reasons=("query reads sensitive columns: refunds.reason",),
+            sensitive_columns=("refunds.reason",),
+            result_limit=10,
+        ),
         AnalysisPlan(
             analysis_goal="统计销售额",
             metrics=["sales_amount"],
@@ -90,7 +99,9 @@ def test_checkpoint_serializer_restores_registered_state_types() -> None:
 
     assert restored == values
     assert restored[0] is AccessRole.ADMIN
-    assert isinstance(restored[1], AnalysisPlan)
-    assert isinstance(restored[2], RetrievalEvidence)
-    assert isinstance(restored[3], ChartSpec)
-    assert isinstance(restored[4], PreparedSQL)
+    assert restored[1] is ApprovalStatus.PENDING
+    assert isinstance(restored[2], QueryRisk)
+    assert isinstance(restored[3], AnalysisPlan)
+    assert isinstance(restored[4], RetrievalEvidence)
+    assert isinstance(restored[5], ChartSpec)
+    assert isinstance(restored[6], PreparedSQL)

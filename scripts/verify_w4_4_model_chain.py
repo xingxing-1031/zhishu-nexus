@@ -4,6 +4,7 @@ from uuid import uuid4
 import httpx
 
 from retail_analytics_agent.audit import DatabaseAuditSink
+from retail_analytics_agent.approval import DatabaseApprovalAuditSink
 from retail_analytics_agent.database import connect_to_database
 from retail_analytics_agent.model_adapters import (
     OllamaAnalysisPlanner,
@@ -41,6 +42,7 @@ def main() -> None:
         max_rows=10,
     )
     audit_sink = DatabaseAuditSink()
+    approval_audit_sink = DatabaseApprovalAuditSink()
 
     with (
         httpx.Client(
@@ -54,6 +56,7 @@ def main() -> None:
             retrieval_tool=CatalogRetrievalTool(),
             sql_generator=OllamaSQLGenerator(model_client),
             validation_tool=SQLGlotValidationTool(audit_sink),
+            approval_audit_sink=approval_audit_sink,
             execution_tool=SafeSQLExecutionTool(
                 query_connection,
                 audit_sink,

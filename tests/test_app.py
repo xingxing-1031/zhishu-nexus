@@ -13,6 +13,8 @@ from retail_analytics_agent.models import (
     AccessRole,
     AnalysisResponse,
     AnalysisStreamEvent,
+    ApprovalRequiredResponse,
+    ApprovalRejectedResponse,
 )
 
 
@@ -21,6 +23,10 @@ client = TestClient(app)
 
 def _access_context() -> AccessContext:
     return AccessContext(user_id="USER-001", role=AccessRole.ANALYST)
+
+
+def _admin_access_context() -> AccessContext:
+    return AccessContext(user_id="ADMIN-001", role=AccessRole.ADMIN)
 
 
 def test_health_check() -> None:
@@ -229,6 +235,110 @@ def test_run_analysis_rejects_mismatched_trusted_identity() -> None:
         "detail": "request user_id does not match authenticated user"
     }
     runner.run.assert_not_called()
+
+
+def test_run_analysis_returns_202_when_approval_is_required() -> None:
+    runner = Mock()
+    runner.run.return_value = ApprovalRequiredResponse(
+        request_id="REQ-PENDING-001",
+        access_role=AccessRole.ADMIN,
+        sql="SELECT reason FROM refunds LIMIT 10",
+        reasons=("query reads sensitive columns: refunds.reason",),
+        sensitive_columns=("refunds.reason",),
+        result_limit=10,
+        trace=("plan", "validate_sql", "assess_risk"),
+    )
+    app.dependency_overrides[get_analysis_runner] = lambda: runner
+    app.dependency_overrides[get_access_context] = _admin_access_context
+
+    try:
+        response = client.post(
+            "/analysis/run",
+            json={
+                "request_id": "REQ-PENDING-001",
+                "user_id": "ADMIN-001",
+                "question": "查询退款原因",
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 202
+    assert response.json()["status"] == "pending"
+    assert response.json()["sensitive_columns"] == ["refunds.reason"]
+
+
+def test_analyst_cannot_resolve_approval() -> None:
+    runner = Mock()
+    app.dependency_overrides[get_analysis_runner] = lambda: runner
+    app.dependency_overrides[get_access_context] = _access_context
+
+    try:
+        response = client.post(
+            "/analysis/REQ-PENDING-002/approval",
+            json={"decision": "approve"},
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 403
+    runner.resume_approval.assert_not_called()
+
+
+def test_admin_resolves_approval_and_returns_rejection() -> None:
+    runner = Mock()
+    runner.resume_approval.return_value = ApprovalRejectedResponse(
+        request_id="REQ-PENDING-003",
+        reviewed_by="ADMIN-001",
+        reason="结果范围过大",
+        trace=("assess_risk", "request_approval", "fail"),
+    )
+    app.dependency_overrides[get_analysis_runner] = lambda: runner
+    app.dependency_overrides[get_access_context] = _admin_access_context
+
+    try:
+        response = client.post(
+            "/analysis/REQ-PENDING-003/approval",
+            json={
+                "decision": "reject",
+                "reason": "结果范围过大",
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "rejected"
+    assert response.json()["reviewed_by"] == "ADMIN-001"
+    runner.resume_approval.assert_called_once()
+    assert runner.resume_approval.call_args.args[1].decision.value == "reject"
+
+
+def test_read_analysis_status_returns_persisted_pending_outcome() -> None:
+    runner = Mock()
+    runner.get_status.return_value = ApprovalRequiredResponse(
+        request_id="REQ-PENDING-004",
+        access_role=AccessRole.ADMIN,
+        sql="SELECT reason FROM refunds LIMIT 10",
+        reasons=("query reads sensitive columns: refunds.reason",),
+        sensitive_columns=("refunds.reason",),
+        result_limit=10,
+        trace=("validate_sql", "assess_risk"),
+    )
+    app.dependency_overrides[get_analysis_runner] = lambda: runner
+    app.dependency_overrides[get_access_context] = _admin_access_context
+
+    try:
+        response = client.get("/analysis/REQ-PENDING-004")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "pending"
+    runner.get_status.assert_called_once_with(
+        "REQ-PENDING-004",
+        _admin_access_context(),
+    )
 
 
 def test_channel_sales_summary_returns_query_results() -> None:

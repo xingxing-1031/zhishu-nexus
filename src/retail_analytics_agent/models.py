@@ -61,6 +61,72 @@ class AccessContext(BaseModel):
     role: AccessRole
 
 
+class ApprovalStatus(StrEnum):
+    NOT_REQUIRED = "not_required"
+    PENDING = "pending"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+
+
+class ApprovalDecision(StrEnum):
+    APPROVE = "approve"
+    REJECT = "reject"
+
+
+class QueryRisk(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    requires_approval: bool
+    reasons: tuple[str, ...] = ()
+    sensitive_columns: tuple[str, ...] = ()
+    result_limit: int = Field(ge=1, le=1000)
+
+    @model_validator(mode="after")
+    def validate_approval_reasons(self) -> Self:
+        if self.requires_approval != bool(self.reasons):
+            raise ValueError(
+                "approval reasons must match requires_approval"
+            )
+        return self
+
+
+class ApprovalResolutionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    decision: ApprovalDecision
+    reason: str | None = Field(default=None, max_length=500)
+
+    @model_validator(mode="after")
+    def validate_rejection_reason(self) -> Self:
+        if self.decision is ApprovalDecision.REJECT:
+            if self.reason is None or not self.reason.strip():
+                raise ValueError("rejection reason is required")
+        return self
+
+
+class ApprovalRequiredResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    request_id: str = Field(min_length=1)
+    status: ApprovalStatus = ApprovalStatus.PENDING
+    access_role: AccessRole
+    sql: str = Field(min_length=1)
+    reasons: tuple[str, ...] = Field(min_length=1)
+    sensitive_columns: tuple[str, ...] = ()
+    result_limit: int = Field(ge=1, le=1000)
+    trace: tuple[str, ...]
+
+
+class ApprovalRejectedResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    request_id: str = Field(min_length=1)
+    status: ApprovalStatus = ApprovalStatus.REJECTED
+    reviewed_by: str = Field(min_length=1)
+    reason: str = Field(min_length=1)
+    trace: tuple[str, ...]
+
+
 class AnalysisMetric(StrEnum):
     SALES_AMOUNT = "sales_amount"
     ORDER_COUNT = "order_count"
@@ -197,10 +263,17 @@ class AnalysisResponse(BaseModel):
     trace: tuple[str, ...]
 
 
+AnalysisOutcome = (
+    AnalysisResponse | ApprovalRequiredResponse | ApprovalRejectedResponse
+)
+
+
 class AnalysisEventType(StrEnum):
     STATUS = "status"
     RESULT = "result"
     ERROR = "error"
+    APPROVAL_REQUIRED = "approval_required"
+    REJECTED = "rejected"
 
 
 class AnalysisStreamEvent(BaseModel):
@@ -210,6 +283,8 @@ class AnalysisStreamEvent(BaseModel):
     node: str | None = None
     message: str = Field(min_length=1)
     response: AnalysisResponse | None = None
+    approval: ApprovalRequiredResponse | None = None
+    rejection: ApprovalRejectedResponse | None = None
 
 
 class ChannelSalesSummary(BaseModel):

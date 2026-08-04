@@ -79,6 +79,8 @@ class PreparedSQL(BaseModel):
     tables: tuple[str, ...]
     max_rows: int = Field(ge=1, le=MAX_QUERY_ROWS)
     access_role: AccessRole = AccessRole.ANALYST
+    referenced_columns: tuple[str, ...] = ()
+    result_limit: int = Field(default=100, ge=1, le=MAX_QUERY_ROWS)
 
 
 def validate_read_only_sql(sql: str) -> exp.Expression:
@@ -127,49 +129,65 @@ def prepare_safe_sql(
     statement = validate_read_only_sql(sql)
     tables, aliases, derived_relations = _validate_tables(statement)
     _validate_columns(statement, tables, aliases, derived_relations)
-    _validate_role_columns(statement, tables, aliases, access_role)
+    referenced_columns = _collect_referenced_columns(
+        statement,
+        tables,
+        aliases,
+    )
+    _validate_role_columns(referenced_columns, access_role)
     _validate_functions(statement)
 
     limited_statement = _enforce_limit(statement, max_rows)
+    result_limit = _read_result_limit(limited_statement)
     return PreparedSQL(
         sql=limited_statement.sql(dialect="postgres"),
         tables=tuple(sorted(tables)),
         max_rows=max_rows,
         access_role=access_role,
+        referenced_columns=tuple(sorted(referenced_columns)),
+        result_limit=result_limit,
     )
 
 
 def _validate_role_columns(
-    statement: exp.Expression,
-    tables: set[str],
-    aliases: dict[str, str],
+    referenced_columns: set[str],
     access_role: AccessRole,
 ) -> None:
     denied = denied_columns_for_role(access_role)
     if not denied:
         return
 
+    denied_names = {f"{table}.{column}" for table, column in denied}
+    forbidden = sorted(referenced_columns & denied_names)
+    if forbidden:
+        raise SQLSafetyError(
+            f"role {access_role.value} is not allowed to access column: "
+            f"{forbidden[0]}"
+        )
+
+
+def _collect_referenced_columns(
+    statement: exp.Expression,
+    tables: set[str],
+    aliases: dict[str, str],
+) -> set[str]:
+    referenced: set[str] = set()
     for column in statement.find_all(exp.Column):
         column_name = column.name.lower()
+        if column_name == "*":
+            continue
+
         qualifier = column.table.lower() if column.table else ""
         if qualifier:
             table_name = aliases.get(qualifier)
-            if table_name is None:
-                continue
-            candidates = (table_name,)
-        else:
-            candidates = tuple(
-                table_name
-                for table_name in tables
-                if column_name in _ALLOWED_COLUMNS[table_name]
-            )
+            if table_name is not None:
+                referenced.add(f"{table_name}.{column_name}")
+            continue
 
-        for table_name in candidates:
-            if (table_name, column_name) in denied:
-                raise SQLSafetyError(
-                    f"role {access_role.value} is not allowed to access "
-                    f"column: {table_name}.{column_name}"
-                )
+        for table_name in tables:
+            if column_name in _ALLOWED_COLUMNS[table_name]:
+                referenced.add(f"{table_name}.{column_name}")
+    return referenced
 
 
 def _validate_tables(
@@ -296,3 +314,13 @@ def _enforce_limit(
                 return statement.copy()
 
     return statement.limit(max_rows, copy=True)
+
+
+def _read_result_limit(statement: exp.Expression) -> int:
+    limit = statement.args.get("limit")
+    if not isinstance(limit, exp.Limit):
+        raise SQLSafetyError("validated SQL must contain a result limit")
+    expression = limit.expression
+    if not isinstance(expression, exp.Literal) or not expression.is_int:
+        raise SQLSafetyError("validated SQL must use an integer result limit")
+    return int(expression.this)
