@@ -34,6 +34,7 @@
 | 15 | [向量检索、混合召回与重排](15-vector-hybrid-reranking.md) | 22 分钟 | W4-3 已完成 |
 | 16 | [真实模型端到端分析与 SSE](16-end-to-end-analysis-sse.md) | 20 分钟 | W4-4 已完成 |
 | 17 | [可信身份与字段访问控制](17-access-control.md) | 18 分钟 | W5-1 已完成 |
+| 18 | [Human-in-the-loop 查询审批](18-hitl-approval.md) | 20 分钟 | W5-2 口述待验收 |
 
 ## 复习节奏
 
