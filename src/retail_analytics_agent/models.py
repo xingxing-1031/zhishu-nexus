@@ -49,6 +49,18 @@ class AnalysisRequest(BaseModel):
     max_rows: int = Field(default=100, ge=1, le=1000)
 
 
+class AccessRole(StrEnum):
+    ANALYST = "analyst"
+    ADMIN = "admin"
+
+
+class AccessContext(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    user_id: str = Field(min_length=1)
+    role: AccessRole
+
+
 class AnalysisMetric(StrEnum):
     SALES_AMOUNT = "sales_amount"
     ORDER_COUNT = "order_count"
@@ -175,6 +187,7 @@ class AnalysisResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     request_id: str = Field(min_length=1)
+    access_role: AccessRole
     answer: str = Field(min_length=1)
     plan: AnalysisPlan
     rows: list[dict[str, Any]]

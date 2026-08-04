@@ -12,6 +12,7 @@ from retail_analytics_agent.model_adapters import (
     OllamaSQLGenerator,
 )
 from retail_analytics_agent.models import (
+    AccessContext,
     AnalysisRequest,
     AnalysisResponse,
     AnalysisStreamEvent,
@@ -35,11 +36,16 @@ class AnalysisRunError(RuntimeError):
 
 
 class AnalysisRunner(Protocol):
-    def run(self, request: AnalysisRequest) -> AnalysisResponse: ...
+    def run(
+        self,
+        request: AnalysisRequest,
+        access_context: AccessContext,
+    ) -> AnalysisResponse: ...
 
     def stream(
         self,
         request: AnalysisRequest,
+        access_context: AccessContext,
     ) -> Iterator[AnalysisStreamEvent]: ...
 
 
@@ -58,13 +64,20 @@ _NODE_STATUS_MESSAGES = {
 class LangGraphAnalysisRunner:
     graph: CompiledAnalysisGraph
 
-    def run(self, request: AnalysisRequest) -> AnalysisResponse:
-        result = self.graph.invoke(create_initial_state(request))
+    def run(
+        self,
+        request: AnalysisRequest,
+        access_context: AccessContext,
+    ) -> AnalysisResponse:
+        result = self.graph.invoke(
+            create_initial_state(request, access_context=access_context)
+        )
         return self._to_response(result)
 
     def stream(
         self,
         request: AnalysisRequest,
+        access_context: AccessContext,
     ) -> Iterator[AnalysisStreamEvent]:
         yield AnalysisStreamEvent(
             event="status",
@@ -74,7 +87,7 @@ class LangGraphAnalysisRunner:
         last_node: str | None = None
         final_state = None
         for state in self.graph.stream(
-            create_initial_state(request),
+            create_initial_state(request, access_context=access_context),
             stream_mode="values",
         ):
             final_state = state
@@ -116,6 +129,7 @@ class LangGraphAnalysisRunner:
 
         return AnalysisResponse(
             request_id=result["request_id"],
+            access_role=result["access_role"],
             answer=answer,
             plan=plan,
             rows=result["query_rows"],

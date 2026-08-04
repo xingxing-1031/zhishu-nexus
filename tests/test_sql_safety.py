@@ -1,6 +1,7 @@
 import pytest
 from sqlglot import exp
 
+from retail_analytics_agent.models import AccessRole
 from retail_analytics_agent.sql_safety import (
     SQLSafetyError,
     prepare_safe_sql,
@@ -131,6 +132,53 @@ def test_prepare_safe_sql_allows_approved_join_fields() -> None:
     )
 
     assert prepared.tables == ("order_items", "orders", "products")
+
+
+@pytest.mark.parametrize(
+    "sql",
+    [
+        "SELECT reason FROM refunds",
+        "SELECT r.reason FROM refunds AS r",
+        (
+            "WITH refund_reasons AS ("
+            "SELECT reason FROM refunds"
+            ") SELECT reason FROM refund_reasons"
+        ),
+    ],
+)
+def test_analyst_cannot_read_refund_reason_through_alias_or_cte(
+    sql: str,
+) -> None:
+    with pytest.raises(
+        SQLSafetyError,
+        match="role analyst is not allowed to access column: refunds.reason",
+    ):
+        prepare_safe_sql(sql, access_role=AccessRole.ANALYST)
+
+
+def test_admin_can_read_refund_reason_and_role_is_preserved() -> None:
+    prepared = prepare_safe_sql(
+        "SELECT reason FROM refunds",
+        access_role=AccessRole.ADMIN,
+    )
+
+    assert prepared.sql == "SELECT reason FROM refunds LIMIT 100"
+    assert prepared.access_role is AccessRole.ADMIN
+
+
+@pytest.mark.parametrize(
+    "sql",
+    [
+        "DELETE FROM orders",
+        "UPDATE orders SET amount = 0",
+    ],
+)
+def test_admin_role_does_not_bypass_read_only_policy(sql: str) -> None:
+    with pytest.raises(
+        SQLSafetyError,
+        match="only read-only SELECT statements are allowed",
+    ):
+        prepare_safe_sql(sql, access_role=AccessRole.ADMIN)
 
 
 @pytest.mark.parametrize(

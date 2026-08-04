@@ -3,6 +3,7 @@ from typing import Annotated
 from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.responses import StreamingResponse
 
+from retail_analytics_agent.access_control import get_access_context
 from retail_analytics_agent.analysis_service import (
     AnalysisRunError,
     AnalysisRunner,
@@ -13,6 +14,7 @@ from retail_analytics_agent.database import (
     get_database_connection,
 )
 from retail_analytics_agent.models import (
+    AccessContext,
     AnalysisRequest,
     AnalysisResponse,
     AnalysisStreamEvent,
@@ -52,9 +54,15 @@ def validate_analysis_request(
 def run_analysis(
     request: AnalysisRequest,
     runner: Annotated[AnalysisRunner, Depends(get_analysis_runner)],
+    access_context: Annotated[AccessContext, Depends(get_access_context)],
 ) -> AnalysisResponse:
+    if request.user_id != access_context.user_id:
+        raise HTTPException(
+            status_code=403,
+            detail="request user_id does not match authenticated user",
+        )
     try:
-        return runner.run(request)
+        return runner.run(request, access_context)
     except ModelInvocationError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     except ValueError as exc:
@@ -66,9 +74,10 @@ def run_analysis(
 def _encode_analysis_events(
     runner: AnalysisRunner,
     request: AnalysisRequest,
+    access_context: AccessContext,
 ):
     try:
-        for event in runner.stream(request):
+        for event in runner.stream(request, access_context):
             yield f"event: {event.event.value}\ndata: {event.model_dump_json()}\n\n"
     except Exception as exc:
         event = AnalysisStreamEvent(
@@ -82,9 +91,15 @@ def _encode_analysis_events(
 def stream_analysis(
     request: AnalysisRequest,
     runner: Annotated[AnalysisRunner, Depends(get_analysis_runner)],
+    access_context: Annotated[AccessContext, Depends(get_access_context)],
 ) -> StreamingResponse:
+    if request.user_id != access_context.user_id:
+        raise HTTPException(
+            status_code=403,
+            detail="request user_id does not match authenticated user",
+        )
     return StreamingResponse(
-        _encode_analysis_events(runner, request),
+        _encode_analysis_events(runner, request, access_context),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",

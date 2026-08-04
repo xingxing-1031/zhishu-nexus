@@ -4,6 +4,7 @@ import pytest
 
 from retail_analytics_agent.audit import QueryAuditRecord, QueryAuditStatus
 from retail_analytics_agent.models import (
+    AccessRole,
     AnalysisPlan,
     AnalysisRequest,
     RetrievalEvidence,
@@ -61,6 +62,7 @@ def _prepared_sql() -> PreparedSQL:
         sql="SELECT channel FROM orders LIMIT 50",
         tables=("orders",),
         max_rows=50,
+        access_role=AccessRole.ANALYST,
     )
 
 
@@ -220,6 +222,7 @@ def test_validation_node_stores_prepared_sql() -> None:
         user_id="USER-001",
         sql="SELECT channel FROM orders",
         max_rows=50,
+        access_role=AccessRole.ANALYST,
     )
 
 
@@ -290,6 +293,7 @@ def test_validation_adapter_uses_sql_safety_and_audits_rejection() -> None:
         user_id="USER-001",
         sql="SELECT order_id FROM orders",
         max_rows=25,
+        access_role=AccessRole.ANALYST,
     )
 
     assert prepared.sql == "SELECT order_id FROM orders LIMIT 25"
@@ -304,6 +308,7 @@ def test_validation_adapter_uses_sql_safety_and_audits_rejection() -> None:
             user_id="USER-001",
             sql="SELECT * FROM orders",
             max_rows=25,
+            access_role=AccessRole.ANALYST,
         )
 
     audit = audit_sink.record.call_args.args[0]

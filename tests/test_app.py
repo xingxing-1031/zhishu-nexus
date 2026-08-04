@@ -3,14 +3,24 @@ from unittest.mock import Mock
 
 from fastapi.testclient import TestClient
 
+from retail_analytics_agent.access_control import get_access_context
 from retail_analytics_agent.analysis_service import get_analysis_runner
 from retail_analytics_agent.app import app
 from retail_analytics_agent.database import get_database_connection
 from retail_analytics_agent.model_adapters import ModelInvocationError
-from retail_analytics_agent.models import AnalysisResponse, AnalysisStreamEvent
+from retail_analytics_agent.models import (
+    AccessContext,
+    AccessRole,
+    AnalysisResponse,
+    AnalysisStreamEvent,
+)
 
 
 client = TestClient(app)
+
+
+def _access_context() -> AccessContext:
+    return AccessContext(user_id="USER-001", role=AccessRole.ANALYST)
 
 
 def test_health_check() -> None:
@@ -58,6 +68,7 @@ def test_run_analysis_invokes_complete_workflow_runner() -> None:
     runner = Mock()
     runner.run.return_value = AnalysisResponse(
         request_id="REQ-RUN-001",
+        access_role=AccessRole.ANALYST,
         answer="最近30天，京东渠道销售额为 11300.00 元。",
         plan={
             "analysis_goal": "各渠道销售额",
@@ -88,6 +99,7 @@ def test_run_analysis_invokes_complete_workflow_runner() -> None:
         ),
     )
     app.dependency_overrides[get_analysis_runner] = lambda: runner
+    app.dependency_overrides[get_access_context] = _access_context
 
     try:
         response = client.post(
@@ -110,12 +122,14 @@ def test_run_analysis_invokes_complete_workflow_runner() -> None:
         "y_fields": ["sales_amount"],
     }
     runner.run.assert_called_once()
+    assert runner.run.call_args.args[1] == _access_context()
 
 
 def test_run_analysis_returns_502_when_model_is_unavailable() -> None:
     runner = Mock()
     runner.run.side_effect = ModelInvocationError("Ollama unavailable")
     app.dependency_overrides[get_analysis_runner] = lambda: runner
+    app.dependency_overrides[get_access_context] = _access_context
 
     try:
         response = client.post(
@@ -146,6 +160,7 @@ def test_stream_analysis_returns_sse_status_and_result_events() -> None:
             message="分析完成",
             response=AnalysisResponse(
                 request_id="REQ-STREAM-001",
+                access_role=AccessRole.ANALYST,
                 answer="京东渠道销售额为 11300.00 元。",
                 plan={
                     "analysis_goal": "各渠道销售额",
@@ -168,6 +183,7 @@ def test_stream_analysis_returns_sse_status_and_result_events() -> None:
         ),
     ]
     app.dependency_overrides[get_analysis_runner] = lambda: runner
+    app.dependency_overrides[get_access_context] = _access_context
 
     try:
         response = client.post(
@@ -187,6 +203,32 @@ def test_stream_analysis_returns_sse_status_and_result_events() -> None:
     assert '"node":"plan"' in response.text
     assert "event: result\n" in response.text
     assert "京东渠道销售额为 11300.00 元" in response.text
+    runner.stream.assert_called_once()
+    assert runner.stream.call_args.args[1] == _access_context()
+
+
+def test_run_analysis_rejects_mismatched_trusted_identity() -> None:
+    runner = Mock()
+    app.dependency_overrides[get_analysis_runner] = lambda: runner
+    app.dependency_overrides[get_access_context] = _access_context
+
+    try:
+        response = client.post(
+            "/analysis/run",
+            json={
+                "request_id": "REQ-FORGED-001",
+                "user_id": "USER-999",
+                "question": "query sales amount",
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 403
+    assert response.json() == {
+        "detail": "request user_id does not match authenticated user"
+    }
+    runner.run.assert_not_called()
 
 
 def test_channel_sales_summary_returns_query_results() -> None:

@@ -9,6 +9,8 @@ from langgraph.graph import END, START, StateGraph
 
 from retail_analytics_agent.charting import build_chart_spec
 from retail_analytics_agent.models import (
+    AccessContext,
+    AccessRole,
     AnalysisPlan,
     AnalysisRequest,
     ChartSpec,
@@ -32,6 +34,7 @@ from retail_analytics_agent.workflow_tools import (
 class AnalysisState(TypedDict):
     request_id: str
     user_id: str
+    access_role: AccessRole
     question: str
     max_rows: int
     plan: AnalysisPlan | None
@@ -92,13 +95,19 @@ def create_initial_state(
     request: AnalysisRequest,
     *,
     max_retries: int = 2,
+    access_context: AccessContext | None = None,
 ) -> AnalysisState:
     if max_retries < 0:
         raise ValueError("max_retries must be non-negative")
 
+    active_access = access_context or AccessContext(
+        user_id=request.user_id,
+        role=AccessRole.ANALYST,
+    )
     return AnalysisState(
         request_id=request.request_id,
-        user_id=request.user_id,
+        user_id=active_access.user_id,
+        access_role=active_access.role,
         question=request.question,
         max_rows=request.max_rows,
         plan=None,
@@ -168,6 +177,7 @@ def create_sql_generation_node(model: SQLGenerator) -> AnalysisNode:
                 question=state["question"],
                 plan=plan,
                 evidence=evidence,
+                access_role=state["access_role"],
                 validation_error=state["sql_validation_error"],
             ),
             "prepared_sql": None,
@@ -196,6 +206,7 @@ def create_sql_validation_node(tool: SQLValidationTool) -> AnalysisNode:
                 user_id=state["user_id"],
                 sql=sql,
                 max_rows=state["max_rows"],
+                access_role=state["access_role"],
             )
         except SQLValidationToolError as exc:
             return {

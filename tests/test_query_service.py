@@ -3,6 +3,7 @@ from unittest.mock import Mock, call
 import pytest
 
 from retail_analytics_agent.audit import QueryAuditStatus
+from retail_analytics_agent.models import AccessRole
 from retail_analytics_agent.query_service import (
     SET_STATEMENT_TIMEOUT_SQL,
     SET_TRANSACTION_READ_ONLY_SQL,
@@ -72,6 +73,30 @@ def test_execute_safe_query_audits_policy_rejection_without_database() -> None:
     assert audit.status is QueryAuditStatus.REJECTED
     assert audit.executed_sql is None
     assert audit.row_count is None
+
+
+def test_analyst_column_rejection_is_audited_without_database() -> None:
+    connection = Mock()
+    audit_sink = Mock()
+
+    with pytest.raises(
+        SQLSafetyError,
+        match="role analyst is not allowed to access column: refunds.reason",
+    ):
+        execute_safe_query(
+            connection,
+            audit_sink,
+            request_id="REQ-ROLE-001",
+            user_id="USER-001",
+            sql="SELECT reason FROM refunds",
+            access_role=AccessRole.ANALYST,
+        )
+
+    connection.execute.assert_not_called()
+    audit = audit_sink.record.call_args.args[0]
+    assert audit.status is QueryAuditStatus.REJECTED
+    assert audit.executed_sql is None
+    assert "refunds.reason" in audit.reason
 
 
 def test_execute_safe_query_rolls_back_and_audits_database_failure() -> None:

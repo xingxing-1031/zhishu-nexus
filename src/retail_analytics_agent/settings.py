@@ -3,6 +3,8 @@ from functools import lru_cache
 from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from retail_analytics_agent.models import AccessRole
+
 
 class Settings(BaseSettings):
     postgres_db: str
@@ -13,6 +15,8 @@ class Settings(BaseSettings):
     ollama_base_url: str = "http://127.0.0.1:11434"
     ollama_model: str = "qwen3:4b"
     ollama_timeout_seconds: float = 120
+    local_access_user_id: str = "USER-001"
+    local_access_role: AccessRole = AccessRole.ANALYST
 
     model_config = SettingsConfigDict(
         env_file=".env",

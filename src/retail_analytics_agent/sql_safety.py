@@ -2,6 +2,9 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlglot import exp, parse
 from sqlglot.errors import ParseError
 
+from retail_analytics_agent.access_control import denied_columns_for_role
+from retail_analytics_agent.models import AccessRole
+
 
 class SQLSafetyError(ValueError):
     """Raised when SQL is not a single read-only query."""
@@ -75,6 +78,7 @@ class PreparedSQL(BaseModel):
     sql: str
     tables: tuple[str, ...]
     max_rows: int = Field(ge=1, le=MAX_QUERY_ROWS)
+    access_role: AccessRole = AccessRole.ANALYST
 
 
 def validate_read_only_sql(sql: str) -> exp.Expression:
@@ -108,7 +112,12 @@ def validate_read_only_sql(sql: str) -> exp.Expression:
     return statement
 
 
-def prepare_safe_sql(sql: str, max_rows: int = 100) -> PreparedSQL:
+def prepare_safe_sql(
+    sql: str,
+    max_rows: int = 100,
+    *,
+    access_role: AccessRole = AccessRole.ANALYST,
+) -> PreparedSQL:
     """Validate a generated query and enforce its maximum result size."""
     if not 1 <= max_rows <= MAX_QUERY_ROWS:
         raise SQLSafetyError(
@@ -118,6 +127,7 @@ def prepare_safe_sql(sql: str, max_rows: int = 100) -> PreparedSQL:
     statement = validate_read_only_sql(sql)
     tables, aliases, derived_relations = _validate_tables(statement)
     _validate_columns(statement, tables, aliases, derived_relations)
+    _validate_role_columns(statement, tables, aliases, access_role)
     _validate_functions(statement)
 
     limited_statement = _enforce_limit(statement, max_rows)
@@ -125,7 +135,41 @@ def prepare_safe_sql(sql: str, max_rows: int = 100) -> PreparedSQL:
         sql=limited_statement.sql(dialect="postgres"),
         tables=tuple(sorted(tables)),
         max_rows=max_rows,
+        access_role=access_role,
     )
+
+
+def _validate_role_columns(
+    statement: exp.Expression,
+    tables: set[str],
+    aliases: dict[str, str],
+    access_role: AccessRole,
+) -> None:
+    denied = denied_columns_for_role(access_role)
+    if not denied:
+        return
+
+    for column in statement.find_all(exp.Column):
+        column_name = column.name.lower()
+        qualifier = column.table.lower() if column.table else ""
+        if qualifier:
+            table_name = aliases.get(qualifier)
+            if table_name is None:
+                continue
+            candidates = (table_name,)
+        else:
+            candidates = tuple(
+                table_name
+                for table_name in tables
+                if column_name in _ALLOWED_COLUMNS[table_name]
+            )
+
+        for table_name in candidates:
+            if (table_name, column_name) in denied:
+                raise SQLSafetyError(
+                    f"role {access_role.value} is not allowed to access "
+                    f"column: {table_name}.{column_name}"
+                )
 
 
 def _validate_tables(

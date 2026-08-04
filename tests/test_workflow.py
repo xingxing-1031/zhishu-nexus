@@ -4,6 +4,8 @@ import pytest
 from langgraph.checkpoint.memory import InMemorySaver
 
 from retail_analytics_agent.models import (
+    AccessContext,
+    AccessRole,
     AnalysisPlan,
     AnalysisRequest,
     RetrievalEvidence,
@@ -128,6 +130,19 @@ def test_create_initial_state_sets_request_and_workflow_defaults() -> None:
     assert state["query_rows"] == []
     assert state["chart_spec"] is None
     assert state["trace"] == []
+
+
+def test_create_initial_state_uses_trusted_access_context() -> None:
+    state = create_initial_state(
+        _request(),
+        access_context=AccessContext(
+            user_id="TRUSTED-ADMIN",
+            role=AccessRole.ADMIN,
+        ),
+    )
+
+    assert state["user_id"] == "TRUSTED-ADMIN"
+    assert state["access_role"] is AccessRole.ADMIN
 
 
 def test_create_initial_state_rejects_negative_max_retries() -> None:

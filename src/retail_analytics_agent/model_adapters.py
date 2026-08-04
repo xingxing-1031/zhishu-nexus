@@ -7,7 +7,9 @@ from typing import Protocol, Sequence
 import httpx
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
+from retail_analytics_agent.access_control import denied_columns_for_role
 from retail_analytics_agent.models import (
+    AccessRole,
     AnalysisDimension,
     AnalysisFilterField,
     AnalysisFilterOperator,
@@ -34,6 +36,7 @@ class SQLGenerator(Protocol):
         question: str,
         plan: AnalysisPlan,
         evidence: Sequence[RetrievalEvidence],
+        access_role: AccessRole,
         validation_error: str | None = None,
     ) -> str: ...
 
@@ -309,6 +312,7 @@ class OllamaSQLGenerator:
         question: str,
         plan: AnalysisPlan,
         evidence: Sequence[RetrievalEvidence],
+        access_role: AccessRole,
         validation_error: str | None = None,
     ) -> str:
         if not evidence:
@@ -330,6 +334,13 @@ class OllamaSQLGenerator:
                 "analysis_plan": plan.model_dump(mode="json"),
                 "retrieval_evidence": [
                     item.model_dump(mode="json") for item in evidence
+                ],
+                "access_role": access_role.value,
+                "forbidden_columns": [
+                    f"{table}.{column}"
+                    for table, column in sorted(
+                        denied_columns_for_role(access_role)
+                    )
                 ],
                 "previous_validation_error": validation_error,
             },

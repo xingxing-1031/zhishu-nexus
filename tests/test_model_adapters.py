@@ -9,7 +9,11 @@ from retail_analytics_agent.model_adapters import (
     OllamaResultSummarizer,
     OllamaSQLGenerator,
 )
-from retail_analytics_agent.models import AnalysisPlan, RetrievalEvidence
+from retail_analytics_agent.models import (
+    AccessRole,
+    AnalysisPlan,
+    RetrievalEvidence,
+)
 
 
 def _client(handler) -> httpx.Client:
@@ -124,6 +128,8 @@ def test_ollama_sql_generator_receives_plan_evidence_and_retry_feedback() -> Non
         assert user_payload["previous_validation_error"] == (
             "wildcard columns are not allowed"
         )
+        assert user_payload["access_role"] == "analyst"
+        assert user_payload["forbidden_columns"] == ["refunds.reason"]
         return httpx.Response(
             200,
             json={
@@ -147,6 +153,7 @@ def test_ollama_sql_generator_receives_plan_evidence_and_retry_feedback() -> Non
         question="最近30天各渠道销售额是多少？",
         plan=_plan(),
         evidence=_evidence(),
+        access_role=AccessRole.ANALYST,
         validation_error="wildcard columns are not allowed",
     )
 
@@ -162,6 +169,7 @@ def test_ollama_sql_generator_requires_retrieval_evidence() -> None:
             question="查询销售额",
             plan=_plan(),
             evidence=[],
+            access_role=AccessRole.ANALYST,
         )
 
 

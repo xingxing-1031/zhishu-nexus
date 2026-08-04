@@ -12,6 +12,7 @@ from retail_analytics_agent.knowledge import (
     SchemaCatalog,
 )
 from retail_analytics_agent.models import (
+    AccessRole,
     AnalysisDimension,
     AnalysisFilterField,
     AnalysisPlan,
@@ -49,6 +50,7 @@ class SQLValidationTool(Protocol):
         user_id: str,
         sql: str,
         max_rows: int,
+        access_role: AccessRole,
     ) -> PreparedSQL: ...
 
 
@@ -217,6 +219,7 @@ class SQLGlotValidationTool:
         user_id: str,
         sql: str,
         max_rows: int,
+        access_role: AccessRole,
     ) -> PreparedSQL:
         try:
             return prepare_audited_sql(
@@ -225,6 +228,7 @@ class SQLGlotValidationTool:
                 user_id=user_id,
                 sql=sql,
                 max_rows=max_rows,
+                access_role=access_role,
             )
         except (SQLSafetyError, ValueError) as exc:
             raise SQLValidationToolError(str(exc)) from exc

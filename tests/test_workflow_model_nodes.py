@@ -3,6 +3,7 @@ from unittest.mock import Mock
 import pytest
 
 from retail_analytics_agent.models import (
+    AccessRole,
     AnalysisPlan,
     AnalysisRequest,
     RetrievalEvidence,
@@ -95,6 +96,7 @@ def test_sql_generation_node_passes_validation_error_on_retry() -> None:
         question=state["question"],
         plan=state["plan"],
         evidence=state["retrieved_context"],
+        access_role=AccessRole.ANALYST,
         validation_error="unsafe SQL",
     )
 

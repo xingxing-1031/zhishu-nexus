@@ -8,6 +8,7 @@ from retail_analytics_agent.checkpointing import (
     open_postgres_checkpointer,
 )
 from retail_analytics_agent.models import (
+    AccessRole,
     AnalysisPlan,
     ChartSpec,
     RetrievalEvidence,
@@ -62,6 +63,7 @@ def test_open_postgres_checkpointer_uses_settings_and_runs_setup() -> None:
 def test_checkpoint_serializer_restores_registered_state_types() -> None:
     serializer = create_checkpoint_serializer()
     values = [
+        AccessRole.ADMIN,
         AnalysisPlan(
             analysis_goal="统计销售额",
             metrics=["sales_amount"],
@@ -87,7 +89,8 @@ def test_checkpoint_serializer_restores_registered_state_types() -> None:
     restored = serializer.loads_typed(serializer.dumps_typed(values))
 
     assert restored == values
-    assert isinstance(restored[0], AnalysisPlan)
-    assert isinstance(restored[1], RetrievalEvidence)
-    assert isinstance(restored[2], ChartSpec)
-    assert isinstance(restored[3], PreparedSQL)
+    assert restored[0] is AccessRole.ADMIN
+    assert isinstance(restored[1], AnalysisPlan)
+    assert isinstance(restored[2], RetrievalEvidence)
+    assert isinstance(restored[3], ChartSpec)
+    assert isinstance(restored[4], PreparedSQL)

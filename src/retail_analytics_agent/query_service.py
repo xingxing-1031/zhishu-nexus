@@ -6,6 +6,7 @@ from retail_analytics_agent.audit import (
     QueryAuditRecord,
     QueryAuditStatus,
 )
+from retail_analytics_agent.models import AccessRole
 from retail_analytics_agent.database import DatabaseConnection, DatabaseRow
 from retail_analytics_agent.sql_safety import (
     PreparedSQL,
@@ -40,12 +41,17 @@ def prepare_audited_sql(
     user_id: str,
     sql: str,
     max_rows: int = 100,
+    access_role: AccessRole = AccessRole.ANALYST,
 ) -> PreparedSQL:
     """Prepare one generated query and audit policy rejections."""
     started_at = perf_counter()
 
     try:
-        return prepare_safe_sql(sql, max_rows=max_rows)
+        return prepare_safe_sql(
+            sql,
+            max_rows=max_rows,
+            access_role=access_role,
+        )
     except (SQLSafetyError, ValueError) as exc:
         audit = _build_audit(
             request_id=request_id,
@@ -111,6 +117,7 @@ def execute_safe_query(
     sql: str,
     max_rows: int = 100,
     statement_timeout_ms: int = 2_000,
+    access_role: AccessRole = AccessRole.ANALYST,
 ) -> SafeQueryResult:
     """Validate, constrain, execute, and audit one generated query."""
     started_at = perf_counter()
@@ -118,7 +125,11 @@ def execute_safe_query(
 
     try:
         _validate_timeout(statement_timeout_ms)
-        prepared = prepare_safe_sql(sql, max_rows=max_rows)
+        prepared = prepare_safe_sql(
+            sql,
+            max_rows=max_rows,
+            access_role=access_role,
+        )
     except (SQLSafetyError, ValueError) as exc:
         audit = _build_audit(
             request_id=request_id,
