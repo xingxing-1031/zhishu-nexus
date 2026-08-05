@@ -36,6 +36,7 @@
 | 17 | [可信身份与字段访问控制](17-access-control.md) | 18 分钟 | W5-1 已完成 |
 | 18 | [Human-in-the-loop 查询审批](18-hitl-approval.md) | 20 分钟 | W5-2 已完成 |
 | 19 | [超时、重试、幂等与降级](19-timeout-retry-idempotency.md) | 20 分钟 | W5-3 已完成 |
+| 20 | [故障注入与完整执行 Trace](20-fault-injection-execution-trace.md) | 20 分钟 | W5-4 已完成 |
 
 ## 复习节奏
 
