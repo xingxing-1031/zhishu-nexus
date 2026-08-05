@@ -9,6 +9,10 @@ from retail_analytics_agent.audit import DatabaseAuditSink
 from retail_analytics_agent.approval import DatabaseApprovalAuditSink
 from retail_analytics_agent.checkpointing import open_postgres_checkpointer
 from retail_analytics_agent.database import connect_to_database
+from retail_analytics_agent.fault_injection import (
+    FaultInjector,
+    fault_injection_context,
+)
 from retail_analytics_agent.model_adapters import (
     OllamaAnalysisPlanner,
     OllamaResultSummarizer,
@@ -37,6 +41,12 @@ from retail_analytics_agent.request_registry import (
 )
 from retail_analytics_agent.resilience import RetryPolicy, workflow_time_budget
 from retail_analytics_agent.settings import get_settings
+from retail_analytics_agent.tracing import (
+    DatabaseExecutionTraceStore,
+    ExecutionTraceResponse,
+    ExecutionTraceStore,
+    execution_trace_context,
+)
 from retail_analytics_agent.workflow import (
     CompiledAnalysisGraph,
     build_analysis_graph,
@@ -85,6 +95,12 @@ class AnalysisRunner(Protocol):
         viewer: AccessContext,
     ) -> AnalysisOutcome: ...
 
+    def get_trace(
+        self,
+        request_id: str,
+        viewer: AccessContext,
+    ) -> ExecutionTraceResponse: ...
+
 
 _NODE_STATUS_MESSAGES = {
     "plan": "分析问题已转换为结构化计划",
@@ -103,6 +119,8 @@ _NODE_STATUS_MESSAGES = {
 class LangGraphAnalysisRunner:
     graph: CompiledAnalysisGraph
     request_store: AnalysisRequestStore | None = None
+    trace_store: ExecutionTraceStore | None = None
+    fault_injector: FaultInjector | None = None
     workflow_timeout_seconds: float = 120
 
     def run(
@@ -115,7 +133,11 @@ class LangGraphAnalysisRunner:
             return self._existing_outcome(request.request_id, claim)
 
         try:
-            with workflow_time_budget(self.workflow_timeout_seconds):
+            with (
+                execution_trace_context(request.request_id, self.trace_store),
+                fault_injection_context(self.fault_injector),
+                workflow_time_budget(self.workflow_timeout_seconds),
+            ):
                 result = self.graph.invoke(
                     create_initial_state(
                         request,
@@ -151,7 +173,11 @@ class LangGraphAnalysisRunner:
         if snapshot.next != ("request_approval",):
             raise ValueError("workflow is not waiting at the approval node")
         try:
-            with workflow_time_budget(self.workflow_timeout_seconds):
+            with (
+                execution_trace_context(request_id, self.trace_store),
+                fault_injection_context(self.fault_injector),
+                workflow_time_budget(self.workflow_timeout_seconds),
+            ):
                 result = self.graph.invoke(
                     Command(
                         resume={
@@ -199,6 +225,32 @@ class LangGraphAnalysisRunner:
             raise PermissionError("analysis request belongs to another user")
         return self._snapshot_outcome(snapshot, snapshot.values["access_role"])
 
+    def get_trace(
+        self,
+        request_id: str,
+        viewer: AccessContext,
+    ) -> ExecutionTraceResponse:
+        if self.request_store is not None:
+            claim = self.request_store.get(request_id)
+            if claim is None:
+                raise ValueError("analysis request was not found")
+            self._check_viewer(claim, viewer)
+        else:
+            snapshot = self.graph.get_state(create_thread_config(request_id))
+            if not snapshot.values:
+                raise ValueError("analysis request was not found")
+            if (
+                viewer.role is not AccessRole.ADMIN
+                and viewer.user_id != snapshot.values["user_id"]
+            ):
+                raise PermissionError("analysis request belongs to another user")
+        events = (
+            self.trace_store.list_for_request(request_id)
+            if self.trace_store is not None
+            else ()
+        )
+        return ExecutionTraceResponse(request_id=request_id, events=events)
+
     def stream(
         self,
         request: AnalysisRequest,
@@ -218,7 +270,11 @@ class LangGraphAnalysisRunner:
         last_node: str | None = None
         final_state = None
         try:
-            with workflow_time_budget(self.workflow_timeout_seconds):
+            with (
+                execution_trace_context(request.request_id, self.trace_store),
+                fault_injection_context(self.fault_injector),
+                workflow_time_budget(self.workflow_timeout_seconds),
+            ):
                 for state in self.graph.stream(
                     create_initial_state(
                         request,
@@ -435,6 +491,7 @@ def get_analysis_runner() -> Iterator[AnalysisRunner]:
     audit_sink = DatabaseAuditSink()
     approval_audit_sink = DatabaseApprovalAuditSink()
     request_store = DatabaseAnalysisRequestStore()
+    trace_store = DatabaseExecutionTraceStore()
     retry_policy = RetryPolicy(
         max_attempts=settings.model_retry_max_attempts,
         initial_backoff_seconds=(
@@ -479,5 +536,6 @@ def get_analysis_runner() -> Iterator[AnalysisRunner]:
         yield LangGraphAnalysisRunner(
             build_analysis_graph(nodes, checkpointer=checkpointer),
             request_store=request_store,
+            trace_store=trace_store,
             workflow_timeout_seconds=settings.workflow_timeout_seconds,
         )

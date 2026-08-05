@@ -36,6 +36,7 @@ from retail_analytics_agent.queries import (
     get_product_sales_summary,
     get_refund_status_summary,
 )
+from retail_analytics_agent.tracing import ExecutionTraceResponse
 
 
 app = FastAPI(
@@ -124,6 +125,23 @@ def read_analysis_status(
 ) -> AnalysisOutcome:
     try:
         return runner.get_status(request_id, access_context)
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.get(
+    "/analysis/{request_id}/trace",
+    response_model=ExecutionTraceResponse,
+)
+def read_analysis_trace(
+    request_id: str,
+    runner: Annotated[AnalysisRunner, Depends(get_analysis_runner)],
+    access_context: Annotated[AccessContext, Depends(get_access_context)],
+) -> ExecutionTraceResponse:
+    try:
+        return runner.get_trace(request_id, access_context)
     except PermissionError as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
     except ValueError as exc:

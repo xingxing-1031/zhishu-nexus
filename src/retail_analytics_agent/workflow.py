@@ -1,6 +1,7 @@
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from operator import add
+from time import monotonic
 from typing import Annotated, Protocol, TypedDict
 
 from langchain_core.runnables import RunnableConfig
@@ -17,6 +18,7 @@ from retail_analytics_agent.approval import (
     assess_query_risk,
 )
 from retail_analytics_agent.charting import build_chart_spec
+from retail_analytics_agent.fault_injection import inject_fault
 from retail_analytics_agent.models import (
     AccessContext,
     AccessRole,
@@ -36,6 +38,10 @@ from retail_analytics_agent.model_adapters import (
     SQLGenerator,
 )
 from retail_analytics_agent.sql_safety import PreparedSQL
+from retail_analytics_agent.tracing import (
+    TraceStatus,
+    record_execution_trace,
+)
 from retail_analytics_agent.workflow_tools import (
     RetrievalTool,
     SQLExecutionTool,
@@ -497,6 +503,64 @@ def route_after_sql_execution(state: AnalysisState) -> str:
     return SUMMARIZE_NODE
 
 
+def _node_trace_status(
+    node_name: str,
+    update: AnalysisStateUpdate,
+) -> TraceStatus:
+    if update.get("result_status") is AnalysisResultStatus.DEGRADED:
+        return TraceStatus.DEGRADED
+    if update.get("execution_error") is not None:
+        return TraceStatus.FAILED
+    if node_name == VALIDATE_SQL_NODE and update.get("sql_valid") is False:
+        return TraceStatus.REJECTED
+    approval_status = update.get("approval_status")
+    if approval_status is ApprovalStatus.PENDING:
+        return TraceStatus.PENDING
+    if approval_status is ApprovalStatus.REJECTED:
+        return TraceStatus.REJECTED
+    if node_name == FAIL_NODE:
+        return TraceStatus.FAILED
+    return TraceStatus.SUCCEEDED
+
+
+def trace_workflow_node(
+    node_name: str,
+    node: AnalysisNode,
+) -> AnalysisNode:
+    component = f"node.{node_name}"
+
+    def traced(state: AnalysisState) -> AnalysisStateUpdate:
+        record_execution_trace(component, TraceStatus.STARTED)
+        started_at = monotonic()
+        try:
+            inject_fault(component)
+            update = node(state)
+        except BaseException as exc:
+            if type(exc).__name__ == "GraphInterrupt":
+                record_execution_trace(
+                    component,
+                    TraceStatus.PENDING,
+                    duration_ms=int((monotonic() - started_at) * 1000),
+                )
+            else:
+                record_execution_trace(
+                    component,
+                    TraceStatus.FAILED,
+                    duration_ms=int((monotonic() - started_at) * 1000),
+                    error_type=type(exc).__name__,
+                    error_message=str(exc),
+                )
+            raise
+        record_execution_trace(
+            component,
+            _node_trace_status(node_name, update),
+            duration_ms=int((monotonic() - started_at) * 1000),
+        )
+        return update
+
+    return traced
+
+
 def build_analysis_graph(
     nodes: WorkflowNodes,
     *,
@@ -505,15 +569,36 @@ def build_analysis_graph(
 ) -> CompiledAnalysisGraph:
     graph = StateGraph(AnalysisState)
 
-    graph.add_node(PLAN_NODE, nodes.plan)
-    graph.add_node(RETRIEVE_NODE, nodes.retrieve)
-    graph.add_node(GENERATE_SQL_NODE, nodes.generate_sql)
-    graph.add_node(VALIDATE_SQL_NODE, nodes.validate_sql)
-    graph.add_node(ASSESS_RISK_NODE, nodes.assess_risk)
-    graph.add_node(REQUEST_APPROVAL_NODE, nodes.request_approval)
-    graph.add_node(EXECUTE_SQL_NODE, nodes.execute_sql)
-    graph.add_node(SUMMARIZE_NODE, nodes.summarize)
-    graph.add_node(FAIL_NODE, nodes.fail)
+    graph.add_node(PLAN_NODE, trace_workflow_node(PLAN_NODE, nodes.plan))
+    graph.add_node(
+        RETRIEVE_NODE,
+        trace_workflow_node(RETRIEVE_NODE, nodes.retrieve),
+    )
+    graph.add_node(
+        GENERATE_SQL_NODE,
+        trace_workflow_node(GENERATE_SQL_NODE, nodes.generate_sql),
+    )
+    graph.add_node(
+        VALIDATE_SQL_NODE,
+        trace_workflow_node(VALIDATE_SQL_NODE, nodes.validate_sql),
+    )
+    graph.add_node(
+        ASSESS_RISK_NODE,
+        trace_workflow_node(ASSESS_RISK_NODE, nodes.assess_risk),
+    )
+    graph.add_node(
+        REQUEST_APPROVAL_NODE,
+        trace_workflow_node(REQUEST_APPROVAL_NODE, nodes.request_approval),
+    )
+    graph.add_node(
+        EXECUTE_SQL_NODE,
+        trace_workflow_node(EXECUTE_SQL_NODE, nodes.execute_sql),
+    )
+    graph.add_node(
+        SUMMARIZE_NODE,
+        trace_workflow_node(SUMMARIZE_NODE, nodes.summarize),
+    )
+    graph.add_node(FAIL_NODE, trace_workflow_node(FAIL_NODE, nodes.fail))
 
     graph.add_edge(START, PLAN_NODE)
     graph.add_edge(PLAN_NODE, RETRIEVE_NODE)

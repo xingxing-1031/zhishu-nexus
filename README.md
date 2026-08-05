@@ -4,11 +4,11 @@
 
 ## 当前状态
 
-- 当前计划任务：`W5-1` 实现 analyst/admin 权限和字段访问控制
-- 总体进度：`16 / 32` 个项目里程碑
-- 已实现：真实 `qwen3:4b` 规划、版本化指标证据检索、受约束 SQL 生成、SQLGlot 安全校验、PostgreSQL 查询、结果解释、确定性图表规格，以及同步和 SSE FastAPI 接口
-- 自动化验证：Python 回归测试 `204 passed`；真实 HTTP 请求返回京东 `11300.00`、淘宝 `9000.00`，SSE 返回六节点状态和最终结果
-- 当前边界：端到端场景只完成小规模种子数据验收；生产只读账号、权限、HITL、故障注入、完整评测集和真实前端图表渲染尚未完成
+- 当前计划任务：`W6-1` 建立至少 60 条独立业务评测集
+- 总体进度：`20 / 32` 个项目里程碑，W5-4 已完成
+- 已实现：真实 `qwen3:4b` 端到端分析、权限与人工审批、有限重试、请求幂等、可信结果降级、确定性故障注入和结构化执行 Trace
+- 自动化验证：Python 回归测试 `262 passed`；W5-4 真实 PostgreSQL Trace 迁移和故障注入验收通过
+- 当前边界：仍是本地身份和小规模种子数据；尚未完成 60 至 100 条独立评测集、CI、部署和前端图表渲染
 
 ## 手机学习
 
@@ -59,6 +59,15 @@
 - 使用普通边固定主链路，使用条件边处理 SQL 重新生成、执行成功和执行失败。
 - 将零行查询结果视为成功，仅在 `execution_error` 存在时进入失败节点。
 - 使用固定输出的假节点验证图结构；当前不宣称已经接入大模型或真实工具节点。
+
+### 容错与可观测性
+
+- 模型瞬时错误采用有限重试、指数退避、随机抖动和工作流总时间预算。
+- 相同 API 请求使用请求指纹复用状态，相同 `request_id` 的不同输入返回 409。
+- 查询审计、审批审计和请求登记使用幂等边界，避免恢复重放产生重复副作用。
+- 使用确定性故障规则指定组件和第几次调用失败，避免随机测试无法复现。
+- 结构化 Trace 记录节点、模型尝试、状态、耗时、错误类型和重试等待；查询与审批审计仍保留独立职责。
+- `GET /analysis/{request_id}/trace` 只允许请求本人或 admin 读取完整执行事件。
 
 ### 结构化分析计划
 
@@ -118,6 +127,8 @@ docker compose cp db/migrations/004_query_approval_logs.sql postgres:/tmp/004_qu
 docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U retail_user -d retail_analytics -f /tmp/004_query_approval_logs.sql
 docker compose cp db/migrations/005_resilience_and_idempotency.sql postgres:/tmp/005_resilience_and_idempotency.sql
 docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U retail_user -d retail_analytics -f /tmp/005_resilience_and_idempotency.sql
+docker compose cp db/migrations/006_execution_trace.sql postgres:/tmp/006_execution_trace.sql
+docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U retail_user -d retail_analytics -f /tmp/006_execution_trace.sql
 docker compose cp db/seeds/001_demo_data.sql postgres:/tmp/001_demo_data.sql
 docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U retail_user -d retail_analytics -f /tmp/001_demo_data.sql
 docker compose cp db/verification/verify_w2_1.sql postgres:/tmp/verify_w2_1.sql
@@ -156,9 +167,9 @@ retail-analytics-agent/
 
 ## 下一阶段
 
-1. 将检索、安全校验和查询服务封装为真实工具节点。
-2. 接入 PostgreSQL Checkpointer 并验证任务中断恢复。
-3. 建立指标字典、Schema 文档和版本信息，为后续 RAG 提供可信知识源。
+1. 建立至少 60 条独立业务评测集并保存原始结果。
+2. 对比基础 SQL、检索与 Reranker 链路并完成错误分析。
+3. 完成 Docker Compose、pytest 和 GitHub Actions 交付链路。
 
 ## 完成定义
 

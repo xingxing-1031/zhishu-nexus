@@ -4,12 +4,14 @@ import json
 from decimal import Decimal, InvalidOperation
 from dataclasses import dataclass
 import re
+from time import monotonic
 from typing import Protocol, Sequence
 
 import httpx
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from retail_analytics_agent.access_control import denied_columns_for_role
+from retail_analytics_agent.fault_injection import inject_fault
 from retail_analytics_agent.models import (
     AccessRole,
     AnalysisDimension,
@@ -26,6 +28,10 @@ from retail_analytics_agent.resilience import (
     WorkflowDeadlineExceeded,
     bounded_timeout_seconds,
     wait_before_retry,
+)
+from retail_analytics_agent.tracing import (
+    TraceStatus,
+    record_execution_trace,
 )
 
 
@@ -289,6 +295,7 @@ def _chat_json(
     response_schema: dict[str, object] | str,
     timeout_seconds: float,
     retry_policy: RetryPolicy,
+    component: str,
 ) -> str:
     payload = {
         "model": model,
@@ -311,16 +318,30 @@ def _chat_json(
     last_error: ModelInvocationError | None = None
 
     for attempt in range(1, retry_policy.max_attempts + 1):
+        record_execution_trace(
+            component,
+            TraceStatus.STARTED,
+            attempt=attempt,
+        )
+        started_at = monotonic()
         try:
+            inject_fault(component)
             response = client.post(
                 "/api/chat",
                 json=payload,
                 timeout=bounded_timeout_seconds(timeout_seconds),
             )
             response.raise_for_status()
-            return _OllamaChatResponse.model_validate(
+            content = _OllamaChatResponse.model_validate(
                 response.json()
             ).message.content
+            record_execution_trace(
+                component,
+                TraceStatus.SUCCEEDED,
+                attempt=attempt,
+                duration_ms=int((monotonic() - started_at) * 1000),
+            )
+            return content
         except httpx.HTTPStatusError as exc:
             detail = exc.response.text.strip()
             last_error = ModelInvocationError(
@@ -335,25 +356,58 @@ def _chat_json(
                 503,
                 504,
             }
+            error_type = f"HTTP_{exc.response.status_code}"
         except (httpx.TimeoutException, httpx.NetworkError) as exc:
             last_error = ModelInvocationError(
                 f"Ollama model invocation failed: {exc}"
             )
             retryable = True
+            error_type = type(exc).__name__
         except WorkflowDeadlineExceeded as exc:
+            record_execution_trace(
+                component,
+                TraceStatus.FAILED,
+                attempt=attempt,
+                duration_ms=int((monotonic() - started_at) * 1000),
+                error_type=type(exc).__name__,
+                error_message=str(exc),
+            )
             raise ModelInvocationError(str(exc)) from exc
         except (httpx.HTTPError, ValidationError, ValueError) as exc:
+            record_execution_trace(
+                component,
+                TraceStatus.FAILED,
+                attempt=attempt,
+                duration_ms=int((monotonic() - started_at) * 1000),
+                error_type=type(exc).__name__,
+                error_message=str(exc),
+            )
             raise ModelInvocationError(
                 f"Ollama model invocation failed: {exc}"
             ) from exc
 
+        assert last_error is not None
+        record_execution_trace(
+            component,
+            TraceStatus.FAILED,
+            attempt=attempt,
+            duration_ms=int((monotonic() - started_at) * 1000),
+            error_type=error_type,
+            error_message=str(last_error),
+        )
         if not retryable or attempt >= retry_policy.max_attempts:
-            assert last_error is not None
             raise last_error
+        delay = retry_policy.delay_before_attempt(attempt + 1)
+        record_execution_trace(
+            component,
+            TraceStatus.RETRY_SCHEDULED,
+            attempt=attempt,
+            error_type=error_type,
+            error_message=str(last_error),
+            retry_delay_ms=int(delay * 1000),
+        )
         try:
-            wait_before_retry(
-                retry_policy.delay_before_attempt(attempt + 1)
-            )
+            wait_before_retry(delay)
         except WorkflowDeadlineExceeded as exc:
             raise ModelInvocationError(str(exc)) from exc
 
@@ -387,6 +441,7 @@ class OllamaAnalysisPlanner:
             response_schema=_planner_response_schema(max_rows),
             timeout_seconds=self.timeout_seconds,
             retry_policy=self.retry_policy,
+            component="model.plan",
         )
         try:
             plan = _ModelAnalysisPlan.model_validate_json(
@@ -451,6 +506,7 @@ class OllamaSQLGenerator:
             response_schema=_GeneratedSQL.model_json_schema(),
             timeout_seconds=self.timeout_seconds,
             retry_policy=self.retry_policy,
+            component="model.generate_sql",
         )
         try:
             sql = _GeneratedSQL.model_validate_json(content).sql.strip()
@@ -493,6 +549,7 @@ class OllamaResultSummarizer:
             response_schema=_GeneratedSummary.model_json_schema(),
             timeout_seconds=self.timeout_seconds,
             retry_policy=self.retry_policy,
+            component="model.summarize",
         )
         try:
             answer = _GeneratedSummary.model_validate_json(content).answer.strip()

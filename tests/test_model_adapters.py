@@ -9,12 +9,22 @@ from retail_analytics_agent.model_adapters import (
     OllamaResultSummarizer,
     OllamaSQLGenerator,
 )
+from retail_analytics_agent.fault_injection import (
+    FaultRule,
+    ScriptedFaultInjector,
+    fault_injection_context,
+)
 from retail_analytics_agent.models import (
     AccessRole,
     AnalysisPlan,
     RetrievalEvidence,
 )
 from retail_analytics_agent.resilience import RetryPolicy
+from retail_analytics_agent.tracing import (
+    InMemoryExecutionTraceStore,
+    TraceStatus,
+    execution_trace_context,
+)
 
 
 def _client(handler) -> httpx.Client:
@@ -279,3 +289,53 @@ def test_ollama_planner_does_not_retry_permanent_http_failure() -> None:
         planner.plan("查询销售额", max_rows=10)
 
     assert attempts == 1
+
+
+def test_fault_injected_model_retry_records_complete_trace() -> None:
+    transport_calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal transport_calls
+        transport_calls += 1
+        return httpx.Response(
+            200,
+            json={"message": {"content": _model_plan_json()}},
+        )
+
+    injector = ScriptedFaultInjector(
+        (
+            FaultRule(
+                "model.plan",
+                1,
+                httpx.ConnectTimeout("injected connection timeout"),
+            ),
+        )
+    )
+    trace_store = InMemoryExecutionTraceStore()
+    planner = OllamaAnalysisPlanner(
+        client=_client(handler),
+        retry_policy=RetryPolicy(
+            max_attempts=2,
+            initial_backoff_seconds=0,
+            max_backoff_seconds=0,
+            jitter_ratio=0,
+        ),
+    )
+
+    with (
+        execution_trace_context("REQ-TRACE", trace_store),
+        fault_injection_context(injector),
+    ):
+        assert planner.plan("查询销售额", max_rows=10) == _plan()
+
+    events = trace_store.list_for_request("REQ-TRACE")
+    assert [(event.status, event.attempt) for event in events] == [
+        (TraceStatus.STARTED, 1),
+        (TraceStatus.FAILED, 1),
+        (TraceStatus.RETRY_SCHEDULED, 1),
+        (TraceStatus.STARTED, 2),
+        (TraceStatus.SUCCEEDED, 2),
+    ]
+    assert events[1].error_type == "ConnectTimeout"
+    assert events[2].retry_delay_ms == 0
+    assert transport_calls == 1

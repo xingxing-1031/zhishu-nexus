@@ -18,6 +18,11 @@ from retail_analytics_agent.models import (
     ApprovalRequiredResponse,
     ApprovalRejectedResponse,
 )
+from retail_analytics_agent.tracing import (
+    ExecutionTraceEvent,
+    ExecutionTraceResponse,
+    TraceStatus,
+)
 
 
 client = TestClient(app)
@@ -389,6 +394,49 @@ def test_read_analysis_status_returns_persisted_pending_outcome() -> None:
     runner.get_status.assert_called_once_with(
         "REQ-PENDING-004",
         _admin_access_context(),
+    )
+
+
+def test_read_analysis_trace_returns_structured_events() -> None:
+    runner = Mock()
+    runner.get_trace.return_value = ExecutionTraceResponse(
+        request_id="REQ-TRACE-001",
+        events=(
+            ExecutionTraceEvent(
+                request_id="REQ-TRACE-001",
+                component="model.plan",
+                status=TraceStatus.FAILED,
+                attempt=1,
+                duration_ms=120,
+                error_type="HTTP_503",
+                error_message="temporarily unavailable",
+            ),
+            ExecutionTraceEvent(
+                request_id="REQ-TRACE-001",
+                component="model.plan",
+                status=TraceStatus.SUCCEEDED,
+                attempt=2,
+                duration_ms=80,
+            ),
+        ),
+    )
+    app.dependency_overrides[get_analysis_runner] = lambda: runner
+    app.dependency_overrides[get_access_context] = _access_context
+
+    try:
+        response = client.get("/analysis/REQ-TRACE-001/trace")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert [event["status"] for event in response.json()["events"]] == [
+        "failed",
+        "succeeded",
+    ]
+    assert response.json()["events"][0]["error_type"] == "HTTP_503"
+    runner.get_trace.assert_called_once_with(
+        "REQ-TRACE-001",
+        _access_context(),
     )
 
 

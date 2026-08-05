@@ -26,6 +26,11 @@ from retail_analytics_agent.request_registry import (
     RequestRunStatus,
 )
 from retail_analytics_agent.sql_safety import prepare_safe_sql
+from retail_analytics_agent.tracing import (
+    ExecutionTraceEvent,
+    InMemoryExecutionTraceStore,
+    TraceStatus,
+)
 from retail_analytics_agent.workflow import create_initial_state
 
 
@@ -365,3 +370,49 @@ def test_runner_marks_degraded_result_in_request_registry() -> None:
         RequestRunStatus.DEGRADED,
         error=None,
     )
+
+
+def test_runner_returns_trace_to_request_owner() -> None:
+    request_store = Mock()
+    request_store.get.return_value = _claim(
+        RequestClaimStatus.EXISTING,
+        RequestRunStatus.COMPLETED,
+    )
+    trace_store = InMemoryExecutionTraceStore()
+    trace_store.record(
+        ExecutionTraceEvent(
+            request_id="REQ-SERVICE-001",
+            component="node.plan",
+            status=TraceStatus.SUCCEEDED,
+            duration_ms=5,
+        )
+    )
+    runner = LangGraphAnalysisRunner(
+        Mock(),
+        request_store=request_store,
+        trace_store=trace_store,
+    )
+
+    response = runner.get_trace("REQ-SERVICE-001", _access_context())
+
+    assert response.request_id == "REQ-SERVICE-001"
+    assert response.events[0].component == "node.plan"
+    assert response.events[0].duration_ms == 5
+
+
+def test_runner_hides_trace_from_another_analyst() -> None:
+    request_store = Mock()
+    request_store.get.return_value = _claim(
+        RequestClaimStatus.EXISTING,
+        RequestRunStatus.COMPLETED,
+    )
+    runner = LangGraphAnalysisRunner(Mock(), request_store=request_store)
+
+    with pytest.raises(
+        PermissionError,
+        match="analysis request belongs to another user",
+    ):
+        runner.get_trace(
+            "REQ-SERVICE-001",
+            AccessContext(user_id="USER-OTHER", role=AccessRole.ANALYST),
+        )
