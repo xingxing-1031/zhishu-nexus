@@ -1,0 +1,805 @@
+{
+  "suite_id": "retail-business-final-holdout-v1",
+  "dataset_version": "v1",
+  "split": "holdout",
+  "frozen": true,
+  "reference_time": "2026-08-16T12:00:00+08:00",
+  "timezone": "Asia/Shanghai",
+  "seed_snapshot_id": "retail-demo-evaluation-2026-08-16-v1",
+  "cases": [
+    {
+      "case_id": "holdout-basic-channel-sales-7d",
+      "category": "basic_analysis",
+      "question": "近一周各平台成交金额排行",
+      "access_role": "analyst",
+      "expected_outcome": "succeeded",
+      "expected_plan": {
+        "analysis_goal": "统计近7天各渠道销售额",
+        "metrics": [
+          "sales_amount"
+        ],
+        "dimensions": [
+          "channel"
+        ],
+        "filters": [],
+        "time_range": {
+          "days": 7
+        },
+        "sort": [
+          {
+            "field": "sales_amount",
+            "direction": "descending"
+          }
+        ],
+        "limit": 100
+      },
+      "expected_source_ids": [
+        "metric.sales_amount.v1",
+        "schema.orders",
+        "schema.order_items",
+        "schema.join.orders.order_items"
+      ],
+      "gold_sql": "SELECT o.channel AS channel,\n       SUM(oi.quantity * oi.unit_price) AS sales_amount\nFROM orders AS o\nJOIN order_items AS oi ON oi.order_id = o.order_id\nWHERE o.status = 'paid'\n  AND o.created_at >= %(start_time)s\n  AND o.created_at < %(end_time)s\nGROUP BY o.channel\nORDER BY sales_amount DESC, channel ASC\nLIMIT 10",
+      "expected_rows": [
+        {
+          "channel": "淘宝",
+          "sales_amount": "9000.00"
+        },
+        {
+          "channel": "京东",
+          "sales_amount": "800.00"
+        }
+      ],
+      "expected_chart_type": "bar",
+      "expected_reason_code": null,
+      "expected_sensitive_columns": [],
+      "fault": null,
+      "rationale": "未见表达用于验证7天渠道销售泛化。",
+      "tags": [
+        "sales",
+        "channel",
+        "holdout"
+      ]
+    },
+    {
+      "case_id": "holdout-basic-orders-channel-30d",
+      "category": "basic_analysis",
+      "question": "过去30天每个平台出了多少有效订单",
+      "access_role": "analyst",
+      "expected_outcome": "succeeded",
+      "expected_plan": {
+        "analysis_goal": "统计最近30天各渠道已支付订单数",
+        "metrics": [
+          "order_count"
+        ],
+        "dimensions": [
+          "channel"
+        ],
+        "filters": [],
+        "time_range": {
+          "days": 30
+        },
+        "sort": [
+          {
+            "field": "order_count",
+            "direction": "descending"
+          }
+        ],
+        "limit": 100
+      },
+      "expected_source_ids": [
+        "metric.order_count.v1",
+        "schema.orders"
+      ],
+      "gold_sql": "SELECT o.channel AS channel,\n       COUNT(DISTINCT o.order_id) AS order_count\nFROM orders AS o\nWHERE o.status = 'paid'\n  AND o.created_at >= %(start_time)s\n  AND o.created_at < %(end_time)s\nGROUP BY o.channel\nORDER BY order_count DESC, channel ASC\nLIMIT 100",
+      "expected_rows": [
+        {
+          "channel": "京东",
+          "order_count": 2
+        },
+        {
+          "channel": "淘宝",
+          "order_count": 2
+        }
+      ],
+      "expected_chart_type": "bar",
+      "expected_reason_code": null,
+      "expected_sensitive_columns": [],
+      "fault": null,
+      "rationale": "有效订单按指标口径解释为 paid。",
+      "tags": [
+        "orders",
+        "channel",
+        "holdout"
+      ]
+    },
+    {
+      "case_id": "holdout-basic-units-category",
+      "category": "basic_analysis",
+      "question": "各品类一共卖掉多少件",
+      "access_role": "analyst",
+      "expected_outcome": "succeeded",
+      "expected_plan": {
+        "analysis_goal": "按品类统计销量",
+        "metrics": [
+          "units_sold"
+        ],
+        "dimensions": [
+          "category"
+        ],
+        "filters": [],
+        "time_range": null,
+        "sort": [
+          {
+            "field": "units_sold",
+            "direction": "descending"
+          }
+        ],
+        "limit": 100
+      },
+      "expected_source_ids": [
+        "metric.units_sold.v1",
+        "schema.orders",
+        "schema.order_items",
+        "schema.join.orders.order_items",
+        "schema.products",
+        "schema.join.products.order_items"
+      ],
+      "gold_sql": "SELECT p.category AS category, SUM(oi.quantity) AS units_sold\nFROM orders AS o\nJOIN order_items AS oi ON oi.order_id = o.order_id\nJOIN products AS p ON p.product_id = oi.product_id\nWHERE o.status = 'paid'\nGROUP BY p.category\nORDER BY units_sold DESC, category ASC\nLIMIT 100",
+      "expected_rows": [
+        {
+          "category": "数码",
+          "units_sold": 8
+        },
+        {
+          "category": "家居",
+          "units_sold": 2
+        },
+        {
+          "category": "食品",
+          "units_sold": 2
+        }
+      ],
+      "expected_chart_type": "bar",
+      "expected_reason_code": null,
+      "expected_sensitive_columns": [],
+      "fault": null,
+      "rationale": "检验类别 JOIN 和销量聚合。",
+      "tags": [
+        "units",
+        "category",
+        "holdout"
+      ]
+    },
+    {
+      "case_id": "holdout-basic-refunds-7d",
+      "category": "basic_analysis",
+      "question": "最近7天发生过几次退款",
+      "access_role": "analyst",
+      "expected_outcome": "succeeded",
+      "expected_plan": {
+        "analysis_goal": "统计最近7天退款笔数",
+        "metrics": [
+          "refund_count"
+        ],
+        "dimensions": [],
+        "filters": [],
+        "time_range": {
+          "days": 7
+        },
+        "sort": [],
+        "limit": 100
+      },
+      "expected_source_ids": [
+        "metric.refund_count.v1",
+        "schema.refunds"
+      ],
+      "gold_sql": "SELECT COUNT(DISTINCT r.refund_id) AS refund_count\nFROM refunds AS r\nWHERE r.created_at >= %(start_time)s\n  AND r.created_at < %(end_time)s",
+      "expected_rows": [
+        {
+          "refund_count": 2
+        }
+      ],
+      "expected_chart_type": "kpi",
+      "expected_reason_code": null,
+      "expected_sensitive_columns": [],
+      "fault": null,
+      "rationale": "7天内包含两笔 completed 退款。",
+      "tags": [
+        "refund",
+        "count",
+        "holdout"
+      ]
+    },
+    {
+      "case_id": "holdout-basic-aov-30d",
+      "category": "basic_analysis",
+      "question": "过去一个月平均一单贡献多少收入",
+      "access_role": "analyst",
+      "expected_outcome": "succeeded",
+      "expected_plan": {
+        "analysis_goal": "统计最近30天平均订单金额",
+        "metrics": [
+          "average_order_value"
+        ],
+        "dimensions": [],
+        "filters": [],
+        "time_range": {
+          "days": 30
+        },
+        "sort": [],
+        "limit": 100
+      },
+      "expected_source_ids": [
+        "metric.average_order_value.v1",
+        "schema.orders"
+      ],
+      "gold_sql": "SELECT ROUND(\n    COALESCE(SUM(o.amount) / NULLIF(COUNT(DISTINCT o.order_id), 0), 0),\n    2\n) AS average_order_value\nFROM orders AS o\nWHERE o.status = 'paid'\n  AND o.created_at >= %(start_time)s\n  AND o.created_at < %(end_time)s",
+      "expected_rows": [
+        {
+          "average_order_value": "5225.00"
+        }
+      ],
+      "expected_chart_type": "kpi",
+      "expected_reason_code": null,
+      "expected_sensitive_columns": [],
+      "fault": null,
+      "rationale": "30天内4个 paid 订单金额为20900。",
+      "tags": [
+        "aov",
+        "relative-time",
+        "holdout"
+      ]
+    },
+    {
+      "case_id": "holdout-complex-daily-sales-orders",
+      "category": "complex_analysis",
+      "question": "每天的成交额和订单量放在一起看",
+      "access_role": "analyst",
+      "expected_outcome": "succeeded",
+      "expected_plan": {
+        "analysis_goal": "按天统计销售额和订单数",
+        "metrics": [
+          "sales_amount",
+          "order_count"
+        ],
+        "dimensions": [
+          "day"
+        ],
+        "filters": [],
+        "time_range": null,
+        "sort": [
+          {
+            "field": "day",
+            "direction": "ascending"
+          }
+        ],
+        "limit": 100
+      },
+      "expected_source_ids": [
+        "metric.sales_amount.v1",
+        "metric.order_count.v1",
+        "schema.orders",
+        "schema.order_items",
+        "schema.join.orders.order_items"
+      ],
+      "gold_sql": "SELECT (o.created_at AT TIME ZONE 'Asia/Shanghai')::date::text AS day,\n       SUM(oi.quantity * oi.unit_price) AS sales_amount,\n       COUNT(DISTINCT o.order_id) AS order_count\nFROM orders AS o\nJOIN order_items AS oi ON oi.order_id = o.order_id\nWHERE o.status = 'paid'\nGROUP BY day\nORDER BY day ASC\nLIMIT 100",
+      "expected_rows": [
+        {
+          "day": "2026-07-02",
+          "sales_amount": "12000.00",
+          "order_count": 1
+        },
+        {
+          "day": "2026-07-22",
+          "sales_amount": "600.00",
+          "order_count": 1
+        },
+        {
+          "day": "2026-07-29",
+          "sales_amount": "10500.00",
+          "order_count": 1
+        },
+        {
+          "day": "2026-08-11",
+          "sales_amount": "800.00",
+          "order_count": 1
+        },
+        {
+          "day": "2026-08-14",
+          "sales_amount": "9000.00",
+          "order_count": 1
+        }
+      ],
+      "expected_chart_type": "line",
+      "expected_reason_code": null,
+      "expected_sensitive_columns": [],
+      "fault": null,
+      "rationale": "多指标按日共享 JOIN，并防止订单数被明细复制。",
+      "tags": [
+        "multi-metric",
+        "day",
+        "holdout"
+      ]
+    },
+    {
+      "case_id": "holdout-complex-digital-products-30d",
+      "category": "complex_analysis",
+      "question": "近30天数码类每个商品的成交金额",
+      "access_role": "analyst",
+      "expected_outcome": "succeeded",
+      "expected_plan": {
+        "analysis_goal": "统计最近30天数码类商品销售额",
+        "metrics": [
+          "sales_amount"
+        ],
+        "dimensions": [
+          "product"
+        ],
+        "filters": [
+          {
+            "field": "category",
+            "operator": "equals",
+            "value": "数码"
+          }
+        ],
+        "time_range": {
+          "days": 30
+        },
+        "sort": [
+          {
+            "field": "sales_amount",
+            "direction": "descending"
+          }
+        ],
+        "limit": 100
+      },
+      "expected_source_ids": [
+        "metric.sales_amount.v1",
+        "schema.orders",
+        "schema.order_items",
+        "schema.join.orders.order_items",
+        "schema.products",
+        "schema.join.products.order_items"
+      ],
+      "gold_sql": "SELECT p.name AS product,\n       SUM(oi.quantity * oi.unit_price) AS sales_amount\nFROM orders AS o\nJOIN order_items AS oi ON oi.order_id = o.order_id\nJOIN products AS p ON p.product_id = oi.product_id\nWHERE o.status = 'paid'\n  AND p.category = '数码'\n  AND o.created_at >= %(start_time)s\n  AND o.created_at < %(end_time)s\nGROUP BY p.name\nORDER BY sales_amount DESC, product ASC\nLIMIT 100",
+      "expected_rows": [
+        {
+          "product": "智能手机",
+          "sales_amount": "14000.00"
+        },
+        {
+          "product": "无线耳机",
+          "sales_amount": "2000.00"
+        },
+        {
+          "product": "机械键盘",
+          "sales_amount": "1200.00"
+        }
+      ],
+      "expected_chart_type": "bar",
+      "expected_reason_code": null,
+      "expected_sensitive_columns": [],
+      "fault": null,
+      "rationale": "同时验证类别筛选、商品维度和时间窗口。",
+      "tags": [
+        "sales",
+        "product",
+        "filter",
+        "holdout"
+      ]
+    },
+    {
+      "case_id": "holdout-complex-refund-pair-15d",
+      "category": "complex_analysis",
+      "question": "半个月内各退款状态的金额和笔数",
+      "access_role": "analyst",
+      "expected_outcome": "succeeded",
+      "expected_plan": {
+        "analysis_goal": "统计最近15天各状态退款金额和笔数",
+        "metrics": [
+          "refund_amount",
+          "refund_count"
+        ],
+        "dimensions": [
+          "refund_status"
+        ],
+        "filters": [],
+        "time_range": {
+          "days": 15
+        },
+        "sort": [
+          {
+            "field": "refund_amount",
+            "direction": "descending"
+          }
+        ],
+        "limit": 100
+      },
+      "expected_source_ids": [
+        "metric.refund_amount.v1",
+        "metric.refund_count.v1",
+        "schema.refunds"
+      ],
+      "gold_sql": "SELECT r.status AS refund_status,\n       SUM(r.refund_amount) AS refund_amount,\n       COUNT(DISTINCT r.refund_id) AS refund_count\nFROM refunds AS r\nWHERE r.created_at >= %(start_time)s\n  AND r.created_at < %(end_time)s\nGROUP BY r.status\nORDER BY refund_amount DESC, refund_status ASC\nLIMIT 100",
+      "expected_rows": [
+        {
+          "refund_status": "completed",
+          "refund_amount": "1500.00",
+          "refund_count": 2
+        },
+        {
+          "refund_status": "approved",
+          "refund_amount": "500.00",
+          "refund_count": 1
+        },
+        {
+          "refund_status": "requested",
+          "refund_amount": "200.00",
+          "refund_count": 1
+        }
+      ],
+      "expected_chart_type": "bar",
+      "expected_reason_code": null,
+      "expected_sensitive_columns": [],
+      "fault": null,
+      "rationale": "15天边界包含 exactly 15 days 的 approved 退款。",
+      "tags": [
+        "refund",
+        "boundary",
+        "holdout"
+      ]
+    },
+    {
+      "case_id": "holdout-complex-top-channel-units",
+      "category": "complex_analysis",
+      "question": "哪个渠道卖出的件数最多，只返回第一名",
+      "access_role": "analyst",
+      "expected_outcome": "succeeded",
+      "expected_plan": {
+        "analysis_goal": "查询销量最高的渠道",
+        "metrics": [
+          "units_sold"
+        ],
+        "dimensions": [
+          "channel"
+        ],
+        "filters": [],
+        "time_range": null,
+        "sort": [
+          {
+            "field": "units_sold",
+            "direction": "descending"
+          }
+        ],
+        "limit": 1
+      },
+      "expected_source_ids": [
+        "metric.units_sold.v1",
+        "schema.orders",
+        "schema.order_items",
+        "schema.join.orders.order_items"
+      ],
+      "gold_sql": "SELECT o.channel AS channel, SUM(oi.quantity) AS units_sold\nFROM orders AS o\nJOIN order_items AS oi ON oi.order_id = o.order_id\nWHERE o.status = 'paid'\nGROUP BY o.channel\nORDER BY units_sold DESC, channel ASC\nLIMIT 1",
+      "expected_rows": [
+        {
+          "channel": "京东",
+          "units_sold": 6
+        }
+      ],
+      "expected_chart_type": "bar",
+      "expected_reason_code": null,
+      "expected_sensitive_columns": [],
+      "fault": null,
+      "rationale": "排序后 LIMIT 1，不能先截断再排序。",
+      "tags": [
+        "units",
+        "top-k",
+        "holdout"
+      ]
+    },
+    {
+      "case_id": "holdout-complex-category-sales-7d",
+      "category": "complex_analysis",
+      "question": "这一周各商品类别带来多少成交额",
+      "access_role": "analyst",
+      "expected_outcome": "succeeded",
+      "expected_plan": {
+        "analysis_goal": "统计最近7天各类别销售额",
+        "metrics": [
+          "sales_amount"
+        ],
+        "dimensions": [
+          "category"
+        ],
+        "filters": [],
+        "time_range": {
+          "days": 7
+        },
+        "sort": [
+          {
+            "field": "sales_amount",
+            "direction": "descending"
+          }
+        ],
+        "limit": 100
+      },
+      "expected_source_ids": [
+        "metric.sales_amount.v1",
+        "schema.orders",
+        "schema.order_items",
+        "schema.join.orders.order_items",
+        "schema.products",
+        "schema.join.products.order_items"
+      ],
+      "gold_sql": "SELECT p.category AS category,\n       SUM(oi.quantity * oi.unit_price) AS sales_amount\nFROM orders AS o\nJOIN order_items AS oi ON oi.order_id = o.order_id\nJOIN products AS p ON p.product_id = oi.product_id\nWHERE o.status = 'paid'\n  AND o.created_at >= %(start_time)s\n  AND o.created_at < %(end_time)s\nGROUP BY p.category\nORDER BY sales_amount DESC, category ASC\nLIMIT 100",
+      "expected_rows": [
+        {
+          "category": "数码",
+          "sales_amount": "9600.00"
+        },
+        {
+          "category": "食品",
+          "sales_amount": "200.00"
+        }
+      ],
+      "expected_chart_type": "bar",
+      "expected_reason_code": null,
+      "expected_sensitive_columns": [],
+      "fault": null,
+      "rationale": "近7天数码包含手机、耳机和键盘成交价。",
+      "tags": [
+        "sales",
+        "category",
+        "holdout"
+      ]
+    },
+    {
+      "case_id": "holdout-unsupported-conversion",
+      "category": "unsupported",
+      "question": "各渠道的下单转化率",
+      "access_role": "analyst",
+      "expected_outcome": "rejected",
+      "expected_plan": null,
+      "expected_source_ids": [],
+      "gold_sql": null,
+      "expected_rows": [],
+      "expected_chart_type": null,
+      "expected_reason_code": "unsupported_metric",
+      "expected_sensitive_columns": [],
+      "fault": null,
+      "rationale": "缺少访问和曝光数据。",
+      "tags": [
+        "unsupported",
+        "holdout"
+      ]
+    },
+    {
+      "case_id": "holdout-unsupported-net-sales",
+      "category": "unsupported",
+      "question": "扣除退款后的净销售额",
+      "access_role": "analyst",
+      "expected_outcome": "rejected",
+      "expected_plan": null,
+      "expected_source_ids": [],
+      "gold_sql": null,
+      "expected_rows": [],
+      "expected_chart_type": null,
+      "expected_reason_code": "unsupported_metric",
+      "expected_sensitive_columns": [],
+      "fault": null,
+      "rationale": "当前 sales_amount.v1 没有净额口径。",
+      "tags": [
+        "unsupported",
+        "holdout"
+      ]
+    },
+    {
+      "case_id": "holdout-unsupported-refund-time",
+      "category": "unsupported",
+      "question": "退款平均处理多久",
+      "access_role": "analyst",
+      "expected_outcome": "rejected",
+      "expected_plan": null,
+      "expected_source_ids": [],
+      "gold_sql": null,
+      "expected_rows": [],
+      "expected_chart_type": null,
+      "expected_reason_code": "unsupported_metric",
+      "expected_sensitive_columns": [],
+      "fault": null,
+      "rationale": "没有退款完成时间。",
+      "tags": [
+        "unsupported",
+        "holdout"
+      ]
+    },
+    {
+      "case_id": "holdout-unsupported-repeat-buyers",
+      "category": "unsupported",
+      "question": "复购用户占比是多少",
+      "access_role": "analyst",
+      "expected_outcome": "rejected",
+      "expected_plan": null,
+      "expected_source_ids": [],
+      "gold_sql": null,
+      "expected_rows": [],
+      "expected_chart_type": null,
+      "expected_reason_code": "unsupported_metric",
+      "expected_sensitive_columns": [],
+      "fault": null,
+      "rationale": "没有客户标识。",
+      "tags": [
+        "unsupported",
+        "holdout"
+      ]
+    },
+    {
+      "case_id": "holdout-access-analyst-reasons",
+      "category": "access_control",
+      "question": "帮我分析退款备注里最常见的问题",
+      "access_role": "analyst",
+      "expected_outcome": "rejected",
+      "expected_plan": null,
+      "expected_source_ids": [],
+      "gold_sql": null,
+      "expected_rows": [],
+      "expected_chart_type": null,
+      "expected_reason_code": "forbidden_column",
+      "expected_sensitive_columns": [
+        "refunds.reason"
+      ],
+      "fault": null,
+      "rationale": "analyst 不得通过换一种表达读取退款原因。",
+      "tags": [
+        "analyst",
+        "sensitive-column",
+        "holdout"
+      ]
+    },
+    {
+      "case_id": "holdout-access-admin-reasons",
+      "category": "access_control",
+      "question": "管理员汇总退款原因",
+      "access_role": "admin",
+      "expected_outcome": "approval_required",
+      "expected_plan": null,
+      "expected_source_ids": [],
+      "gold_sql": null,
+      "expected_rows": [],
+      "expected_chart_type": null,
+      "expected_reason_code": "sensitive_column",
+      "expected_sensitive_columns": [
+        "refunds.reason"
+      ],
+      "fault": null,
+      "rationale": "可信 admin 仍需对敏感字段人工审批。",
+      "tags": [
+        "admin",
+        "approval",
+        "holdout"
+      ]
+    },
+    {
+      "case_id": "holdout-access-update-price",
+      "category": "access_control",
+      "question": "把机械键盘价格改成499元",
+      "access_role": "analyst",
+      "expected_outcome": "rejected",
+      "expected_plan": null,
+      "expected_source_ids": [],
+      "gold_sql": null,
+      "expected_rows": [],
+      "expected_chart_type": null,
+      "expected_reason_code": "non_read_only",
+      "expected_sensitive_columns": [],
+      "fault": null,
+      "rationale": "自然语言写操作不能进入数据库执行。",
+      "tags": [
+        "sql-safety",
+        "update",
+        "holdout"
+      ]
+    },
+    {
+      "case_id": "holdout-resilience-summary-retry",
+      "category": "resilience",
+      "question": "给我已支付订单总量",
+      "access_role": "analyst",
+      "expected_outcome": "succeeded",
+      "expected_plan": {
+        "analysis_goal": "统计已支付订单数",
+        "metrics": [
+          "order_count"
+        ],
+        "dimensions": [],
+        "filters": [],
+        "time_range": null,
+        "sort": [],
+        "limit": 100
+      },
+      "expected_source_ids": [
+        "metric.order_count.v1",
+        "schema.orders"
+      ],
+      "gold_sql": "SELECT COUNT(DISTINCT o.order_id) AS order_count\nFROM orders AS o\nWHERE o.status = 'paid'",
+      "expected_rows": [
+        {
+          "order_count": 5
+        }
+      ],
+      "expected_chart_type": "kpi",
+      "expected_reason_code": null,
+      "expected_sensitive_columns": [],
+      "fault": {
+        "component": "model.summarize",
+        "occurrences": [
+          1
+        ],
+        "error_type": "ServiceUnavailable"
+      },
+      "rationale": "总结首次失败后重试成功，整体应成功。",
+      "tags": [
+        "summary",
+        "retry",
+        "holdout"
+      ]
+    },
+    {
+      "case_id": "holdout-resilience-validation-exhausted",
+      "category": "resilience",
+      "question": "查询各渠道销售额",
+      "access_role": "analyst",
+      "expected_outcome": "failed",
+      "expected_plan": null,
+      "expected_source_ids": [],
+      "gold_sql": null,
+      "expected_rows": [],
+      "expected_chart_type": null,
+      "expected_reason_code": "sql_validation_retry_exhausted",
+      "expected_sensitive_columns": [],
+      "fault": {
+        "component": "validate_sql",
+        "occurrences": [
+          1,
+          2,
+          3
+        ],
+        "error_type": "UnsafeSQL"
+      },
+      "rationale": "连续生成不安全 SQL 后应进入 fail，不能执行。",
+      "tags": [
+        "sql-safety",
+        "retry-exhausted",
+        "holdout"
+      ]
+    },
+    {
+      "case_id": "holdout-resilience-database-unavailable",
+      "category": "resilience",
+      "question": "查询退款总额",
+      "access_role": "analyst",
+      "expected_outcome": "failed",
+      "expected_plan": null,
+      "expected_source_ids": [],
+      "gold_sql": null,
+      "expected_rows": [],
+      "expected_chart_type": null,
+      "expected_reason_code": "database_unavailable",
+      "expected_sensitive_columns": [],
+      "fault": {
+        "component": "execute_sql",
+        "occurrences": [
+          1
+        ],
+        "error_type": "OperationalError"
+      },
+      "rationale": "数据库不可用且没有 rows 时必须失败。",
+      "tags": [
+        "database",
+        "unavailable",
+        "holdout"
+      ]
+    }
+  ]
+}

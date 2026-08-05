@@ -1,8 +1,66 @@
-# Retrieval evaluation artifacts
+# Evaluation artifacts
 
-W4-3 separates development evidence from the one-time final holdout result.
+The repository keeps development data separate from frozen holdout data. A
+holdout result is only valid while its questions and labels have not been used
+to tune prompts, retrieval thresholds, model selection or business rules.
 
-## Datasets
+## W6-1 end-to-end business benchmark
+
+| File | Cases | Purpose |
+|---|---:|---|
+| `business_development.json` | 40 | Diagnose failures and improve the system |
+| `business_holdout.json` | 20 | One-time final evaluation after the system is fixed |
+
+The 60 independent cases cover 15 basic analyses, 15 complex analyses, 10
+unsupported requests, 10 access-control boundaries and 10 deterministic
+resilience scenarios. Gold labels were written before model execution.
+
+Every case records the user question, trusted role, expected outcome and the
+stage-level expectations needed to locate a failure. Successful and degraded
+cases additionally contain:
+
+- a human-labelled `AnalysisPlan`;
+- expected metric and Schema evidence source IDs;
+- human-reviewed parameterized Gold SQL;
+- exact rows from the fixed PostgreSQL snapshot;
+- the deterministic chart type.
+
+Rejected, failed and approval-required cases store a reason code instead of
+inventing a result. Resilience cases also identify the component, occurrence
+and error type to inject.
+
+### Fixed snapshot
+
+```text
+reference_time = 2026-08-16T12:00:00+08:00
+timezone = Asia/Shanghai
+seed_snapshot_id = retail-demo-evaluation-2026-08-16-v1
+```
+
+Relative ranges are evaluated as `[reference_time - days, reference_time)`.
+The Gold verifier temporarily replaces the relative seed timestamps with
+absolute snapshot timestamps inside one transaction. It executes every trusted
+Gold query, compares ordered rows exactly, and always rolls the transaction
+back so the development database is unchanged.
+
+```powershell
+python scripts/build_w6_1_dataset.py
+python scripts/verify_w6_1_gold.py
+```
+
+Model SQL is not required to match the Gold SQL string. W6-2 will score the
+plan, retrieved evidence, safety outcome, exact result rows and final response
+semantics separately. This allows an equivalent SQL query to pass while still
+showing which stage caused a wrong final answer.
+
+### Holdout leakage rule
+
+Do not inspect a holdout failure and then tune the current system against that
+case while continuing to report the same file as a final holdout. Once a
+holdout example influences implementation, move it into development evidence
+and create a new independent holdout before reporting another final score.
+
+## W4-3 retrieval benchmark
 
 | File | Purpose |
 |---|---|
@@ -11,18 +69,6 @@ W4-3 separates development evidence from the one-time final holdout result.
 | `metric_query_validation.json` | Independent development set used only for distance-threshold selection |
 | `metric_query_holdout.json` | Final 20-case holdout, evaluated once after prompts and thresholds were fixed |
 
-## Reports
-
-| File | Meaning |
-|---|---|
-| `catalog_baseline.json` | Deterministic catalog evidence baseline |
-| `keyword_metric_baseline.json` | Literal keyword baseline on the development set |
-| `vector_metric_baseline.json` | Unthresholded `bge-m3` Top-5 baseline |
-| `hybrid_metric_top1.json` / `hybrid_metric_top5.json` | RRF fusion baselines without hard distance filtering |
-| `vector_threshold_validation.json` | Threshold selection experiment; diagnostic evidence, not the final retrieval policy |
-| `llm_reranker_qwen3_0_6b_initial.json` | Initial 0.6B LLM reranker experiment |
-| `llm_reranker_qwen3_4b.json` | 4B reranker-only development result |
-| `domain_gated_development_only_qwen3_4b.json` | Development-only result affected by prompt/test overlap; not a final score |
-| `domain_gated_metric_query_holdout_qwen3_4b.json` | One-time final holdout result: 85% exact match |
-
-Do not tune prompts or thresholds against `metric_query_holdout.json` and continue to call it a holdout. Once a failure from that file is used for development, a new independent holdout is required for another final evaluation.
+The `reports` directory contains the W4-3 retrieval baselines and the one-time
+holdout result. Those reports measure retrieval only; they are separate from
+the W6 end-to-end business benchmark.
