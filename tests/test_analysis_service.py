@@ -3,6 +3,7 @@ from unittest.mock import Mock
 import pytest
 
 from retail_analytics_agent.analysis_service import (
+    AnalysisRequestConflictError,
     AnalysisRunError,
     LangGraphAnalysisRunner,
 )
@@ -14,8 +15,15 @@ from retail_analytics_agent.models import (
     ApprovalStatus,
     AnalysisPlan,
     AnalysisRequest,
+    AnalysisResultStatus,
+    AnalysisRunningResponse,
     ChartSpec,
     QueryRisk,
+)
+from retail_analytics_agent.request_registry import (
+    RequestClaim,
+    RequestClaimStatus,
+    RequestRunStatus,
 )
 from retail_analytics_agent.sql_safety import prepare_safe_sql
 from retail_analytics_agent.workflow import create_initial_state
@@ -261,3 +269,99 @@ def test_runner_hides_another_users_request_from_analyst() -> None:
                 role=AccessRole.ANALYST,
             ),
         )
+
+
+def _claim(
+    status: RequestClaimStatus,
+    run_status: RequestRunStatus,
+    *,
+    error: str | None = None,
+) -> RequestClaim:
+    return RequestClaim(
+        status=status,
+        run_status=run_status,
+        user_id="USER-001",
+        access_role=AccessRole.ANALYST,
+        error=error,
+    )
+
+
+def test_runner_returns_existing_completed_request_without_reinvoking() -> None:
+    graph = Mock()
+    graph.get_state.return_value = Mock(
+        values=_successful_state(),
+        next=(),
+    )
+    store = Mock()
+    store.claim.return_value = _claim(
+        RequestClaimStatus.EXISTING,
+        RequestRunStatus.COMPLETED,
+    )
+
+    outcome = LangGraphAnalysisRunner(graph, request_store=store).run(
+        _request(),
+        _access_context(),
+    )
+
+    assert outcome.status is AnalysisResultStatus.SUCCEEDED
+    graph.invoke.assert_not_called()
+
+
+def test_runner_returns_running_for_duplicate_before_first_checkpoint() -> None:
+    graph = Mock()
+    graph.get_state.return_value = Mock(values={}, next=())
+    store = Mock()
+    store.claim.return_value = _claim(
+        RequestClaimStatus.EXISTING,
+        RequestRunStatus.RUNNING,
+    )
+
+    outcome = LangGraphAnalysisRunner(graph, request_store=store).run(
+        _request(),
+        _access_context(),
+    )
+
+    assert isinstance(outcome, AnalysisRunningResponse)
+    graph.invoke.assert_not_called()
+
+
+def test_runner_rejects_request_id_reused_for_different_input() -> None:
+    store = Mock()
+    store.claim.return_value = _claim(
+        RequestClaimStatus.CONFLICT,
+        RequestRunStatus.RUNNING,
+    )
+
+    with pytest.raises(
+        AnalysisRequestConflictError,
+        match="different analysis input",
+    ):
+        LangGraphAnalysisRunner(Mock(), request_store=store).run(
+            _request(),
+            _access_context(),
+        )
+
+
+def test_runner_marks_degraded_result_in_request_registry() -> None:
+    graph = Mock()
+    state = _successful_state()
+    state["result_status"] = AnalysisResultStatus.DEGRADED
+    state["degradation_reason"] = "summary unavailable"
+    graph.invoke.return_value = state
+    store = Mock()
+    store.claim.return_value = _claim(
+        RequestClaimStatus.NEW,
+        RequestRunStatus.RUNNING,
+    )
+
+    outcome = LangGraphAnalysisRunner(graph, request_store=store).run(
+        _request(),
+        _access_context(),
+    )
+
+    assert outcome.status is AnalysisResultStatus.DEGRADED
+    store.mark.assert_called_once_with(
+        "REQ-SERVICE-001",
+        RequestRunStatus.DEGRADED,
+        error=None,
+    )

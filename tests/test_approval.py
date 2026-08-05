@@ -9,6 +9,7 @@ from retail_analytics_agent.approval import (
     ApprovalAuditRecord,
     ApprovalAuditStatus,
     DatabaseApprovalAuditSink,
+    approval_audit_event_key,
     assess_query_risk,
 )
 from retail_analytics_agent.models import (
@@ -102,7 +103,33 @@ def test_database_approval_audit_sink_persists_event() -> None:
 
     payload = audit.model_dump(mode="json")
     payload["reasons"] = list(audit.reasons)
+    payload["event_key"] = approval_audit_event_key(audit)
     connection.execute.assert_called_once_with(
         APPROVAL_AUDIT_INSERT_SQL,
         payload,
     )
+
+
+def test_approval_resolution_uses_one_stable_terminal_event_key() -> None:
+    common = {
+        "request_id": "REQ-APPROVAL-TERMINAL",
+        "requester_id": "USER-001",
+        "access_role": AccessRole.ADMIN,
+        "sql": "SELECT reason FROM refunds LIMIT 10",
+        "reasons": ("query reads sensitive columns: refunds.reason",),
+        "reviewer_id": "ADMIN-001",
+    }
+    approved = ApprovalAuditRecord(
+        **common,
+        status=ApprovalAuditStatus.APPROVED,
+    )
+    rejected = ApprovalAuditRecord(
+        **common,
+        status=ApprovalAuditStatus.REJECTED,
+        decision_reason="not required",
+    )
+
+    assert approval_audit_event_key(approved) == (
+        approval_audit_event_key(rejected)
+    )
+    assert "ON CONFLICT (event_key) DO NOTHING" in APPROVAL_AUDIT_INSERT_SQL

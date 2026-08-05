@@ -73,6 +73,12 @@ class ApprovalDecision(StrEnum):
     REJECT = "reject"
 
 
+class AnalysisResultStatus(StrEnum):
+    SUCCEEDED = "succeeded"
+    DEGRADED = "degraded"
+    RUNNING = "running"
+
+
 class QueryRisk(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -253,6 +259,7 @@ class AnalysisResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     request_id: str = Field(min_length=1)
+    status: AnalysisResultStatus = AnalysisResultStatus.SUCCEEDED
     access_role: AccessRole
     answer: str = Field(min_length=1)
     plan: AnalysisPlan
@@ -260,11 +267,35 @@ class AnalysisResponse(BaseModel):
     chart_spec: ChartSpec | None
     evidence_source_ids: tuple[str, ...]
     retry_count: int = Field(ge=0)
+    degradation_reason: str | None = None
     trace: tuple[str, ...]
+
+    @model_validator(mode="after")
+    def validate_degradation(self) -> Self:
+        if self.status is AnalysisResultStatus.DEGRADED:
+            if self.degradation_reason is None:
+                raise ValueError("degraded result requires a reason")
+        elif self.degradation_reason is not None:
+            raise ValueError(
+                "successful result must not have a degradation reason"
+            )
+        return self
+
+
+class AnalysisRunningResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    request_id: str = Field(min_length=1)
+    status: AnalysisResultStatus = AnalysisResultStatus.RUNNING
+    access_role: AccessRole
+    trace: tuple[str, ...] = ()
 
 
 AnalysisOutcome = (
-    AnalysisResponse | ApprovalRequiredResponse | ApprovalRejectedResponse
+    AnalysisResponse
+    | AnalysisRunningResponse
+    | ApprovalRequiredResponse
+    | ApprovalRejectedResponse
 )
 
 

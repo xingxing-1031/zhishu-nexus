@@ -14,6 +14,7 @@ from retail_analytics_agent.models import (
     AnalysisPlan,
     RetrievalEvidence,
 )
+from retail_analytics_agent.resilience import RetryPolicy
 
 
 def _client(handler) -> httpx.Client:
@@ -199,3 +200,82 @@ def test_ollama_summarizer_uses_real_rows() -> None:
     )
 
     assert answer == "最近30天，京东渠道销售额为 9000.00 元。"
+
+
+def test_ollama_summarizer_rejects_ungrounded_numbers() -> None:
+    summarizer = OllamaResultSummarizer(
+        client=_client(
+            lambda request: httpx.Response(
+                200,
+                json={
+                    "message": {
+                        "content": json.dumps(
+                            {"answer": "京东渠道销售额为 801.00 元。"},
+                            ensure_ascii=False,
+                        )
+                    }
+                },
+            )
+        )
+    )
+
+    with pytest.raises(
+        ModelInvocationError,
+        match="absent from verified inputs: 801",
+    ):
+        summarizer.summarize(
+            question="最近30天各渠道销售额是多少？",
+            plan=_plan(),
+            rows=[{"channel": "jd", "sales_amount": "800.00"}],
+        )
+
+
+def test_ollama_planner_retries_transient_http_failure() -> None:
+    attempts = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            return httpx.Response(503, text="temporarily unavailable")
+        return httpx.Response(
+            200,
+            json={"message": {"content": _model_plan_json()}},
+        )
+
+    planner = OllamaAnalysisPlanner(
+        client=_client(handler),
+        retry_policy=RetryPolicy(
+            max_attempts=2,
+            initial_backoff_seconds=0,
+            max_backoff_seconds=0,
+            jitter_ratio=0,
+        ),
+    )
+
+    assert planner.plan("查询销售额", max_rows=10) == _plan()
+    assert attempts == 2
+
+
+def test_ollama_planner_does_not_retry_permanent_http_failure() -> None:
+    attempts = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal attempts
+        attempts += 1
+        return httpx.Response(400, text="invalid request")
+
+    planner = OllamaAnalysisPlanner(
+        client=_client(handler),
+        retry_policy=RetryPolicy(
+            max_attempts=3,
+            initial_backoff_seconds=0,
+            max_backoff_seconds=0,
+            jitter_ratio=0,
+        ),
+    )
+
+    with pytest.raises(ModelInvocationError, match="HTTP 400"):
+        planner.plan("查询销售额", max_rows=10)
+
+    assert attempts == 1

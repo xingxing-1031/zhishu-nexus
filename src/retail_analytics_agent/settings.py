@@ -1,6 +1,6 @@
 from functools import lru_cache
 
-from pydantic import SecretStr
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from retail_analytics_agent.models import AccessRole
@@ -14,7 +14,14 @@ class Settings(BaseSettings):
     postgres_port: int = 5432
     ollama_base_url: str = "http://127.0.0.1:11434"
     ollama_model: str = "qwen3:4b"
-    ollama_timeout_seconds: float = 120
+    ollama_timeout_seconds: float = Field(default=120, gt=0, le=600)
+    model_retry_max_attempts: int = Field(default=3, ge=1, le=5)
+    model_retry_initial_backoff_seconds: float = Field(
+        default=0.25,
+        ge=0,
+        le=10,
+    )
+    workflow_timeout_seconds: float = Field(default=120, gt=0, le=900)
     local_access_user_id: str = "USER-001"
     local_access_role: AccessRole = AccessRole.ANALYST
 

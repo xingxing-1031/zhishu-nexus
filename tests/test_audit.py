@@ -5,6 +5,7 @@ from retail_analytics_agent.audit import (
     DatabaseAuditSink,
     QueryAuditRecord,
     QueryAuditStatus,
+    query_audit_event_key,
 )
 
 
@@ -29,7 +30,22 @@ def test_database_audit_sink_persists_structured_record() -> None:
     ):
         DatabaseAuditSink().record(audit)
 
-    connection.execute.assert_called_once_with(
-        AUDIT_INSERT_SQL,
-        audit.model_dump(mode="json"),
+    payload = audit.model_dump(mode="json")
+    payload["event_key"] = query_audit_event_key(audit)
+    connection.execute.assert_called_once_with(AUDIT_INSERT_SQL, payload)
+
+
+def test_query_audit_event_key_ignores_replay_duration() -> None:
+    first = QueryAuditRecord(
+        request_id="REQ-REPLAY-001",
+        user_id="USER-001",
+        original_sql="SELECT order_id FROM orders",
+        executed_sql="SELECT order_id FROM orders LIMIT 10",
+        status=QueryAuditStatus.SUCCEEDED,
+        row_count=2,
+        duration_ms=1.25,
     )
+    replay = first.model_copy(update={"duration_ms": 9.75})
+
+    assert query_audit_event_key(first) == query_audit_event_key(replay)
+    assert "ON CONFLICT (event_key) DO NOTHING" in AUDIT_INSERT_SQL

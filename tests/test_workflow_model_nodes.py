@@ -6,8 +6,10 @@ from retail_analytics_agent.models import (
     AccessRole,
     AnalysisPlan,
     AnalysisRequest,
+    AnalysisResultStatus,
     RetrievalEvidence,
 )
+from retail_analytics_agent.model_adapters import ModelInvocationError
 from retail_analytics_agent.workflow import (
     build_analysis_graph,
     create_fail_node,
@@ -114,6 +116,8 @@ def test_summarize_node_passes_zero_rows_as_successful_result() -> None:
     assert update == {
         "final_answer": "没有符合条件的数据。",
         "chart_spec": None,
+        "result_status": AnalysisResultStatus.SUCCEEDED,
+        "degradation_reason": None,
         "trace": ["summarize"],
     }
     model.summarize.assert_called_once_with(
@@ -121,6 +125,23 @@ def test_summarize_node_passes_zero_rows_as_successful_result() -> None:
         plan=state["plan"],
         rows=[],
     )
+
+
+def test_summarize_node_degrades_after_successful_query() -> None:
+    model = Mock()
+    model.summarize.side_effect = ModelInvocationError("Ollama unavailable")
+    state = _state()
+    state["plan"] = _plan()
+    state["query_rows"] = [
+        {"channel": "jd", "sales_amount": "9000.00"}
+    ]
+
+    update = create_summarize_node(model)(state)
+
+    assert update["result_status"] is AnalysisResultStatus.DEGRADED
+    assert update["degradation_reason"] == "Ollama unavailable"
+    assert "返回 1 行数据" in update["final_answer"]
+    assert update["chart_spec"] is not None
 
 
 def test_fail_node_uses_execution_error_before_validation_error() -> None:

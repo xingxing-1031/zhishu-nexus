@@ -24,8 +24,18 @@ from retail_analytics_agent.models import (
     AnalysisOutcome,
     AnalysisRequest,
     AnalysisResponse,
+    AnalysisResultStatus,
+    AnalysisRunningResponse,
     AnalysisStreamEvent,
 )
+from retail_analytics_agent.request_registry import (
+    AnalysisRequestStore,
+    DatabaseAnalysisRequestStore,
+    RequestClaim,
+    RequestClaimStatus,
+    RequestRunStatus,
+)
+from retail_analytics_agent.resilience import RetryPolicy, workflow_time_budget
 from retail_analytics_agent.settings import get_settings
 from retail_analytics_agent.workflow import (
     CompiledAnalysisGraph,
@@ -43,6 +53,10 @@ from retail_analytics_agent.workflow_tools import (
 
 class AnalysisRunError(RuntimeError):
     """Stable error for a workflow that cannot produce a successful response."""
+
+
+class AnalysisRequestConflictError(RuntimeError):
+    """Raised when one request_id is reused for different input."""
 
 
 class AnalysisRunner(Protocol):
@@ -88,17 +102,37 @@ _NODE_STATUS_MESSAGES = {
 @dataclass(frozen=True, slots=True)
 class LangGraphAnalysisRunner:
     graph: CompiledAnalysisGraph
+    request_store: AnalysisRequestStore | None = None
+    workflow_timeout_seconds: float = 120
 
     def run(
         self,
         request: AnalysisRequest,
         access_context: AccessContext,
     ) -> AnalysisOutcome:
-        result = self.graph.invoke(
-            create_initial_state(request, access_context=access_context),
-            create_thread_config(request.request_id),
-        )
-        return self._to_outcome(result)
+        claim = self._claim_request(request, access_context)
+        if claim is not None and claim.status is RequestClaimStatus.EXISTING:
+            return self._existing_outcome(request.request_id, claim)
+
+        try:
+            with workflow_time_budget(self.workflow_timeout_seconds):
+                result = self.graph.invoke(
+                    create_initial_state(
+                        request,
+                        access_context=access_context,
+                    ),
+                    create_thread_config(request.request_id),
+                )
+            outcome = self._to_outcome(result)
+        except Exception as exc:
+            self._mark_request(
+                request.request_id,
+                RequestRunStatus.FAILED,
+                error=str(exc),
+            )
+            raise
+        self._mark_outcome(outcome)
+        return outcome
 
     def resume_approval(
         self,
@@ -116,18 +150,29 @@ class LangGraphAnalysisRunner:
             raise ValueError("approval request is not pending")
         if snapshot.next != ("request_approval",):
             raise ValueError("workflow is not waiting at the approval node")
-        result = self.graph.invoke(
-            Command(
-                resume={
-                    "decision": resolution.decision,
-                    "reason": resolution.reason,
-                    "reviewer_id": reviewer.user_id,
-                    "reviewer_role": reviewer.role,
-                }
-            ),
-            config,
-        )
-        return self._to_outcome(result)
+        try:
+            with workflow_time_budget(self.workflow_timeout_seconds):
+                result = self.graph.invoke(
+                    Command(
+                        resume={
+                            "decision": resolution.decision,
+                            "reason": resolution.reason,
+                            "reviewer_id": reviewer.user_id,
+                            "reviewer_role": reviewer.role,
+                        }
+                    ),
+                    config,
+                )
+            outcome = self._to_outcome(result)
+        except Exception as exc:
+            self._mark_request(
+                request_id,
+                RequestRunStatus.FAILED,
+                error=str(exc),
+            )
+            raise
+        self._mark_outcome(outcome)
+        return outcome
 
     def get_status(
         self,
@@ -136,49 +181,90 @@ class LangGraphAnalysisRunner:
     ) -> AnalysisOutcome:
         snapshot = self.graph.get_state(create_thread_config(request_id))
         if not snapshot.values:
-            raise ValueError("analysis request was not found")
+            claim = self.request_store.get(request_id) if self.request_store else None
+            if claim is None:
+                raise ValueError("analysis request was not found")
+            self._check_viewer(claim, viewer)
+            if claim.run_status is RequestRunStatus.FAILED:
+                raise AnalysisRunError(claim.error or "analysis request failed")
+            return AnalysisRunningResponse(
+                request_id=request_id,
+                access_role=claim.access_role,
+            )
         requester_id = snapshot.values["user_id"]
         if (
             viewer.role is not AccessRole.ADMIN
             and viewer.user_id != requester_id
         ):
             raise PermissionError("analysis request belongs to another user")
-        return self._to_outcome(snapshot.values)
+        return self._snapshot_outcome(snapshot, snapshot.values["access_role"])
 
     def stream(
         self,
         request: AnalysisRequest,
         access_context: AccessContext,
     ) -> Iterator[AnalysisStreamEvent]:
+        claim = self._claim_request(request, access_context)
         yield AnalysisStreamEvent(
             event="status",
             node=None,
             message="分析请求已接收",
         )
+        if claim is not None and claim.status is RequestClaimStatus.EXISTING:
+            outcome = self._existing_outcome(request.request_id, claim)
+            yield from self._outcome_events(outcome)
+            return
+
         last_node: str | None = None
         final_state = None
-        for state in self.graph.stream(
-            create_initial_state(request, access_context=access_context),
-            create_thread_config(request.request_id),
-            stream_mode="values",
-        ):
-            final_state = state
-            current_node = state["trace"][-1] if state["trace"] else None
-            if current_node is None or current_node == last_node:
-                continue
-            last_node = current_node
-            yield AnalysisStreamEvent(
-                event="status",
-                node=current_node,
-                message=_NODE_STATUS_MESSAGES.get(
-                    current_node,
-                    "正在处理分析请求",
-                ),
+        try:
+            with workflow_time_budget(self.workflow_timeout_seconds):
+                for state in self.graph.stream(
+                    create_initial_state(
+                        request,
+                        access_context=access_context,
+                    ),
+                    create_thread_config(request.request_id),
+                    stream_mode="values",
+                ):
+                    final_state = state
+                    current_node = (
+                        state["trace"][-1] if state["trace"] else None
+                    )
+                    if current_node is None or current_node == last_node:
+                        continue
+                    last_node = current_node
+                    yield AnalysisStreamEvent(
+                        event="status",
+                        node=current_node,
+                        message=_NODE_STATUS_MESSAGES.get(
+                            current_node,
+                            "正在处理分析请求",
+                        ),
+                    )
+        except Exception as exc:
+            self._mark_request(
+                request.request_id,
+                RequestRunStatus.FAILED,
+                error=str(exc),
             )
+            raise
 
         if final_state is None:
             raise AnalysisRunError("analysis workflow returned no state")
         outcome = self._to_outcome(final_state)
+        self._mark_outcome(outcome)
+        yield from self._outcome_events(outcome)
+
+    @staticmethod
+    def _outcome_events(outcome: AnalysisOutcome) -> Iterator[AnalysisStreamEvent]:
+        if isinstance(outcome, AnalysisRunningResponse):
+            yield AnalysisStreamEvent(
+                event="status",
+                node=None,
+                message="相同分析请求仍在处理中",
+            )
+            return
         if isinstance(outcome, ApprovalRequiredResponse):
             yield AnalysisStreamEvent(
                 event="approval_required",
@@ -198,9 +284,90 @@ class LangGraphAnalysisRunner:
         yield AnalysisStreamEvent(
             event="result",
             node=None,
-            message="分析完成",
+            message=(
+                "分析完成（总结已降级）"
+                if outcome.status is AnalysisResultStatus.DEGRADED
+                else "分析完成"
+            ),
             response=outcome,
         )
+
+    def _claim_request(
+        self,
+        request: AnalysisRequest,
+        access_context: AccessContext,
+    ) -> RequestClaim | None:
+        if self.request_store is None:
+            return None
+        claim = self.request_store.claim(request, access_context)
+        if claim.status is RequestClaimStatus.CONFLICT:
+            raise AnalysisRequestConflictError(
+                "request_id is already bound to different analysis input"
+            )
+        return claim
+
+    def _existing_outcome(
+        self,
+        request_id: str,
+        claim: RequestClaim,
+    ) -> AnalysisOutcome:
+        if claim.run_status is RequestRunStatus.FAILED:
+            raise AnalysisRunError(claim.error or "analysis request failed")
+        snapshot = self.graph.get_state(create_thread_config(request_id))
+        if not snapshot.values:
+            return AnalysisRunningResponse(
+                request_id=request_id,
+                access_role=claim.access_role,
+            )
+        return self._snapshot_outcome(snapshot, claim.access_role)
+
+    def _snapshot_outcome(
+        self,
+        snapshot,
+        access_role: AccessRole,
+    ) -> AnalysisOutcome:
+        values = snapshot.values
+        if values["approval_status"] is ApprovalStatus.PENDING:
+            return self._to_outcome(values)
+        next_nodes = snapshot.next if isinstance(snapshot.next, tuple) else ()
+        if next_nodes:
+            return AnalysisRunningResponse(
+                request_id=values["request_id"],
+                access_role=access_role,
+                trace=tuple(values["trace"]),
+            )
+        return self._to_outcome(values)
+
+    @staticmethod
+    def _check_viewer(claim: RequestClaim, viewer: AccessContext) -> None:
+        if (
+            viewer.role is not AccessRole.ADMIN
+            and viewer.user_id != claim.user_id
+        ):
+            raise PermissionError("analysis request belongs to another user")
+
+    def _mark_outcome(self, outcome: AnalysisOutcome) -> None:
+        if isinstance(outcome, ApprovalRequiredResponse):
+            status = RequestRunStatus.PENDING
+        elif isinstance(outcome, ApprovalRejectedResponse):
+            status = RequestRunStatus.REJECTED
+        elif isinstance(outcome, AnalysisRunningResponse):
+            status = RequestRunStatus.RUNNING
+        elif outcome.status is AnalysisResultStatus.DEGRADED:
+            status = RequestRunStatus.DEGRADED
+        else:
+            status = RequestRunStatus.COMPLETED
+        self._mark_request(outcome.request_id, status)
+
+    def _mark_request(
+        self,
+        request_id: str,
+        status: RequestRunStatus,
+        *,
+        error: str | None = None,
+    ) -> None:
+        if self.request_store is not None:
+            self.request_store.mark(request_id, status, error=error)
 
     @staticmethod
     def _to_outcome(result) -> AnalysisOutcome:
@@ -245,6 +412,10 @@ class LangGraphAnalysisRunner:
 
         return AnalysisResponse(
             request_id=result["request_id"],
+            status=(
+                result["result_status"]
+                or AnalysisResultStatus.SUCCEEDED
+            ),
             access_role=result["access_role"],
             answer=answer,
             plan=plan,
@@ -254,6 +425,7 @@ class LangGraphAnalysisRunner:
                 item.source_id for item in result["retrieved_context"]
             ),
             retry_count=result["retry_count"],
+            degradation_reason=result["degradation_reason"],
             trace=tuple(result["trace"]),
         )
 
@@ -262,6 +434,13 @@ def get_analysis_runner() -> Iterator[AnalysisRunner]:
     settings = get_settings()
     audit_sink = DatabaseAuditSink()
     approval_audit_sink = DatabaseApprovalAuditSink()
+    request_store = DatabaseAnalysisRequestStore()
+    retry_policy = RetryPolicy(
+        max_attempts=settings.model_retry_max_attempts,
+        initial_backoff_seconds=(
+            settings.model_retry_initial_backoff_seconds
+        ),
+    )
     with (
         httpx.Client(
             base_url=settings.ollama_base_url,
@@ -274,11 +453,15 @@ def get_analysis_runner() -> Iterator[AnalysisRunner]:
             planner=OllamaAnalysisPlanner(
                 model_client,
                 model=settings.ollama_model,
+                timeout_seconds=settings.ollama_timeout_seconds,
+                retry_policy=retry_policy,
             ),
             retrieval_tool=CatalogRetrievalTool(),
             sql_generator=OllamaSQLGenerator(
                 model_client,
                 model=settings.ollama_model,
+                timeout_seconds=settings.ollama_timeout_seconds,
+                retry_policy=retry_policy,
             ),
             validation_tool=SQLGlotValidationTool(audit_sink),
             approval_audit_sink=approval_audit_sink,
@@ -289,8 +472,12 @@ def get_analysis_runner() -> Iterator[AnalysisRunner]:
             summarizer=OllamaResultSummarizer(
                 model_client,
                 model=settings.ollama_model,
+                timeout_seconds=settings.ollama_timeout_seconds,
+                retry_policy=retry_policy,
             ),
         )
         yield LangGraphAnalysisRunner(
-            build_analysis_graph(nodes, checkpointer=checkpointer)
+            build_analysis_graph(nodes, checkpointer=checkpointer),
+            request_store=request_store,
+            workflow_timeout_seconds=settings.workflow_timeout_seconds,
         )

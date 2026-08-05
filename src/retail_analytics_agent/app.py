@@ -5,6 +5,7 @@ from fastapi.responses import StreamingResponse
 
 from retail_analytics_agent.access_control import get_access_context
 from retail_analytics_agent.analysis_service import (
+    AnalysisRequestConflictError,
     AnalysisRunError,
     AnalysisRunner,
     get_analysis_runner,
@@ -19,6 +20,7 @@ from retail_analytics_agent.models import (
     AnalysisRequest,
     AnalysisOutcome,
     AnalysisResponse,
+    AnalysisRunningResponse,
     AnalysisStreamEvent,
     ApprovalRequiredResponse,
     ApprovalResolutionRequest,
@@ -60,7 +62,7 @@ def run_analysis(
     response: Response,
     runner: Annotated[AnalysisRunner, Depends(get_analysis_runner)],
     access_context: Annotated[AccessContext, Depends(get_access_context)],
-) -> AnalysisResponse:
+) -> AnalysisOutcome:
     if request.user_id != access_context.user_id:
         raise HTTPException(
             status_code=403,
@@ -68,9 +70,14 @@ def run_analysis(
         )
     try:
         result = runner.run(request, access_context)
-        if isinstance(result, ApprovalRequiredResponse):
+        if isinstance(
+            result,
+            (ApprovalRequiredResponse, AnalysisRunningResponse),
+        ):
             response.status_code = 202
         return result
+    except AnalysisRequestConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except ModelInvocationError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     except ValueError as exc:

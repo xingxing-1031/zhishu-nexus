@@ -24,12 +24,14 @@ from retail_analytics_agent.models import (
     ApprovalStatus,
     AnalysisPlan,
     AnalysisRequest,
+    AnalysisResultStatus,
     ChartSpec,
     RetrievalEvidence,
     QueryRisk,
 )
 from retail_analytics_agent.model_adapters import (
     AnalysisPlanner,
+    ModelInvocationError,
     ResultSummarizer,
     SQLGenerator,
 )
@@ -63,6 +65,8 @@ class AnalysisState(TypedDict):
     execution_error: str | None
     final_answer: str | None
     chart_spec: ChartSpec | None
+    result_status: AnalysisResultStatus | None
+    degradation_reason: str | None
     retry_count: int
     max_retries: int
     trace: Annotated[list[str], add]
@@ -147,6 +151,8 @@ def create_initial_state(
         execution_error=None,
         final_answer=None,
         chart_spec=None,
+        result_status=None,
+        degradation_reason=None,
         retry_count=0,
         max_retries=max_retries,
         trace=[],
@@ -213,6 +219,8 @@ def create_sql_generation_node(model: SQLGenerator) -> AnalysisNode:
             "approval_status": ApprovalStatus.NOT_REQUIRED,
             "reviewed_by": None,
             "approval_reason": None,
+            "result_status": None,
+            "degradation_reason": None,
             "trace": [GENERATE_SQL_NODE],
         }
 
@@ -386,13 +394,38 @@ def create_summarize_node(model: ResultSummarizer) -> AnalysisNode:
         if state["execution_error"] is not None:
             raise ValueError("successful query execution is required before summarization")
 
-        return {
-            "final_answer": model.summarize(
+        chart_spec = build_chart_spec(plan, state["query_rows"])
+        try:
+            answer = model.summarize(
                 question=state["question"],
                 plan=plan,
                 rows=state["query_rows"],
-            ),
-            "chart_spec": build_chart_spec(plan, state["query_rows"]),
+            )
+        except ModelInvocationError as exc:
+            row_count = len(state["query_rows"])
+            if row_count == 0:
+                answer = (
+                    "查询已成功完成，但总结服务暂时不可用。"
+                    "当前没有符合条件的数据。"
+                )
+            else:
+                answer = (
+                    f"查询已成功完成并返回 {row_count} 行数据，"
+                    "但自然语言总结服务暂时不可用，请查看表格结果。"
+                )
+            return {
+                "final_answer": answer,
+                "chart_spec": chart_spec,
+                "result_status": AnalysisResultStatus.DEGRADED,
+                "degradation_reason": str(exc),
+                "trace": [SUMMARIZE_NODE],
+            }
+
+        return {
+            "final_answer": answer,
+            "chart_spec": chart_spec,
+            "result_status": AnalysisResultStatus.SUCCEEDED,
+            "degradation_reason": None,
             "trace": [SUMMARIZE_NODE],
         }
 

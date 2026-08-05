@@ -116,6 +116,8 @@ docker compose cp db/migrations/003_knowledge_chunks.sql postgres:/tmp/003_knowl
 docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U retail_user -d retail_analytics -f /tmp/003_knowledge_chunks.sql
 docker compose cp db/migrations/004_query_approval_logs.sql postgres:/tmp/004_query_approval_logs.sql
 docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U retail_user -d retail_analytics -f /tmp/004_query_approval_logs.sql
+docker compose cp db/migrations/005_resilience_and_idempotency.sql postgres:/tmp/005_resilience_and_idempotency.sql
+docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U retail_user -d retail_analytics -f /tmp/005_resilience_and_idempotency.sql
 docker compose cp db/seeds/001_demo_data.sql postgres:/tmp/001_demo_data.sql
 docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U retail_user -d retail_analytics -f /tmp/001_demo_data.sql
 docker compose cp db/verification/verify_w2_1.sql postgres:/tmp/verify_w2_1.sql

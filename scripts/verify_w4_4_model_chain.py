@@ -98,6 +98,12 @@ def main() -> None:
         ),
         "rows": result["query_rows"],
         "answer": result["final_answer"],
+        "result_status": (
+            result["result_status"].value
+            if result["result_status"] is not None
+            else None
+        ),
+        "degradation_reason": result["degradation_reason"],
         "chart_spec": (
             result["chart_spec"].model_dump(mode="json")
             if result["chart_spec"] is not None

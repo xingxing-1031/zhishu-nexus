@@ -20,3 +20,6 @@ def test_settings_builds_postgres_connection_kwargs() -> None:
         "host": "database.example",
         "port": 55432,
     }
+    assert settings.model_retry_max_attempts == 3
+    assert settings.model_retry_initial_backoff_seconds == 0.25
+    assert settings.workflow_timeout_seconds == 120

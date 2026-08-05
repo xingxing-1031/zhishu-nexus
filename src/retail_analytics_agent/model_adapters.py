@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+from decimal import Decimal, InvalidOperation
 from dataclasses import dataclass
+import re
 from typing import Protocol, Sequence
 
 import httpx
@@ -18,6 +20,12 @@ from retail_analytics_agent.models import (
     AnalysisSort,
     RetrievalEvidence,
     SortDirection,
+)
+from retail_analytics_agent.resilience import (
+    RetryPolicy,
+    WorkflowDeadlineExceeded,
+    bounded_timeout_seconds,
+    wait_before_retry,
 )
 
 
@@ -73,6 +81,60 @@ class _GeneratedSummary(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     answer: str = Field(min_length=1)
+
+
+_NUMBER_PATTERN = re.compile(r"(?<![\w.])-?\d[\d,]*(?:\.\d+)?")
+
+
+def _normalized_numbers(value: object) -> set[Decimal]:
+    if isinstance(value, bool) or value is None:
+        return set()
+    if isinstance(value, dict):
+        return {
+            number
+            for item in value.values()
+            for number in _normalized_numbers(item)
+        }
+    if isinstance(value, (list, tuple)):
+        return {
+            number
+            for item in value
+            for number in _normalized_numbers(item)
+        }
+    if isinstance(value, (int, float, Decimal)):
+        try:
+            return {Decimal(str(value)).normalize()}
+        except InvalidOperation:
+            return set()
+    if isinstance(value, str):
+        numbers: set[Decimal] = set()
+        for token in _NUMBER_PATTERN.findall(value):
+            try:
+                numbers.add(Decimal(token.replace(",", "")).normalize())
+            except InvalidOperation:
+                continue
+        return numbers
+    return set()
+
+
+def _validate_summary_numbers(
+    answer: str,
+    *,
+    question: str,
+    plan: AnalysisPlan,
+    rows: Sequence[dict[str, object]],
+) -> None:
+    allowed = _normalized_numbers(question)
+    allowed.update(_normalized_numbers(plan.model_dump(mode="json")))
+    allowed.update(_normalized_numbers(rows))
+    allowed.add(Decimal(len(rows)))
+    unsupported = _normalized_numbers(answer) - allowed
+    if unsupported:
+        rendered = ", ".join(str(item) for item in sorted(unsupported))
+        raise ModelInvocationError(
+            "Ollama summary contains numbers absent from verified inputs: "
+            f"{rendered}"
+        )
 
 
 class _ModelFilter(BaseModel):
@@ -225,47 +287,85 @@ def _chat_json(
     system_prompt: str,
     user_payload: dict[str, object],
     response_schema: dict[str, object] | str,
+    timeout_seconds: float,
+    retry_policy: RetryPolicy,
 ) -> str:
-    try:
-        response = client.post(
-            "/api/chat",
-            json={
-                "model": model,
-                "stream": False,
-                "think": False,
-                "format": response_schema,
-                "options": {"temperature": 0},
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    {
-                        "role": "user",
-                        "content": json.dumps(
-                            user_payload,
-                            ensure_ascii=False,
-                            default=str,
-                        ),
-                    },
-                ],
+    payload = {
+        "model": model,
+        "stream": False,
+        "think": False,
+        "format": response_schema,
+        "options": {"temperature": 0},
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {
+                "role": "user",
+                "content": json.dumps(
+                    user_payload,
+                    ensure_ascii=False,
+                    default=str,
+                ),
             },
-        )
-        response.raise_for_status()
-        return _OllamaChatResponse.model_validate(
-            response.json()
-        ).message.content
-    except httpx.HTTPStatusError as exc:
-        detail = exc.response.text.strip()
-        raise ModelInvocationError(
-            "Ollama model invocation failed: "
-            f"HTTP {exc.response.status_code}: {detail}"
-        ) from exc
-    except (httpx.HTTPError, ValidationError, ValueError) as exc:
-        raise ModelInvocationError(f"Ollama model invocation failed: {exc}") from exc
+        ],
+    }
+    last_error: ModelInvocationError | None = None
+
+    for attempt in range(1, retry_policy.max_attempts + 1):
+        try:
+            response = client.post(
+                "/api/chat",
+                json=payload,
+                timeout=bounded_timeout_seconds(timeout_seconds),
+            )
+            response.raise_for_status()
+            return _OllamaChatResponse.model_validate(
+                response.json()
+            ).message.content
+        except httpx.HTTPStatusError as exc:
+            detail = exc.response.text.strip()
+            last_error = ModelInvocationError(
+                "Ollama model invocation failed: "
+                f"HTTP {exc.response.status_code}: {detail}"
+            )
+            retryable = exc.response.status_code in {
+                408,
+                429,
+                500,
+                502,
+                503,
+                504,
+            }
+        except (httpx.TimeoutException, httpx.NetworkError) as exc:
+            last_error = ModelInvocationError(
+                f"Ollama model invocation failed: {exc}"
+            )
+            retryable = True
+        except WorkflowDeadlineExceeded as exc:
+            raise ModelInvocationError(str(exc)) from exc
+        except (httpx.HTTPError, ValidationError, ValueError) as exc:
+            raise ModelInvocationError(
+                f"Ollama model invocation failed: {exc}"
+            ) from exc
+
+        if not retryable or attempt >= retry_policy.max_attempts:
+            assert last_error is not None
+            raise last_error
+        try:
+            wait_before_retry(
+                retry_policy.delay_before_attempt(attempt + 1)
+            )
+        except WorkflowDeadlineExceeded as exc:
+            raise ModelInvocationError(str(exc)) from exc
+
+    raise AssertionError("model retry loop exited unexpectedly")
 
 
 @dataclass(frozen=True, slots=True)
 class OllamaAnalysisPlanner:
     client: httpx.Client
     model: str = "qwen3:4b"
+    timeout_seconds: float = 120
+    retry_policy: RetryPolicy = RetryPolicy()
 
     def plan(self, question: str, *, max_rows: int) -> AnalysisPlan:
         if not question.strip():
@@ -285,6 +385,8 @@ class OllamaAnalysisPlanner:
             ),
             user_payload={"question": question, "max_rows": max_rows},
             response_schema=_planner_response_schema(max_rows),
+            timeout_seconds=self.timeout_seconds,
+            retry_policy=self.retry_policy,
         )
         try:
             plan = _ModelAnalysisPlan.model_validate_json(
@@ -305,6 +407,8 @@ class OllamaAnalysisPlanner:
 class OllamaSQLGenerator:
     client: httpx.Client
     model: str = "qwen3:4b"
+    timeout_seconds: float = 120
+    retry_policy: RetryPolicy = RetryPolicy()
 
     def generate(
         self,
@@ -345,6 +449,8 @@ class OllamaSQLGenerator:
                 "previous_validation_error": validation_error,
             },
             response_schema=_GeneratedSQL.model_json_schema(),
+            timeout_seconds=self.timeout_seconds,
+            retry_policy=self.retry_policy,
         )
         try:
             sql = _GeneratedSQL.model_validate_json(content).sql.strip()
@@ -361,6 +467,8 @@ class OllamaSQLGenerator:
 class OllamaResultSummarizer:
     client: httpx.Client
     model: str = "qwen3:4b"
+    timeout_seconds: float = 120
+    retry_policy: RetryPolicy = RetryPolicy()
 
     def summarize(
         self,
@@ -383,6 +491,8 @@ class OllamaResultSummarizer:
                 "query_rows": list(rows),
             },
             response_schema=_GeneratedSummary.model_json_schema(),
+            timeout_seconds=self.timeout_seconds,
+            retry_policy=self.retry_policy,
         )
         try:
             answer = _GeneratedSummary.model_validate_json(content).answer.strip()
@@ -392,4 +502,10 @@ class OllamaResultSummarizer:
             ) from exc
         if not answer:
             raise ModelInvocationError("Ollama summarizer returned an empty answer")
+        _validate_summary_numbers(
+            answer,
+            question=question,
+            plan=plan,
+            rows=rows,
+        )
         return answer

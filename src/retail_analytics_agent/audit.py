@@ -1,4 +1,6 @@
 from enum import StrEnum
+from hashlib import sha256
+import json
 from typing import Protocol
 
 from pydantic import BaseModel, Field
@@ -29,6 +31,7 @@ class AuditSink(Protocol):
 
 AUDIT_INSERT_SQL = """
 INSERT INTO query_audit_logs (
+    event_key,
     request_id,
     user_id,
     original_sql,
@@ -39,6 +42,7 @@ INSERT INTO query_audit_logs (
     duration_ms
 )
 VALUES (
+    %(event_key)s,
     %(request_id)s,
     %(user_id)s,
     %(original_sql)s,
@@ -47,8 +51,22 @@ VALUES (
     %(reason)s,
     %(row_count)s,
     %(duration_ms)s
-);
+)
+ON CONFLICT (event_key) DO NOTHING;
 """
+
+
+def query_audit_event_key(audit: QueryAuditRecord) -> str:
+    payload = audit.model_dump(mode="json", exclude={"duration_ms"})
+    digest = sha256(
+        json.dumps(
+            payload,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    ).hexdigest()
+    return f"query:{audit.request_id}:{digest}"
 
 
 class DatabaseAuditSink:
@@ -56,7 +74,9 @@ class DatabaseAuditSink:
 
     def record(self, audit: QueryAuditRecord) -> None:
         with connect_to_database() as connection:
+            payload = audit.model_dump(mode="json")
+            payload["event_key"] = query_audit_event_key(audit)
             connection.execute(
                 AUDIT_INSERT_SQL,
-                audit.model_dump(mode="json"),
+                payload,
             )

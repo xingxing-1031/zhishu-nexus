@@ -88,6 +88,7 @@ class ApprovalAuditSink(Protocol):
 
 APPROVAL_AUDIT_INSERT_SQL = """
 INSERT INTO query_approval_logs (
+    event_key,
     request_id,
     requester_id,
     access_role,
@@ -98,6 +99,7 @@ INSERT INTO query_approval_logs (
     decision_reason
 )
 VALUES (
+    %(event_key)s,
     %(request_id)s,
     %(requester_id)s,
     %(access_role)s,
@@ -106,8 +108,18 @@ VALUES (
     %(reasons)s,
     %(reviewer_id)s,
     %(decision_reason)s
-);
+)
+ON CONFLICT (event_key) DO NOTHING;
 """
+
+
+def approval_audit_event_key(audit: ApprovalAuditRecord) -> str:
+    phase = (
+        "pending"
+        if audit.status is ApprovalAuditStatus.PENDING
+        else "resolution"
+    )
+    return f"approval:{audit.request_id}:{phase}"
 
 
 class DatabaseApprovalAuditSink:
@@ -115,6 +127,7 @@ class DatabaseApprovalAuditSink:
         with connect_to_database() as connection:
             payload = audit.model_dump(mode="json")
             payload["reasons"] = list(audit.reasons)
+            payload["event_key"] = approval_audit_event_key(audit)
             connection.execute(APPROVAL_AUDIT_INSERT_SQL, payload)
 
 

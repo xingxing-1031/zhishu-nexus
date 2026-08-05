@@ -23,6 +23,10 @@ from retail_analytics_agent.query_service import (
     execute_prepared_query,
     prepare_audited_sql,
 )
+from retail_analytics_agent.resilience import (
+    WorkflowDeadlineExceeded,
+    remaining_workflow_seconds,
+)
 from retail_analytics_agent.sql_safety import PreparedSQL, SQLSafetyError
 
 
@@ -249,6 +253,17 @@ class SafeSQLExecutionTool:
         prepared_sql: PreparedSQL,
     ) -> SafeQueryResult:
         try:
+            statement_timeout_ms = self.statement_timeout_ms
+            remaining = remaining_workflow_seconds()
+            if remaining is not None:
+                if remaining < 0.1:
+                    raise WorkflowDeadlineExceeded(
+                        "workflow time budget exhausted before SQL execution"
+                    )
+                statement_timeout_ms = min(
+                    statement_timeout_ms,
+                    int(remaining * 1000),
+                )
             return execute_prepared_query(
                 self.connection,
                 self.audit_sink,
@@ -256,7 +271,7 @@ class SafeSQLExecutionTool:
                 user_id=user_id,
                 original_sql=original_sql,
                 prepared_sql=prepared_sql,
-                statement_timeout_ms=self.statement_timeout_ms,
+                statement_timeout_ms=statement_timeout_ms,
             )
         except Exception as exc:
             raise SQLExecutionToolError(

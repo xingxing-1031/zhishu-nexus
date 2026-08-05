@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 
 from retail_analytics_agent.access_control import get_access_context
 from retail_analytics_agent.analysis_service import get_analysis_runner
+from retail_analytics_agent.analysis_service import AnalysisRequestConflictError
 from retail_analytics_agent.app import app
 from retail_analytics_agent.database import get_database_connection
 from retail_analytics_agent.model_adapters import ModelInvocationError
@@ -12,6 +13,7 @@ from retail_analytics_agent.models import (
     AccessContext,
     AccessRole,
     AnalysisResponse,
+    AnalysisRunningResponse,
     AnalysisStreamEvent,
     ApprovalRequiredResponse,
     ApprovalRejectedResponse,
@@ -151,6 +153,55 @@ def test_run_analysis_returns_502_when_model_is_unavailable() -> None:
 
     assert response.status_code == 502
     assert response.json() == {"detail": "Ollama unavailable"}
+
+
+def test_run_analysis_returns_202_for_duplicate_still_running() -> None:
+    runner = Mock()
+    runner.run.return_value = AnalysisRunningResponse(
+        request_id="REQ-RUNNING-001",
+        access_role=AccessRole.ANALYST,
+    )
+    app.dependency_overrides[get_analysis_runner] = lambda: runner
+    app.dependency_overrides[get_access_context] = _access_context
+
+    try:
+        response = client.post(
+            "/analysis/run",
+            json={
+                "request_id": "REQ-RUNNING-001",
+                "user_id": "USER-001",
+                "question": "查询销售额",
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 202
+    assert response.json()["status"] == "running"
+
+
+def test_run_analysis_returns_409_for_reused_request_id() -> None:
+    runner = Mock()
+    runner.run.side_effect = AnalysisRequestConflictError(
+        "request_id is already bound to different analysis input"
+    )
+    app.dependency_overrides[get_analysis_runner] = lambda: runner
+    app.dependency_overrides[get_access_context] = _access_context
+
+    try:
+        response = client.post(
+            "/analysis/run",
+            json={
+                "request_id": "REQ-CONFLICT-001",
+                "user_id": "USER-001",
+                "question": "查询退款金额",
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 409
+    assert "different analysis input" in response.json()["detail"]
 
 
 def test_stream_analysis_returns_sse_status_and_result_events() -> None:
