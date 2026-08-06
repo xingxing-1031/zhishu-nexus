@@ -3,6 +3,7 @@ from pathlib import Path
 
 from retail_analytics_agent.business_evaluation import (
     BusinessEvaluationSuite,
+    EvaluationCategory,
     load_business_evaluation_suite,
 )
 from retail_analytics_agent.evaluation_runs import (
@@ -28,6 +29,12 @@ def main() -> None:
         default=None,
         help="run one development case; omit to run the full development suite",
     )
+    parser.add_argument(
+        "--category",
+        choices=[item.value for item in EvaluationCategory],
+        default=None,
+        help="run one development category; cannot be combined with --case-id",
+    )
     parser.add_argument("--execution-id", default="w6-2-smoke")
     parser.add_argument("--repetitions", type=int, default=1)
     parser.add_argument("--output", type=Path, default=None)
@@ -35,10 +42,20 @@ def main() -> None:
 
     if args.repetitions < 1:
         raise ValueError("repetitions must be positive")
+    if args.case_id is not None and args.category is not None:
+        raise ValueError("--case-id and --category cannot be combined")
 
     full_suite = load_business_evaluation_suite(DEVELOPMENT_SUITE)
-    if args.case_id is None:
+    if args.case_id is None and args.category is None:
         selected = full_suite.cases
+    elif args.category is not None:
+        selected = tuple(
+            case
+            for case in full_suite.cases
+            if case.category.value == args.category
+        )
+        if not selected:
+            raise ValueError(f"development category not found: {args.category}")
     else:
         selected = tuple(
             case for case in full_suite.cases if case.case_id == args.case_id

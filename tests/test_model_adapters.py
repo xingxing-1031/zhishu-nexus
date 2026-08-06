@@ -240,6 +240,49 @@ def test_ollama_planner_applies_default_metric_sort_to_grouped_plan() -> None:
     ]
 
 
+@pytest.mark.parametrize(
+    ("question", "expected_metric", "expected_dimensions"),
+    [
+        ("返回500行订单分析结果", "order_count", []),
+        ("管理员查询最多500行渠道统计", "sales_amount", ["channel"]),
+    ],
+)
+def test_ollama_planner_aligns_generic_access_boundary_plans(
+    question: str,
+    expected_metric: str,
+    expected_dimensions: list[str],
+) -> None:
+    model_output = {
+        "analysis_goal": question,
+        "metrics": [
+            "sales_amount",
+            "order_count",
+            "units_sold",
+            "refund_amount",
+        ],
+        "dimensions": ["channel", "product", "category", "day"],
+        "filters": [],
+        "time_range_days": 0,
+        "sort": [{"field": "sales_amount", "direction": "descending"}],
+        "limit": 500,
+    }
+    planner = OllamaAnalysisPlanner(
+        client=_client(
+            lambda request: httpx.Response(
+                200,
+                json={"message": {"content": json.dumps(model_output)}},
+            )
+        )
+    )
+
+    plan = planner.plan(question, max_rows=1000)
+
+    assert [item.value for item in plan.metrics] == [expected_metric]
+    assert [item.value for item in plan.dimensions] == expected_dimensions
+    assert plan.sort == []
+    assert plan.limit == 500
+
+
 def test_ollama_planner_aligns_explicit_metric_aliases() -> None:
     model_output = {
         "analysis_goal": "最近30天各品类销量",

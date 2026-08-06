@@ -250,6 +250,7 @@ class ObservedWorkflowExecutor:
             actual_sql=observation.generated_sql,
             sql_safe=observation.sql_safe,
             evidence_match=observation.business_sql_valid,
+            scope_rejection_reason=observation.scope_rejection_reason,
             actual_rows=observation.rows,
             actual_reason_code=self.reason_code_resolver(observation, error),
             actual_sensitive_columns=observation.sensitive_columns,

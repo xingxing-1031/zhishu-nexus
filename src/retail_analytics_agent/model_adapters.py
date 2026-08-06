@@ -199,6 +199,16 @@ def _sql_generation_contract(
         "required_predicates": required_predicates,
         "required_group_by": required_group_by,
         "required_order_by": required_order_by,
+        "required_group_by_clause": (
+            "GROUP BY " + ", ".join(required_group_by)
+            if required_group_by
+            else None
+        ),
+        "required_order_by_clause": (
+            "ORDER BY " + ", ".join(required_order_by)
+            if required_order_by
+            else None
+        ),
         "time_range": (
             {
                 "days": plan.time_range.days,
@@ -387,10 +397,38 @@ def _remove_redundant_fixed_filters(plan: AnalysisPlan) -> AnalysisPlan:
 
 def _explicit_metric_hints(question: str) -> tuple[AnalysisMetric, ...]:
     normalized = question.casefold()
-    return tuple(
+    matches = tuple(
         definition.metric
         for definition in DEFAULT_METRIC_CATALOG.definitions
         if any(alias.casefold() in normalized for alias in definition.aliases)
+    )
+    if matches:
+        return matches
+    if "订单" in normalized and "退款" not in normalized:
+        return (AnalysisMetric.ORDER_COUNT,)
+    if "渠道" in normalized:
+        return (AnalysisMetric.SALES_AMOUNT,)
+    return ()
+
+
+_DIMENSION_HINTS = {
+    AnalysisDimension.CHANNEL: ("渠道", "channel"),
+    AnalysisDimension.PRODUCT: ("商品", "product"),
+    AnalysisDimension.CATEGORY: ("品类", "类别", "category"),
+    AnalysisDimension.ORDER_STATUS: ("订单状态", "order status"),
+    AnalysisDimension.REFUND_STATUS: ("退款状态", "refund status"),
+    AnalysisDimension.DAY: ("每天", "每日", "按日", "day"),
+}
+
+
+def _explicit_dimension_hints(
+    question: str,
+) -> tuple[AnalysisDimension, ...]:
+    normalized = question.casefold()
+    return tuple(
+        dimension
+        for dimension, terms in _DIMENSION_HINTS.items()
+        if any(term.casefold() in normalized for term in terms)
     )
 
 
@@ -446,8 +484,25 @@ def _align_explicit_metrics(
     )
 
 
+def _align_explicit_dimensions(
+    plan: AnalysisPlan,
+    *,
+    question: str,
+) -> AnalysisPlan:
+    if plan.limit <= 100:
+        return plan
+    dimensions = _explicit_dimension_hints(question)
+    return AnalysisPlan.model_validate(
+        {
+            **plan.model_dump(mode="json"),
+            "dimensions": [item.value for item in dimensions],
+            "sort": [],
+        }
+    )
+
+
 def _apply_default_grouped_sort(plan: AnalysisPlan) -> AnalysisPlan:
-    if not plan.dimensions or plan.sort:
+    if not plan.dimensions or plan.sort or plan.limit > 100:
         return plan
     return plan.model_copy(
         update={
@@ -800,6 +855,7 @@ class OllamaAnalysisPlanner:
             default_limit=default_limit,
         )
         plan = _align_explicit_metrics(plan, question=question)
+        plan = _align_explicit_dimensions(plan, question=question)
         plan = _apply_default_grouped_sort(plan)
         plan = _remove_placeholder_filters(plan)
         return _remove_redundant_fixed_filters(plan)
@@ -838,6 +894,8 @@ class OllamaSQLGenerator:
                 "每个输出别名、固定筛选、时间参数和分组要求都必须出现在 SQL 中。"
                 "请直接复制 contract.required_predicates、contract.required_group_by "
                 "和 contract.time_range.predicate 的文本；不要自行改写时间条件。"
+                "required_group_by_clause 和 required_order_by_clause 非空时，"
+                "必须把完整子句原样加入 SQL。"
                 "禁止用 NOW() 或 CURRENT_TIMESTAMP 代替 start_time/end_time。不要解释 SQL。"
             ),
             user_payload={

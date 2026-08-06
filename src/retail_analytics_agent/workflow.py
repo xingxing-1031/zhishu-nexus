@@ -18,6 +18,13 @@ from retail_analytics_agent.approval import (
     approval_status_for_risk,
     assess_query_risk,
 )
+from retail_analytics_agent.access_control import (
+    build_sensitive_read_sql,
+    requested_sensitive_columns,
+    requests_all_columns,
+    requests_role_elevation,
+    requests_write_operation,
+)
 from retail_analytics_agent.charting import build_chart_spec
 from retail_analytics_agent.fault_injection import inject_fault
 from retail_analytics_agent.metric_domain import MetricDomainGate
@@ -39,7 +46,7 @@ from retail_analytics_agent.model_adapters import (
     ResultSummarizer,
     SQLGenerator,
 )
-from retail_analytics_agent.sql_safety import PreparedSQL
+from retail_analytics_agent.sql_safety import PreparedSQL, prepare_safe_sql
 from retail_analytics_agent.tracing import (
     TraceStatus,
     record_execution_trace,
@@ -197,6 +204,61 @@ def create_thread_config(thread_id: str) -> RunnableConfig:
 
 def create_domain_scope_node(gate: MetricDomainGate) -> AnalysisNode:
     def scope(state: AnalysisState) -> AnalysisStateUpdate:
+        if requests_role_elevation(
+            state["question"],
+            state["access_role"],
+        ):
+            return {
+                "scope_supported": False,
+                "scope_rejection_reason": "identity_mismatch",
+                "trace": [SCOPE_NODE],
+            }
+
+        if requests_write_operation(state["question"]):
+            return {
+                "scope_supported": False,
+                "scope_rejection_reason": "non_read_only",
+                "trace": [SCOPE_NODE],
+            }
+
+        if requests_all_columns(state["question"]):
+            return {
+                "scope_supported": False,
+                "scope_rejection_reason": "select_star_forbidden",
+                "trace": [SCOPE_NODE],
+            }
+
+        sensitive_columns = requested_sensitive_columns(state["question"])
+        if sensitive_columns:
+            if state["access_role"] is AccessRole.ANALYST:
+                return {
+                    "scope_supported": False,
+                    "scope_rejection_reason": "forbidden_column",
+                    "query_risk": QueryRisk(
+                        requires_approval=False,
+                        sensitive_columns=sensitive_columns,
+                        result_limit=state["max_rows"],
+                    ),
+                    "trace": [SCOPE_NODE],
+                }
+            sql = build_sensitive_read_sql(
+                sensitive_columns,
+                max_rows=state["max_rows"],
+            )
+            return {
+                "scope_supported": True,
+                "scope_rejection_reason": None,
+                "generated_sql": sql,
+                "prepared_sql": prepare_safe_sql(
+                    sql,
+                    max_rows=state["max_rows"],
+                    access_role=state["access_role"],
+                ),
+                "sql_valid": True,
+                "business_sql_valid": True,
+                "trace": [SCOPE_NODE],
+            }
+
         decision = gate.classify(state["question"])
         return {
             "scope_supported": decision.supported,
@@ -598,6 +660,8 @@ def create_workflow_nodes(
 
 
 def route_after_scope(state: AnalysisState) -> str:
+    if state["prepared_sql"] is not None:
+        return ASSESS_RISK_NODE
     if state["scope_supported"] is True:
         return PLAN_NODE
     return FAIL_NODE
@@ -771,6 +835,7 @@ def build_analysis_graph(
             route_after_scope,
             {
                 PLAN_NODE: PLAN_NODE,
+                ASSESS_RISK_NODE: ASSESS_RISK_NODE,
                 FAIL_NODE: FAIL_NODE,
             },
         )

@@ -130,6 +130,7 @@ class EvaluationRunRecord(BaseModel):
     actual_sql: str | None = None
     sql_safe: bool | None = None
     evidence_match: bool | None = None
+    scope_rejection_reason: str | None = None
     actual_rows: tuple[dict[str, JsonScalar], ...] = ()
     actual_reason_code: str | None = None
     actual_sensitive_columns: tuple[str, ...] = ()
@@ -328,7 +329,9 @@ def score_case(
         stages.append(_stage(EvaluationStage.SQL, sql_passed, sql_reason))
     elif case.expected_outcome is ExpectedOutcome.REJECTED:
         rejected_safely = (
-            run.sql_safe is False or run.evidence_match is False
+            run.scope_rejection_reason is not None
+            or run.sql_safe is False
+            or run.evidence_match is False
         ) and not run.database_called
         stages.append(
             _stage(

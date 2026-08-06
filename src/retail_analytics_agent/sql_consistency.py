@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Iterable, Sequence
 
 from pydantic import BaseModel, ConfigDict, Field
+from sqlglot import parse_one
 from sqlglot import exp
 
 from retail_analytics_agent.knowledge import (
@@ -163,7 +164,7 @@ def validate_sql_against_evidence(
             elif dimension_column not in group_columns:
                 reasons.append(f"dimension_not_grouped:{dimension.value}")
 
-    reasons.extend(_check_sort(statement, plan))
+    reasons.extend(_check_sort(statement, plan, definitions))
 
     if reasons:
         raise SQLBusinessConsistencyError("; ".join(dict.fromkeys(reasons)))
@@ -475,6 +476,7 @@ def _group_columns(
 def _check_sort(
     statement: exp.Expression,
     plan: AnalysisPlan,
+    definitions: Sequence[MetricDefinition],
 ) -> list[str]:
     if not plan.sort:
         return []
@@ -490,18 +492,35 @@ def _check_sort(
         if not isinstance(item, exp.Ordered):
             continue
         expression = item.this
-        if not isinstance(expression, exp.Column) or expression.table:
-            continue
-        actual[expression.name.lower()] = bool(item.args.get("desc"))
+        if isinstance(expression, exp.Column) and not expression.table:
+            key = expression.name.lower()
+        else:
+            key = expression.sql(dialect="postgres").casefold()
+        actual[key] = bool(item.args.get("desc"))
 
     reasons: list[str] = []
     for item in plan.sort:
         field = item.field.value
-        if field not in actual:
+        definition = next(
+            (item for item in definitions if item.metric.value == field),
+            None,
+        )
+        accepted_keys = {field}
+        if definition is not None:
+            accepted_keys.add(
+                parse_one(definition.formula, dialect="postgres")
+                .sql(dialect="postgres")
+                .casefold()
+            )
+        actual_key = next(
+            (key for key in accepted_keys if key in actual),
+            None,
+        )
+        if actual_key is None:
             reasons.append(f"missing_required_sort:{field}")
             continue
         expected_descending = item.direction.value == "descending"
-        if actual[field] is not expected_descending:
+        if actual[actual_key] is not expected_descending:
             reasons.append(f"sort_direction_mismatch:{field}")
     return reasons
 
