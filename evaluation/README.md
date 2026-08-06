@@ -119,3 +119,10 @@ errors, retries and trace from the trusted snapshot. These fields are not
 added to the public `AnalysisResponse`. The observation deliberately has no
 `evidence_match` field because runtime SQL-to-evidence consistency validation
 has not been implemented; an executor must not invent a passing value.
+
+`sql_consistency.py` now provides the first pure business-consistency
+validator. After SQLGlot parsing, it checks the plan and Evidence contract for
+approved tables, required JOIN pairs, versioned metric source columns, fixed
+filters, the sales deal-price formula and selected dimensions. It raises a
+stable reason code and never executes SQL. The validator is tested in
+isolation; it is not yet wired into the production workflow node.
