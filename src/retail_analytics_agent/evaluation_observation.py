@@ -39,6 +39,7 @@ class AnalysisEvaluationObservation(BaseModel):
     business_sql_validation_error: str | None = None
     execution_error: str | None = None
     degradation_reason: str | None = None
+    workflow_error: str | None = None
     retry_count: int = Field(ge=0)
     trace: tuple[str, ...] = ()
     database_called: bool = False

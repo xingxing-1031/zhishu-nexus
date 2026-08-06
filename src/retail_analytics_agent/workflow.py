@@ -270,12 +270,17 @@ def create_sql_validation_node(tool: SQLValidationTool) -> AnalysisNode:
                 "trace": [VALIDATE_SQL_NODE],
             }
 
+        plan = state.get("plan")
+        effective_max_rows = min(
+            state["max_rows"],
+            plan.limit if plan is not None else state["max_rows"],
+        )
         try:
             prepared_sql = tool.validate(
                 request_id=state["request_id"],
                 user_id=state["user_id"],
                 sql=sql,
-                max_rows=state["max_rows"],
+                max_rows=effective_max_rows,
                 access_role=state["access_role"],
             )
         except SQLValidationToolError as exc:

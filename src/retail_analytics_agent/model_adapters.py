@@ -12,6 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_valida
 
 from retail_analytics_agent.access_control import denied_columns_for_role
 from retail_analytics_agent.fault_injection import inject_fault
+from retail_analytics_agent.knowledge import DEFAULT_METRIC_CATALOG
 from retail_analytics_agent.models import (
     AccessRole,
     AnalysisDimension,
@@ -169,9 +170,9 @@ class _ModelAnalysisPlan(BaseModel):
     filters: list[_ModelFilter] = Field(default_factory=list, max_length=10)
     time_range_days: int = Field(ge=0, le=365)
     sort: list[AnalysisSort] = Field(default_factory=list, max_length=5)
-    limit: int = Field(ge=1, le=1000)
+    limit: int | None = Field(default=None, ge=1, le=1000)
 
-    def to_analysis_plan(self) -> AnalysisPlan:
+    def to_analysis_plan(self, *, default_limit: int) -> AnalysisPlan:
         return AnalysisPlan(
             analysis_goal=self.analysis_goal,
             metrics=self.metrics,
@@ -194,8 +195,55 @@ class _ModelAnalysisPlan(BaseModel):
                 else None
             ),
             sort=self.sort,
-            limit=self.limit,
+            limit=self.limit if self.limit is not None else default_limit,
         )
+
+
+def _remove_redundant_fixed_filters(plan: AnalysisPlan) -> AnalysisPlan:
+    definitions = [
+        DEFAULT_METRIC_CATALOG.get(metric) for metric in plan.metrics
+    ]
+    shared_fixed_filters = [
+        fixed_filter
+        for fixed_filter in definitions[0].fixed_filters
+        if all(
+            fixed_filter in definition.fixed_filters
+            for definition in definitions[1:]
+        )
+    ]
+    if not shared_fixed_filters:
+        return plan
+    return plan.model_copy(
+        update={
+            "filters": [
+                item
+                for item in plan.filters
+                if item not in shared_fixed_filters
+            ]
+        }
+    )
+
+
+_EXPLICIT_RESULT_LIMIT = re.compile(
+    r"(?:\b(?:top|limit)\s*\d+\b|\d+\s*(?:行|条|个|项|件|商品|订单))",
+    re.IGNORECASE,
+)
+
+
+def _apply_default_limit_when_unrequested(
+    plan: AnalysisPlan,
+    *,
+    question: str,
+    max_rows: int,
+    default_limit: int,
+) -> AnalysisPlan:
+    if (
+        plan.limit == max_rows
+        and max_rows > default_limit
+        and not _EXPLICIT_RESULT_LIMIT.search(question)
+    ):
+        return plan.model_copy(update={"limit": default_limit})
+    return plan
 
 
 def _planner_response_schema(max_rows: int) -> dict[str, object]:
@@ -268,9 +316,18 @@ def _planner_response_schema(max_rows: int) -> dict[str, object]:
                 "maxItems": 5,
             },
             "limit": {
-                "type": "integer",
-                "minimum": 1,
-                "maximum": max_rows,
+                "description": (
+                    "Result count explicitly requested in the user's question; "
+                    "null when the user did not request a count."
+                ),
+                "anyOf": [
+                    {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": max_rows,
+                    },
+                    {"type": "null"},
+                ],
             },
         },
         "required": [
@@ -427,6 +484,7 @@ class OllamaAnalysisPlanner:
         if max_rows < 1:
             raise ValueError("max_rows must be positive")
 
+        default_limit = min(100, max_rows)
         content = _chat_json(
             self.client,
             model=self.model,
@@ -437,7 +495,17 @@ class OllamaAnalysisPlanner:
                 "用户没有明确筛选条件时 filters 必须为空；指标固定业务规则会由检索证据补充。"
                 "时间范围只能写入 time_range_days，不能写成 filter；没有时间范围时填 0。"
             ),
-            user_payload={"question": question, "max_rows": max_rows},
+            user_payload={
+                "question": question,
+                "max_rows": max_rows,
+                "default_limit": default_limit,
+                "planning_rules": [
+                    "Only add a dimension for an explicit grouping, comparison, or breakdown request.",
+                    "A status used only as a condition must not become a dimension.",
+                    "Paid-order filtering for sales_amount, order_count, units_sold, and average_order_value is supplied by fixed metric evidence; do not duplicate order_status=paid in filters.",
+                    "Set limit to null unless the question explicitly requests a result count; the application will then apply default_limit.",
+                ],
+            },
             response_schema=_planner_response_schema(max_rows),
             timeout_seconds=self.timeout_seconds,
             retry_policy=self.retry_policy,
@@ -446,7 +514,7 @@ class OllamaAnalysisPlanner:
         try:
             plan = _ModelAnalysisPlan.model_validate_json(
                 content
-            ).to_analysis_plan()
+            ).to_analysis_plan(default_limit=default_limit)
         except (ValidationError, ValueError) as exc:
             raise ModelInvocationError(
                 f"Ollama planner returned an invalid analysis plan: {exc}"
@@ -455,7 +523,13 @@ class OllamaAnalysisPlanner:
             raise ModelInvocationError(
                 "Ollama planner returned a limit greater than max_rows"
             )
-        return plan
+        plan = _apply_default_limit_when_unrequested(
+            plan,
+            question=question,
+            max_rows=max_rows,
+            default_limit=default_limit,
+        )
+        return _remove_redundant_fixed_filters(plan)
 
 
 @dataclass(frozen=True, slots=True)

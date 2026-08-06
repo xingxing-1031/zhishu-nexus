@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from decimal import Decimal, InvalidOperation
 from enum import StrEnum
 from statistics import fmean
 from typing import Protocol, Self
@@ -21,6 +22,18 @@ class EvaluationVariant(StrEnum):
     BASELINE = "baseline"
     RETRIEVAL = "retrieval"
     RERANKER = "reranker"
+
+
+def _plans_match(
+    actual: AnalysisPlan | None,
+    expected: AnalysisPlan,
+) -> bool:
+    """Compare execution semantics, not the model's paraphrased goal text."""
+    if actual is None:
+        return False
+    return actual.model_dump(exclude={"analysis_goal"}) == expected.model_dump(
+        exclude={"analysis_goal"}
+    )
 
 
 class ExperimentConditions(BaseModel):
@@ -204,7 +217,31 @@ def _rows_match(
     expected: tuple[dict[str, JsonScalar], ...],
     actual: tuple[dict[str, JsonScalar], ...],
 ) -> bool:
-    return expected == actual
+    if len(expected) != len(actual):
+        return False
+    for expected_row, actual_row in zip(expected, actual):
+        if expected_row.keys() != actual_row.keys():
+            return False
+        for field in expected_row:
+            expected_value = expected_row[field]
+            actual_value = actual_row[field]
+            if (
+                isinstance(expected_value, (int, float))
+                and not isinstance(expected_value, bool)
+            ) or (
+                isinstance(actual_value, (int, float))
+                and not isinstance(actual_value, bool)
+            ):
+                try:
+                    if Decimal(str(expected_value)) != Decimal(
+                        str(actual_value)
+                    ):
+                        return False
+                except InvalidOperation:
+                    return False
+            elif expected_value != actual_value:
+                return False
+    return True
 
 
 def score_case(
@@ -237,12 +274,13 @@ def score_case(
             )
         )
     else:
+        plan_matches = _plans_match(run.actual_plan, case.expected_plan)
         stages.append(
             _stage(
                 EvaluationStage.PLAN,
-                run.actual_plan == case.expected_plan,
-                "analysis plan matches the human gold plan"
-                if run.actual_plan == case.expected_plan
+                plan_matches,
+                "analysis plan matches the human gold business fields"
+                if plan_matches
                 else "analysis plan differs from the human gold plan",
             )
         )

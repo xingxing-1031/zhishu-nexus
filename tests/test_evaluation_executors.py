@@ -189,3 +189,38 @@ def test_langgraph_workflow_preserves_original_error_without_checkpoint() -> Non
             _case(),
             request_id="EVAL-GRAPH-002",
         )
+
+
+def test_langgraph_workflow_attaches_error_to_existing_checkpoint() -> None:
+    case = _case()
+    state = {
+        "request_id": "EVAL-GRAPH-003",
+        "plan": case.expected_plan,
+        "retrieved_context": [],
+        "generated_sql": None,
+        "sql_valid": None,
+        "business_sql_valid": None,
+        "query_rows": [],
+        "chart_spec": None,
+        "final_answer": None,
+        "result_status": None,
+        "approval_status": ApprovalStatus.NOT_REQUIRED,
+        "query_risk": None,
+        "sql_validation_error": None,
+        "business_sql_validation_error": None,
+        "execution_error": None,
+        "degradation_reason": None,
+        "retry_count": 0,
+        "trace": ["plan"],
+    }
+    runner = Mock()
+    runner.run.side_effect = ValueError("unsupported dimension")
+    runner.graph.get_state.return_value = Mock(values=state)
+
+    observation = LangGraphEvaluationCaseWorkflow(runner).run_case(
+        case,
+        request_id="EVAL-GRAPH-003",
+    )
+
+    assert observation.workflow_error == "ValueError: unsupported dimension"
+    assert observation_outcome(observation) is ExpectedOutcome.FAILED

@@ -83,7 +83,9 @@ def test_ollama_planner_returns_validated_analysis_plan() -> None:
         payload = json.loads(request.content)
         assert payload["model"] == "qwen3:4b"
         assert payload["think"] is False
-        assert payload["format"]["properties"]["limit"]["maximum"] == 10
+        assert payload["format"]["properties"]["limit"]["anyOf"][0][
+            "maximum"
+        ] == 10
         assert payload["format"]["properties"]["filters"]["items"][
             "properties"
         ]["field"]["enum"] == [
@@ -97,6 +99,13 @@ def test_ollama_planner_returns_validated_analysis_plan() -> None:
         assert user_payload == {
             "question": "最近30天各渠道销售额是多少？",
             "max_rows": 10,
+            "default_limit": 10,
+            "planning_rules": [
+                "Only add a dimension for an explicit grouping, comparison, or breakdown request.",
+                "A status used only as a condition must not become a dimension.",
+                "Paid-order filtering for sales_amount, order_count, units_sold, and average_order_value is supplied by fixed metric evidence; do not duplicate order_status=paid in filters.",
+                "Set limit to null unless the question explicitly requests a result count; the application will then apply default_limit.",
+            ],
         }
         return httpx.Response(
             200,
@@ -109,6 +118,37 @@ def test_ollama_planner_returns_validated_analysis_plan() -> None:
     )
 
     assert plan == _plan()
+
+
+def test_ollama_planner_applies_default_limit_and_fixed_filter_rules() -> None:
+    model_output = {
+        "analysis_goal": "calculate paid sales",
+        "metrics": ["sales_amount"],
+        "dimensions": [],
+        "filters": [
+            {
+                "field": "order_status",
+                "operator": "equals",
+                "values": ["paid"],
+            }
+        ],
+        "time_range_days": 0,
+        "sort": [],
+        "limit": None,
+    }
+    planner = OllamaAnalysisPlanner(
+        client=_client(
+            lambda request: httpx.Response(
+                200,
+                json={"message": {"content": json.dumps(model_output)}},
+            )
+        )
+    )
+
+    plan = planner.plan("calculate paid sales", max_rows=1000)
+
+    assert plan.limit == 100
+    assert plan.filters == []
 
 
 def test_ollama_planner_rejects_invalid_model_output() -> None:

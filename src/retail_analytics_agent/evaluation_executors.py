@@ -67,7 +67,19 @@ class LangGraphEvaluationCaseWorkflow:
             run_error = exc
 
         try:
-            return read_evaluation_observation(self.runner.graph, request_id)
+            observation = read_evaluation_observation(
+                self.runner.graph,
+                request_id,
+            )
+            if run_error is not None:
+                return observation.model_copy(
+                    update={
+                        "workflow_error": (
+                            f"{type(run_error).__name__}: {run_error}"
+                        )
+                    }
+                )
+            return observation
         except ValueError:
             if run_error is not None:
                 raise run_error
@@ -91,6 +103,8 @@ def observation_outcome(
         return ExpectedOutcome.APPROVAL_REQUIRED
     if observation.approval_status is ApprovalStatus.REJECTED:
         return ExpectedOutcome.REJECTED
+    if observation.workflow_error is not None:
+        return ExpectedOutcome.FAILED
     if observation.execution_error is not None:
         return ExpectedOutcome.FAILED
     if (
@@ -119,6 +133,7 @@ def _default_reason_code(
         observation.business_sql_validation_error
         or observation.sql_validation_error
         or observation.execution_error
+        or observation.workflow_error
         or (str(error) if error is not None else None)
     )
     if not message:
@@ -196,5 +211,6 @@ class ObservedWorkflowExecutor:
                 observation.execution_error
                 or observation.business_sql_validation_error
                 or observation.sql_validation_error
+                or observation.workflow_error
             ),
         )
