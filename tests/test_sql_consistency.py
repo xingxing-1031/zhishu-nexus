@@ -155,3 +155,31 @@ def test_consistency_rejects_aggregate_without_dimension_group() -> None:
             plan=_plan(),
             evidence=_evidence(_plan()),
         )
+
+
+def test_consistency_rejects_metric_alias_drift() -> None:
+    sql = _valid_sql().replace("AS sales_amount", "AS refund_amount")
+
+    with pytest.raises(
+        SQLBusinessConsistencyError,
+        match="missing_metric_alias:sales_amount",
+    ):
+        validate_sql_against_evidence(
+            sql,
+            plan=_plan(),
+            evidence=_evidence(_plan()),
+        )
+
+
+def test_consistency_rejects_dimension_alias_drift() -> None:
+    sql = _valid_sql().replace("o.channel,", "o.channel AS sales_channel,")
+
+    with pytest.raises(
+        SQLBusinessConsistencyError,
+        match="missing_dimension_alias:channel",
+    ):
+        validate_sql_against_evidence(
+            sql,
+            plan=_plan(),
+            evidence=_evidence(_plan()),
+        )

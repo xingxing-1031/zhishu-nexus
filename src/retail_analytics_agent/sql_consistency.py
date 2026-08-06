@@ -75,6 +75,14 @@ def validate_sql_against_evidence(
     actual_tables, aliases = _tables_and_aliases(statement)
     reasons: list[str] = []
 
+    output_names = _output_names(statement)
+    for metric in plan.metrics:
+        if metric.value not in output_names:
+            reasons.append(f"missing_metric_alias:{metric.value}")
+    for dimension in plan.dimensions:
+        if dimension.value not in output_names:
+            reasons.append(f"missing_dimension_alias:{dimension.value}")
+
     if not expected_tables:
         reasons.append("missing_schema_evidence")
     missing_tables = expected_tables - actual_tables
@@ -210,6 +218,14 @@ def _tables_and_aliases(
         tables.add(table_name)
         aliases[table.alias_or_name.lower()] = table_name
     return tables, aliases
+
+
+def _output_names(statement: exp.Expression) -> set[str]:
+    return {
+        name.lower()
+        for selection in statement.selects
+        if (name := selection.alias_or_name)
+    }
 
 
 def _qualified_column(

@@ -13,6 +13,7 @@ from retail_analytics_agent.fault_injection import (
     FaultInjector,
     fault_injection_context,
 )
+from retail_analytics_agent.metric_domain import OllamaMetricDomainGate
 from retail_analytics_agent.model_adapters import (
     OllamaAnalysisPlanner,
     OllamaResultSummarizer,
@@ -21,6 +22,7 @@ from retail_analytics_agent.model_adapters import (
 from retail_analytics_agent.models import (
     AccessContext,
     AccessRole,
+    AnalysisRejectedResponse,
     ApprovalRejectedResponse,
     ApprovalRequiredResponse,
     ApprovalResolutionRequest,
@@ -331,7 +333,10 @@ class LangGraphAnalysisRunner:
                 approval=outcome,
             )
             return
-        if isinstance(outcome, ApprovalRejectedResponse):
+        if isinstance(
+            outcome,
+            (AnalysisRejectedResponse, ApprovalRejectedResponse),
+        ):
             yield AnalysisStreamEvent(
                 event="rejected",
                 node="fail",
@@ -407,7 +412,10 @@ class LangGraphAnalysisRunner:
     def _mark_outcome(self, outcome: AnalysisOutcome) -> None:
         if isinstance(outcome, ApprovalRequiredResponse):
             status = RequestRunStatus.PENDING
-        elif isinstance(outcome, ApprovalRejectedResponse):
+        elif isinstance(
+            outcome,
+            (AnalysisRejectedResponse, ApprovalRejectedResponse),
+        ):
             status = RequestRunStatus.REJECTED
         elif isinstance(outcome, AnalysisRunningResponse):
             status = RequestRunStatus.RUNNING
@@ -429,6 +437,17 @@ class LangGraphAnalysisRunner:
 
     @staticmethod
     def _to_outcome(result) -> AnalysisOutcome:
+        if result["scope_supported"] is False:
+            reason_code = (
+                result["scope_rejection_reason"] or "unsupported_metric"
+            )
+            return AnalysisRejectedResponse(
+                request_id=result["request_id"],
+                access_role=result["access_role"],
+                reason_code=reason_code,
+                reason="当前分析能力不支持该指标或维度",
+                trace=tuple(result["trace"]),
+            )
         if result["approval_status"] is ApprovalStatus.PENDING:
             prepared_sql = result["prepared_sql"]
             risk = result["query_risk"]
@@ -462,6 +481,11 @@ class LangGraphAnalysisRunner:
         if result["sql_valid"] is not True:
             raise AnalysisRunError(
                 result["sql_validation_error"] or "SQL validation failed"
+            )
+        if result["business_sql_valid"] is False:
+            raise AnalysisRunError(
+                result["business_sql_validation_error"]
+                or "SQL business consistency validation failed"
             )
         plan = result["plan"]
         answer = result["final_answer"]
@@ -509,6 +533,10 @@ def get_analysis_runner() -> Iterator[AnalysisRunner]:
         open_postgres_checkpointer(settings) as checkpointer,
     ):
         nodes = create_workflow_nodes(
+            domain_gate=OllamaMetricDomainGate(
+                model_client,
+                model=settings.ollama_model,
+            ),
             planner=OllamaAnalysisPlanner(
                 model_client,
                 model=settings.ollama_model,

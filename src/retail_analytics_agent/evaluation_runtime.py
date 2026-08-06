@@ -23,6 +23,7 @@ from retail_analytics_agent.metric_reranking import (
     OllamaLLMMetricReranker,
     RerankedMetricRetriever,
 )
+from retail_analytics_agent.metric_domain import OllamaMetricDomainGate
 from retail_analytics_agent.metric_retrieval import KeywordMetricRetriever
 from retail_analytics_agent.model_adapters import (
     OllamaAnalysisPlanner,
@@ -146,6 +147,10 @@ def open_real_evaluation_executors(
 
         def workflow_factory(retrieval_adapter):
             nodes = create_workflow_nodes(
+                domain_gate=OllamaMetricDomainGate(
+                    client,
+                    model=active_settings.ollama_model,
+                ),
                 planner=planner,
                 retrieval_tool=retrieval_adapter,
                 sql_generator=sql_generator,

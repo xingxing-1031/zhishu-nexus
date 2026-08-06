@@ -1,6 +1,6 @@
 from decimal import Decimal
 from enum import StrEnum
-from typing import Any, Self
+from typing import Any, Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -129,6 +129,17 @@ class ApprovalRejectedResponse(BaseModel):
     request_id: str = Field(min_length=1)
     status: ApprovalStatus = ApprovalStatus.REJECTED
     reviewed_by: str = Field(min_length=1)
+    reason: str = Field(min_length=1)
+    trace: tuple[str, ...]
+
+
+class AnalysisRejectedResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    request_id: str = Field(min_length=1)
+    status: Literal["rejected"] = "rejected"
+    access_role: AccessRole
+    reason_code: str = Field(min_length=1)
     reason: str = Field(min_length=1)
     trace: tuple[str, ...]
 
@@ -294,6 +305,7 @@ class AnalysisRunningResponse(BaseModel):
 AnalysisOutcome = (
     AnalysisResponse
     | AnalysisRunningResponse
+    | AnalysisRejectedResponse
     | ApprovalRequiredResponse
     | ApprovalRejectedResponse
 )
@@ -315,7 +327,7 @@ class AnalysisStreamEvent(BaseModel):
     message: str = Field(min_length=1)
     response: AnalysisResponse | None = None
     approval: ApprovalRequiredResponse | None = None
-    rejection: ApprovalRejectedResponse | None = None
+    rejection: AnalysisRejectedResponse | ApprovalRejectedResponse | None = None
 
 
 class ChannelSalesSummary(BaseModel):

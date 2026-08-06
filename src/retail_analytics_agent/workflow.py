@@ -19,6 +19,7 @@ from retail_analytics_agent.approval import (
 )
 from retail_analytics_agent.charting import build_chart_spec
 from retail_analytics_agent.fault_injection import inject_fault
+from retail_analytics_agent.metric_domain import MetricDomainGate
 from retail_analytics_agent.models import (
     AccessContext,
     AccessRole,
@@ -60,6 +61,8 @@ class AnalysisState(TypedDict):
     access_role: AccessRole
     question: str
     max_rows: int
+    scope_supported: bool | None
+    scope_rejection_reason: str | None
     plan: AnalysisPlan | None
     retrieved_context: list[RetrievalEvidence]
     generated_sql: str | None
@@ -117,8 +120,10 @@ class WorkflowNodes:
     summarize: AnalysisNode
     fail: AnalysisNode
     validate_business_sql: AnalysisNode | None = None
+    scope: AnalysisNode | None = None
 
 
+SCOPE_NODE = "scope"
 PLAN_NODE = "plan"
 RETRIEVE_NODE = "retrieve"
 GENERATE_SQL_NODE = "generate_sql"
@@ -150,6 +155,8 @@ def create_initial_state(
         access_role=active_access.role,
         question=request.question,
         max_rows=request.max_rows,
+        scope_supported=None,
+        scope_rejection_reason=None,
         plan=None,
         retrieved_context=[],
         generated_sql=None,
@@ -179,6 +186,22 @@ def create_thread_config(thread_id: str) -> RunnableConfig:
         raise ValueError("thread_id must not be empty")
 
     return {"configurable": {"thread_id": thread_id}}
+
+
+def create_domain_scope_node(gate: MetricDomainGate) -> AnalysisNode:
+    def scope(state: AnalysisState) -> AnalysisStateUpdate:
+        decision = gate.classify(state["question"])
+        return {
+            "scope_supported": decision.supported,
+            "scope_rejection_reason": (
+                decision.reason_code.value
+                if decision.reason_code is not None
+                else None
+            ),
+            "trace": [SCOPE_NODE],
+        }
+
+    return scope
 
 
 def create_plan_node(model: AnalysisPlanner) -> AnalysisNode:
@@ -509,6 +532,7 @@ def create_fail_node() -> AnalysisNode:
         reason = (
             state["execution_error"]
             or state["approval_reason"]
+            or state["scope_rejection_reason"]
             or state["business_sql_validation_error"]
             or state["sql_validation_error"]
             or "unknown workflow error"
@@ -531,6 +555,7 @@ def create_workflow_nodes(
     execution_tool: SQLExecutionTool,
     summarizer: ResultSummarizer,
     business_validation_tool: SQLBusinessConsistencyTool | None = None,
+    domain_gate: MetricDomainGate | None = None,
 ) -> WorkflowNodes:
     return WorkflowNodes(
         plan=create_plan_node(planner),
@@ -547,7 +572,18 @@ def create_workflow_nodes(
             if business_validation_tool is not None
             else None
         ),
+        scope=(
+            create_domain_scope_node(domain_gate)
+            if domain_gate is not None
+            else None
+        ),
     )
+
+
+def route_after_scope(state: AnalysisState) -> str:
+    if state["scope_supported"] is True:
+        return PLAN_NODE
+    return FAIL_NODE
 
 
 def route_after_sql_validation(state: AnalysisState) -> str:
@@ -600,6 +636,8 @@ def _node_trace_status(
         return TraceStatus.DEGRADED
     if update.get("execution_error") is not None:
         return TraceStatus.FAILED
+    if node_name == SCOPE_NODE and update.get("scope_supported") is False:
+        return TraceStatus.REJECTED
     if node_name == VALIDATE_SQL_NODE and update.get("sql_valid") is False:
         return TraceStatus.REJECTED
     if (
@@ -663,6 +701,11 @@ def build_analysis_graph(
 ) -> CompiledAnalysisGraph:
     graph = StateGraph(AnalysisState)
 
+    if nodes.scope is not None:
+        graph.add_node(
+            SCOPE_NODE,
+            trace_workflow_node(SCOPE_NODE, nodes.scope),
+        )
     graph.add_node(PLAN_NODE, trace_workflow_node(PLAN_NODE, nodes.plan))
     graph.add_node(
         RETRIEVE_NODE,
@@ -702,7 +745,18 @@ def build_analysis_graph(
     )
     graph.add_node(FAIL_NODE, trace_workflow_node(FAIL_NODE, nodes.fail))
 
-    graph.add_edge(START, PLAN_NODE)
+    if nodes.scope is None:
+        graph.add_edge(START, PLAN_NODE)
+    else:
+        graph.add_edge(START, SCOPE_NODE)
+        graph.add_conditional_edges(
+            SCOPE_NODE,
+            route_after_scope,
+            {
+                PLAN_NODE: PLAN_NODE,
+                FAIL_NODE: FAIL_NODE,
+            },
+        )
     graph.add_edge(PLAN_NODE, RETRIEVE_NODE)
     graph.add_edge(RETRIEVE_NODE, GENERATE_SQL_NODE)
     graph.add_edge(GENERATE_SQL_NODE, VALIDATE_SQL_NODE)

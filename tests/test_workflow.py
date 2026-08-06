@@ -6,6 +6,10 @@ from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.types import Command
 
 from retail_analytics_agent.approval import ApprovalAuditStatus
+from retail_analytics_agent.metric_domain import (
+    DomainDecision,
+    DomainRejectionReason,
+)
 from retail_analytics_agent.models import (
     AccessContext,
     AccessRole,
@@ -25,6 +29,7 @@ from retail_analytics_agent.workflow import (
     WorkflowNodes,
     build_analysis_graph,
     create_initial_state,
+    create_domain_scope_node,
     create_approval_node,
     create_query_risk_node,
     create_thread_config,
@@ -44,10 +49,12 @@ def _request() -> AnalysisRequest:
 
 def _base_nodes(
     *,
+    plan_node: Callable[[AnalysisState], dict[str, object]] | None = None,
     validate_sql: Callable[[AnalysisState], dict[str, object]] | None = None,
     execute_sql: Callable[[AnalysisState], dict[str, object]] | None = None,
     assess_risk: Callable[[AnalysisState], dict[str, object]] | None = None,
     request_approval: Callable[[AnalysisState], dict[str, object]] | None = None,
+    scope: Callable[[AnalysisState], dict[str, object]] | None = None,
 ) -> WorkflowNodes:
     def plan(state: AnalysisState) -> dict[str, object]:
         return {
@@ -126,6 +133,7 @@ def _base_nodes(
         reason = (
             state["execution_error"]
             or state["approval_reason"]
+            or state["scope_rejection_reason"]
             or state["sql_validation_error"]
         )
         return {
@@ -134,7 +142,7 @@ def _base_nodes(
         }
 
     return WorkflowNodes(
-        plan=plan,
+        plan=plan_node or plan,
         retrieve=retrieve,
         generate_sql=generate_sql,
         validate_sql=validate_sql or default_validate_sql,
@@ -143,6 +151,7 @@ def _base_nodes(
         execute_sql=execute_sql or default_execute_sql,
         summarize=summarize,
         fail=fail,
+        scope=scope,
     )
 
 
@@ -172,6 +181,45 @@ def test_create_initial_state_uses_trusted_access_context() -> None:
 
     assert state["user_id"] == "TRUSTED-ADMIN"
     assert state["access_role"] is AccessRole.ADMIN
+
+
+def test_domain_scope_node_rejects_unsupported_metric_before_planner() -> None:
+    gate = Mock()
+    gate.classify.return_value = DomainDecision(
+        supported=False,
+        reason_code=DomainRejectionReason.UNSUPPORTED_METRIC,
+    )
+
+    update = create_domain_scope_node(gate)(create_initial_state(_request()))
+
+    assert update == {
+        "scope_supported": False,
+        "scope_rejection_reason": "unsupported_metric",
+        "trace": ["scope"],
+    }
+    gate.classify.assert_called_once_with(_request().question)
+
+
+def test_domain_scope_rejection_ends_graph_before_planner() -> None:
+    gate = Mock()
+    gate.classify.return_value = DomainDecision(
+        supported=False,
+        reason_code=DomainRejectionReason.UNSUPPORTED_METRIC,
+    )
+    planner = Mock(side_effect=AssertionError("planner must not run"))
+    graph = build_analysis_graph(
+        _base_nodes(
+            scope=create_domain_scope_node(gate),
+            plan_node=planner,
+        )
+    )
+
+    result = graph.invoke(create_initial_state(_request()))
+
+    assert result["trace"] == ["scope", "fail"]
+    assert result["scope_rejection_reason"] == "unsupported_metric"
+    assert result["plan"] is None
+    planner.assert_not_called()
 
 
 def test_create_initial_state_rejects_negative_max_retries() -> None:

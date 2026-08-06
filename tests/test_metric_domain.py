@@ -5,9 +5,12 @@ import httpx
 import pytest
 
 from retail_analytics_agent.metric_domain import (
+    DomainDecision,
     DomainGateError,
     DomainGatedMetricRetriever,
+    DomainRejectionReason,
     OllamaMetricDomainGate,
+    explicit_domain_rejection,
 )
 from retail_analytics_agent.models import AnalysisMetric
 
@@ -20,12 +23,21 @@ def _client(handler) -> httpx.Client:
 
 
 @pytest.mark.parametrize(
-    ("query", "supported"),
-    [("卖了多少钱", True), ("天气怎么样", False)],
+    ("query", "decision"),
+    [
+        ("卖了多少钱", DomainDecision(supported=True)),
+        (
+            "天气怎么样",
+            DomainDecision(
+                supported=False,
+                reason_code=DomainRejectionReason.UNSUPPORTED_METRIC,
+            ),
+        ),
+    ],
 )
 def test_ollama_domain_gate_returns_structured_decision(
     query: str,
-    supported: bool,
+    decision: DomainDecision,
 ) -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         payload = json.loads(request.content)
@@ -37,14 +49,14 @@ def test_ollama_domain_gate_returns_structured_decision(
             200,
             json={
                 "message": {
-                    "content": json.dumps({"supported": supported})
+                    "content": decision.model_dump_json()
                 }
             },
         )
 
     gate = OllamaMetricDomainGate(client=_client(handler))
 
-    assert gate.is_supported(query) is supported
+    assert gate.classify(query) == decision
 
 
 def test_ollama_domain_gate_rejects_invalid_response() -> None:
@@ -61,9 +73,46 @@ def test_ollama_domain_gate_rejects_invalid_response() -> None:
         gate.is_supported("销售额")
 
 
+@pytest.mark.parametrize(
+    ("query", "reason"),
+    [
+        ("哪些商品库存快没了", "unsupported_metric"),
+        ("各商品毛利润是多少", "unsupported_metric"),
+        ("购买用户主要来自哪些年龄段", "unsupported_dimension"),
+    ],
+)
+def test_explicit_domain_policy_rejects_absent_business_concepts(
+    query: str,
+    reason: str,
+) -> None:
+    decision = explicit_domain_rejection(query)
+
+    assert decision is not None
+    assert decision.supported is False
+    assert decision.reason_code is not None
+    assert decision.reason_code.value == reason
+
+
+def test_explicit_domain_policy_does_not_reject_supported_product_units() -> None:
+    assert explicit_domain_rejection("最近30天每种商品卖出了多少件") is None
+
+
+def test_ollama_domain_gate_rejects_inventory_without_model_call() -> None:
+    client = _client(lambda request: pytest.fail("model must not be called"))
+
+    decision = OllamaMetricDomainGate(client=client).classify(
+        "哪些商品库存快没了"
+    )
+
+    assert decision.reason_code is DomainRejectionReason.UNSUPPORTED_METRIC
+
+
 def test_domain_gate_stops_unsupported_query_before_retrieval() -> None:
     gate = Mock()
-    gate.is_supported.return_value = False
+    gate.classify.return_value = DomainDecision(
+        supported=False,
+        reason_code=DomainRejectionReason.UNSUPPORTED_METRIC,
+    )
     retriever = Mock()
     gated = DomainGatedMetricRetriever(gate=gate, retriever=retriever)
 
@@ -73,7 +122,7 @@ def test_domain_gate_stops_unsupported_query_before_retrieval() -> None:
 
 def test_domain_gate_forwards_supported_query() -> None:
     gate = Mock()
-    gate.is_supported.return_value = True
+    gate.classify.return_value = DomainDecision(supported=True)
     retriever = Mock()
     retriever.search.return_value = (AnalysisMetric.SALES_AMOUNT,)
     gated = DomainGatedMetricRetriever(gate=gate, retriever=retriever)
@@ -86,10 +135,13 @@ def test_domain_gate_forwards_supported_query() -> None:
 
 def test_domain_gate_validates_top_k_before_rejection() -> None:
     gate = Mock()
-    gate.is_supported.return_value = False
+    gate.classify.return_value = DomainDecision(
+        supported=False,
+        reason_code=DomainRejectionReason.UNSUPPORTED_METRIC,
+    )
     gated = DomainGatedMetricRetriever(gate=gate, retriever=Mock())
 
     with pytest.raises(ValueError, match="top_k must be between"):
         gated.search("天气怎么样", top_k=0)
 
-    gate.is_supported.assert_not_called()
+    gate.classify.assert_not_called()

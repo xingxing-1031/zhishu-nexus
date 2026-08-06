@@ -13,6 +13,7 @@ from retail_analytics_agent.models import (
     ApprovalResolutionRequest,
     ApprovalRequiredResponse,
     ApprovalStatus,
+    AnalysisRejectedResponse,
     AnalysisPlan,
     AnalysisRequest,
     AnalysisResultStatus,
@@ -131,6 +132,28 @@ def test_runner_converts_successful_state_to_public_response() -> None:
     assert response.chart_spec.x_field == "channel"
     assert response.trace[-1] == "summarize"
     graph.invoke.assert_called_once()
+
+
+def test_runner_returns_business_scope_rejection_without_planner_result() -> None:
+    graph = Mock()
+    state = create_initial_state(_request())
+    state.update(
+        {
+            "scope_supported": False,
+            "scope_rejection_reason": "unsupported_metric",
+            "trace": ["scope", "fail"],
+        }
+    )
+    graph.invoke.return_value = state
+
+    outcome = LangGraphAnalysisRunner(graph).run(
+        _request(),
+        _access_context(),
+    )
+
+    assert isinstance(outcome, AnalysisRejectedResponse)
+    assert outcome.reason_code == "unsupported_metric"
+    assert outcome.trace == ("scope", "fail")
 
 
 def test_runner_rejects_failed_execution_state() -> None:

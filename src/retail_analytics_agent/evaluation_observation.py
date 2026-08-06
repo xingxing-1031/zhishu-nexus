@@ -24,6 +24,8 @@ class AnalysisEvaluationObservation(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     request_id: str = Field(min_length=1)
+    scope_supported: bool | None = None
+    scope_rejection_reason: str | None = None
     plan: AnalysisPlan | None = None
     evidence_source_ids: tuple[str, ...] = ()
     generated_sql: str | None = None
@@ -55,6 +57,8 @@ def observe_analysis_state(
     trace = tuple(state["trace"])
     return AnalysisEvaluationObservation(
         request_id=state["request_id"],
+        scope_supported=state.get("scope_supported"),
+        scope_rejection_reason=state.get("scope_rejection_reason"),
         plan=state["plan"],
         evidence_source_ids=tuple(
             item.source_id for item in state["retrieved_context"]

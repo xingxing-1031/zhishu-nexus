@@ -145,6 +145,8 @@ AnswerJudge = Callable[
 def observation_outcome(
     observation: AnalysisEvaluationObservation,
 ) -> ExpectedOutcome:
+    if observation.scope_supported is False:
+        return ExpectedOutcome.REJECTED
     if observation.approval_status is ApprovalStatus.PENDING:
         return ExpectedOutcome.APPROVAL_REQUIRED
     if observation.approval_status is ApprovalStatus.REJECTED:
@@ -176,7 +178,8 @@ def _default_reason_code(
             else "high_result_limit"
         )
     message = (
-        observation.business_sql_validation_error
+        observation.scope_rejection_reason
+        or observation.business_sql_validation_error
         or observation.sql_validation_error
         or observation.execution_error
         or observation.workflow_error
