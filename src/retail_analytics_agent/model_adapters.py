@@ -12,7 +12,10 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_valida
 
 from retail_analytics_agent.access_control import denied_columns_for_role
 from retail_analytics_agent.fault_injection import inject_fault
-from retail_analytics_agent.knowledge import DEFAULT_METRIC_CATALOG
+from retail_analytics_agent.knowledge import (
+    DEFAULT_METRIC_CATALOG,
+    DEFAULT_SCHEMA_CATALOG,
+)
 from retail_analytics_agent.models import (
     AccessRole,
     AnalysisDimension,
@@ -64,6 +67,95 @@ class ResultSummarizer(Protocol):
         plan: AnalysisPlan,
         rows: Sequence[dict[str, object]],
     ) -> str: ...
+
+
+_DIMENSION_SQL_COLUMNS = {
+    AnalysisDimension.CHANNEL: "orders.channel",
+    AnalysisDimension.PRODUCT: "products.name",
+    AnalysisDimension.CATEGORY: "products.category",
+    AnalysisDimension.ORDER_STATUS: "orders.status",
+    AnalysisDimension.REFUND_STATUS: "refunds.status",
+}
+
+
+def _sql_generation_contract(
+    plan: AnalysisPlan,
+    evidence: Sequence[RetrievalEvidence],
+) -> dict[str, object]:
+    """Build deterministic SQL obligations from the validated plan and evidence."""
+
+    evidence_ids = {item.source_id for item in evidence}
+    metric_definitions = [
+        DEFAULT_METRIC_CATALOG.get(metric) for metric in plan.metrics
+    ]
+    required_tables = sorted(
+        item.removeprefix("schema.")
+        for item in evidence_ids
+        if item.startswith("schema.") and not item.startswith("schema.join.")
+    )
+    required_joins = [
+        {
+            "source_id": join.source_id,
+            "on": (
+                f"{join.left_table}.{join.left_column} = "
+                f"{join.right_table}.{join.right_column}"
+            ),
+        }
+        for join in DEFAULT_SCHEMA_CATALOG.joins
+        if join.source_id in evidence_ids
+    ]
+    return {
+        "required_tables": required_tables,
+        "required_joins": required_joins,
+        "metric_outputs": [
+            {
+                "metric": definition.metric.value,
+                "formula": definition.formula,
+                "output_alias": definition.metric.value,
+            }
+            for definition in metric_definitions
+        ],
+        "dimension_outputs": [
+            {
+                "plan_field": dimension.value,
+                "sql_expression": (
+                    (
+                        "refunds.created_at"
+                        if all(
+                            "refunds" in definition.source_tables
+                            for definition in metric_definitions
+                        )
+                        else "orders.created_at"
+                    )
+                    if dimension is AnalysisDimension.DAY
+                    else _DIMENSION_SQL_COLUMNS[dimension]
+                ),
+                "output_alias": dimension.value,
+                "must_be_grouped": True,
+            }
+            for dimension in plan.dimensions
+        ],
+        "required_filters": [
+            {
+                "field": item.field.value,
+                "operator": item.operator.value,
+                "value": item.value,
+            }
+            for item in [
+                *(
+                    fixed_filter
+                    for definition in metric_definitions
+                    for fixed_filter in definition.fixed_filters
+                ),
+                *plan.filters,
+            ]
+        ],
+        "hard_rule": (
+            "Every required table and approved join must appear in SQL; "
+            "every metric and dimension must be selected with its exact "
+            "output alias; every dimension must be in GROUP BY."
+        ),
+    }
 
 
 class _OllamaMessage(BaseModel):
@@ -560,7 +652,9 @@ class OllamaSQLGenerator:
                 "固定筛选、表、字段和批准的 JOIN。禁止 SELECT *，禁止写操作，"
                 "禁止使用证据中没有出现的表、字段和关系。若提供了上一次安全校验错误，"
                 "必须修正该错误。SELECT 输出中的指标和维度必须使用分析计划枚举值作为别名，"
-                "例如 channel 和 sales_amount，供后续图表规格安全引用。不要解释 SQL。"
+                "例如 channel 和 sales_amount，供后续图表规格安全引用。"
+                "sql_generation_contract 是强制执行清单，其中每张表、每条 JOIN、"
+                "每个输出别名、固定筛选和分组要求都必须出现在 SQL 中。不要解释 SQL。"
             ),
             user_payload={
                 "question": question,
@@ -568,6 +662,10 @@ class OllamaSQLGenerator:
                 "retrieval_evidence": [
                     item.model_dump(mode="json") for item in evidence
                 ],
+                "sql_generation_contract": _sql_generation_contract(
+                    plan,
+                    evidence,
+                ),
                 "access_role": access_role.value,
                 "forbidden_columns": [
                     f"{table}.{column}"

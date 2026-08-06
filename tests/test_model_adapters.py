@@ -176,6 +176,38 @@ def test_ollama_sql_generator_receives_plan_evidence_and_retry_feedback() -> Non
             "metric.sales_amount.v1",
             "schema.join.orders.order_items",
         ]
+        contract = user_payload["sql_generation_contract"]
+        assert contract["required_tables"] == []
+        assert contract["required_joins"] == [
+            {
+                "source_id": "schema.join.orders.order_items",
+                "on": "orders.order_id = order_items.order_id",
+            }
+        ]
+        assert contract["metric_outputs"] == [
+            {
+                "metric": "sales_amount",
+                "formula": (
+                    "SUM(order_items.quantity * order_items.unit_price)"
+                ),
+                "output_alias": "sales_amount",
+            }
+        ]
+        assert contract["dimension_outputs"] == [
+            {
+                "plan_field": "channel",
+                "sql_expression": "orders.channel",
+                "output_alias": "channel",
+                "must_be_grouped": True,
+            }
+        ]
+        assert contract["required_filters"] == [
+            {
+                "field": "order_status",
+                "operator": "equals",
+                "value": "paid",
+            }
+        ]
         assert user_payload["previous_validation_error"] == (
             "wildcard columns are not allowed"
         )
@@ -210,6 +242,97 @@ def test_ollama_sql_generator_receives_plan_evidence_and_retry_feedback() -> Non
 
     assert "SUM(oi.quantity * oi.unit_price)" in sql
     assert "o.status = 'paid'" in sql
+
+
+def test_sql_generation_contract_requires_product_table_and_join() -> None:
+    plan = AnalysisPlan(
+        analysis_goal="每种商品分别卖出了多少件",
+        metrics=["units_sold"],
+        dimensions=["product"],
+    )
+    evidence = [
+        RetrievalEvidence(
+            source_id="metric.units_sold.v1",
+            content="SUM(order_items.quantity)",
+        ),
+        RetrievalEvidence(
+            source_id="schema.orders",
+            content="orders table",
+        ),
+        RetrievalEvidence(
+            source_id="schema.products",
+            content="products table",
+        ),
+        RetrievalEvidence(
+            source_id="schema.order_items",
+            content="order_items table",
+        ),
+        RetrievalEvidence(
+            source_id="schema.join.orders.order_items",
+            content="orders.order_id = order_items.order_id",
+        ),
+        RetrievalEvidence(
+            source_id="schema.join.products.order_items",
+            content="products.product_id = order_items.product_id",
+        ),
+    ]
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        payload = json.loads(request.content)
+        contract = json.loads(payload["messages"][1]["content"])[
+            "sql_generation_contract"
+        ]
+        assert contract["required_tables"] == [
+            "order_items",
+            "orders",
+            "products",
+        ]
+        assert contract["required_joins"] == [
+            {
+                "source_id": "schema.join.orders.order_items",
+                "on": "orders.order_id = order_items.order_id",
+            },
+            {
+                "source_id": "schema.join.products.order_items",
+                "on": "products.product_id = order_items.product_id",
+            },
+        ]
+        assert contract["dimension_outputs"] == [
+            {
+                "plan_field": "product",
+                "sql_expression": "products.name",
+                "output_alias": "product",
+                "must_be_grouped": True,
+            }
+        ]
+        return httpx.Response(
+            200,
+            json={
+                "message": {
+                    "content": json.dumps(
+                        {
+                            "sql": (
+                                "SELECT p.name AS product, "
+                                "SUM(oi.quantity) AS units_sold "
+                                "FROM orders o JOIN order_items oi "
+                                "ON o.order_id = oi.order_id "
+                                "JOIN products p ON p.product_id = oi.product_id "
+                                "WHERE o.status = 'paid' GROUP BY p.name"
+                            )
+                        }
+                    )
+                }
+            },
+        )
+
+    sql = OllamaSQLGenerator(client=_client(handler)).generate(
+        question="每种商品分别卖出了多少件",
+        plan=plan,
+        evidence=evidence,
+        access_role=AccessRole.ANALYST,
+    )
+
+    assert "JOIN products p" in sql
 
 
 def test_ollama_sql_generator_requires_retrieval_evidence() -> None:
