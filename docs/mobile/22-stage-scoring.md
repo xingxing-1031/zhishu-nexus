@@ -89,8 +89,8 @@ W6-2 先建立单次运行记录和阶段级评分。一次运行不仅保存最
 
 普通用户响应只需要结论、rows 和图表，不应暴露生成 SQL、数据库错误和全部内部状态。评测 executor 却需要这些原始字段定位错误，因此 `AnalysisEvaluationObservation` 从可信 LangGraph 快照中复制 plan、Evidence source_id、SQL、安全状态、rows、chart、answer、错误、重试和 Trace，再交给 executor 转换为运行记录。它不会修改工作流，也不会把内部字段加入公开 FastAPI 响应。
 
-当前观测对象故意没有 `evidence_match`。项目只有评分字段，还没有实现运行时 SQL 与 Evidence 业务一致性校验，不能因为 SQL 可执行或结果成功就伪造为一致。后续必须由专用一致性校验器基于 SQLGlot AST、AnalysisPlan、Evidence 和指标字典给出这个结论。
+观测对象不直接伪造 `evidence_match`，而是保存真实的 `business_sql_valid` 和拒绝原因。评测 executor 后续只能根据这个工作流节点的真实结果转换评分字段，不能因为 SQL 可执行或最终成功就猜测为一致。
 
 ## SQL 与 Evidence 一致性校验
 
-第一版 `sql_consistency.py` 是独立纯工具。它先调用 SQLGlot 确认语句可解析且只读，再检查业务结构：Evidence 允许的表是否都被使用，批准的 JOIN 是否存在，指标定义的源字段和固定 `paid` 筛选是否存在，销售额是否使用 `order_items.quantity * order_items.unit_price`，以及 AnalysisPlan 的维度是否真的分组。缺失或扩大条件会返回稳定的 reason code 并拒绝执行。当前只完成工具和定点测试，还没有接入工作流节点。
+第一版 `sql_consistency.py` 是独立纯工具。它先调用 SQLGlot 确认语句可解析且只读，再检查业务结构：Evidence 允许的表是否都被使用，批准的 JOIN 是否存在，指标定义的源字段和固定 `paid` 筛选是否存在，销售额是否使用 `order_items.quantity * order_items.unit_price`，以及 AnalysisPlan 的维度是否真的分组。缺失或扩大条件会返回稳定的 reason code。工具已经通过独立 `validate_business_sql` 节点接入工作流；失败会反馈给 SQL 生成节点有限重试，并且不会进入审批或 PostgreSQL。

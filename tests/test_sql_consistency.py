@@ -1,11 +1,23 @@
 import pytest
+from pathlib import Path
 
+from retail_analytics_agent.business_evaluation import (
+    ExpectedOutcome,
+    load_business_evaluation_suite,
+)
 from retail_analytics_agent.models import AnalysisPlan
 from retail_analytics_agent.sql_consistency import (
     SQLBusinessConsistencyError,
     validate_sql_against_evidence,
 )
 from retail_analytics_agent.workflow_tools import CatalogRetrievalTool
+
+
+DEVELOPMENT_SUITE_PATH = (
+    Path(__file__).resolve().parents[1]
+    / "evaluation"
+    / "business_development.json"
+)
 
 
 def _plan(*, dimensions: list[str] | None = None) -> AnalysisPlan:
@@ -41,6 +53,25 @@ def test_consistency_accepts_aliases_and_approved_business_shape() -> None:
 
     assert result.passed is True
     assert result.reason is None
+
+
+def test_all_trusted_development_gold_sql_passes_consistency() -> None:
+    suite = load_business_evaluation_suite(DEVELOPMENT_SUITE_PATH)
+    trusted = {
+        ExpectedOutcome.SUCCEEDED,
+        ExpectedOutcome.DEGRADED,
+    }
+
+    for case in suite.cases:
+        if case.expected_outcome not in trusted:
+            continue
+        assert case.expected_plan is not None
+        assert case.gold_sql is not None
+        validate_sql_against_evidence(
+            case.gold_sql,
+            plan=case.expected_plan,
+            evidence=_evidence(case.expected_plan),
+        )
 
 
 def test_consistency_rejects_missing_paid_filter() -> None:

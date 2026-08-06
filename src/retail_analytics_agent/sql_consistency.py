@@ -101,11 +101,7 @@ def validate_sql_against_evidence(
         if expected_pair not in actual_join_pairs:
             reasons.append(f"missing_required_join:{join.source_id}")
 
-    referenced_columns = _referenced_columns(statement, aliases)
     for definition in definitions:
-        for source_column in definition.source_columns:
-            if source_column not in referenced_columns:
-                reasons.append(f"missing_metric_column:{source_column}")
         if definition.metric is AnalysisMetric.SALES_AMOUNT:
             expected_product = frozenset(
                 (
@@ -115,6 +111,8 @@ def validate_sql_against_evidence(
             )
             if expected_product not in _multiplication_pairs(statement, aliases):
                 reasons.append("sales_formula_must_use_deal_price_times_quantity")
+        elif not _metric_formula_matches(statement, aliases, definition.metric):
+            reasons.append(f"metric_formula_mismatch:{definition.source_id}")
 
         for fixed_filter in definition.fixed_filters:
             reasons.extend(
@@ -143,7 +141,7 @@ def validate_sql_against_evidence(
     if plan.dimensions:
         group_columns = _group_columns(statement, aliases)
         for dimension in plan.dimensions:
-            dimension_column = _dimension_column(dimension)
+            dimension_column = _dimension_column(dimension, definitions)
             if dimension_column is None:
                 reasons.append(f"unsupported_dimension:{dimension.value}")
             elif dimension_column not in group_columns:
@@ -226,13 +224,13 @@ def _qualified_column(
     return f"{table}.{name}"
 
 
-def _referenced_columns(
-    statement: exp.Expression,
+def _expression_columns(
+    expression: exp.Expression,
     aliases: dict[str, str],
 ) -> set[str]:
     return {
         qualified
-        for column in statement.find_all(exp.Column)
+        for column in expression.find_all(exp.Column)
         if (qualified := _qualified_column(column, aliases)) is not None
     }
 
@@ -273,6 +271,51 @@ def _multiplication_pairs(
         if all(item is not None for item in qualified):
             pairs.add(frozenset(qualified))
     return pairs
+
+
+def _has_sum(
+    statement: exp.Expression,
+    aliases: dict[str, str],
+    column: str,
+) -> bool:
+    return any(
+        column in _expression_columns(item, aliases)
+        for item in statement.find_all(exp.Sum)
+    )
+
+
+def _has_distinct_count(
+    statement: exp.Expression,
+    aliases: dict[str, str],
+    column: str,
+) -> bool:
+    return any(
+        item.find(exp.Distinct) is not None
+        and column in _expression_columns(item, aliases)
+        for item in statement.find_all(exp.Count)
+    )
+
+
+def _metric_formula_matches(
+    statement: exp.Expression,
+    aliases: dict[str, str],
+    metric: AnalysisMetric,
+) -> bool:
+    if metric is AnalysisMetric.ORDER_COUNT:
+        return _has_distinct_count(statement, aliases, "orders.order_id")
+    if metric is AnalysisMetric.UNITS_SOLD:
+        return _has_sum(statement, aliases, "order_items.quantity")
+    if metric is AnalysisMetric.REFUND_AMOUNT:
+        return _has_sum(statement, aliases, "refunds.refund_amount")
+    if metric is AnalysisMetric.REFUND_COUNT:
+        return _has_distinct_count(statement, aliases, "refunds.refund_id")
+    if metric is AnalysisMetric.AVERAGE_ORDER_VALUE:
+        return (
+            statement.find(exp.Div) is not None
+            and _has_sum(statement, aliases, "orders.amount")
+            and _has_distinct_count(statement, aliases, "orders.order_id")
+        )
+    return False
 
 
 def _literal_value(node: exp.Expression) -> str | int | float | None:
@@ -359,19 +402,35 @@ def _group_columns(
     group = statement.args.get("group")
     if group is None:
         return set()
-    return {
+    columns = {
         qualified
         for column in group.find_all(exp.Column)
         if (qualified := _qualified_column(column, aliases)) is not None
     }
+    projection_aliases = {
+        item.alias.lower(): _expression_columns(item.this, aliases)
+        for item in statement.find_all(exp.Alias)
+        if item.alias
+    }
+    for column in group.find_all(exp.Column):
+        if column.table:
+            continue
+        columns.update(projection_aliases.get(column.name.lower(), set()))
+    return columns
 
 
-def _dimension_column(dimension: AnalysisDimension) -> str | None:
+def _dimension_column(
+    dimension: AnalysisDimension,
+    definitions: Sequence[MetricDefinition],
+) -> str | None:
+    if dimension is AnalysisDimension.DAY:
+        if all("refunds" in item.source_tables for item in definitions):
+            return "refunds.created_at"
+        return "orders.created_at"
     return {
         AnalysisDimension.CHANNEL: "orders.channel",
         AnalysisDimension.PRODUCT: "products.name",
         AnalysisDimension.CATEGORY: "products.category",
         AnalysisDimension.ORDER_STATUS: "orders.status",
         AnalysisDimension.REFUND_STATUS: "refunds.status",
-        AnalysisDimension.DAY: "orders.created_at",
     }.get(dimension)

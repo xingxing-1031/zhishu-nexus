@@ -1,4 +1,5 @@
 from collections import deque
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -28,6 +29,11 @@ from retail_analytics_agent.resilience import (
     remaining_workflow_seconds,
 )
 from retail_analytics_agent.sql_safety import PreparedSQL, SQLSafetyError
+from retail_analytics_agent.sql_consistency import (
+    SQLBusinessConsistencyError,
+    SQLConsistencyResult,
+    validate_sql_against_evidence,
+)
 
 
 class SQLValidationToolError(ValueError):
@@ -36,6 +42,10 @@ class SQLValidationToolError(ValueError):
 
 class SQLExecutionToolError(RuntimeError):
     """Stable workflow-facing error for database execution failures."""
+
+
+class SQLBusinessConsistencyToolError(ValueError):
+    """Stable workflow-facing error for business-invalid SQL."""
 
 
 class CatalogRetrievalToolError(ValueError):
@@ -56,6 +66,16 @@ class SQLValidationTool(Protocol):
         max_rows: int,
         access_role: AccessRole,
     ) -> PreparedSQL: ...
+
+
+class SQLBusinessConsistencyTool(Protocol):
+    def validate(
+        self,
+        *,
+        sql: str,
+        plan: AnalysisPlan,
+        evidence: Sequence[RetrievalEvidence],
+    ) -> SQLConsistencyResult: ...
 
 
 class SQLExecutionTool(Protocol):
@@ -236,6 +256,32 @@ class SQLGlotValidationTool:
             )
         except (SQLSafetyError, ValueError) as exc:
             raise SQLValidationToolError(str(exc)) from exc
+
+
+@dataclass(frozen=True, slots=True)
+class SQLConsistencyValidationTool:
+    """Adapter from the workflow tool contract to the pure SQL validator."""
+
+    metric_catalog: MetricCatalog = DEFAULT_METRIC_CATALOG
+    schema_catalog: SchemaCatalog = DEFAULT_SCHEMA_CATALOG
+
+    def validate(
+        self,
+        *,
+        sql: str,
+        plan: AnalysisPlan,
+        evidence: Sequence[RetrievalEvidence],
+    ) -> SQLConsistencyResult:
+        try:
+            return validate_sql_against_evidence(
+                sql,
+                plan=plan,
+                evidence=evidence,
+                metric_catalog=self.metric_catalog,
+                schema_catalog=self.schema_catalog,
+            )
+        except SQLBusinessConsistencyError as exc:
+            raise SQLBusinessConsistencyToolError(str(exc)) from exc
 
 
 @dataclass(slots=True)

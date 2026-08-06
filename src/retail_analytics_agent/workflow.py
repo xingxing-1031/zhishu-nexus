@@ -44,6 +44,8 @@ from retail_analytics_agent.tracing import (
 )
 from retail_analytics_agent.workflow_tools import (
     RetrievalTool,
+    SQLBusinessConsistencyTool,
+    SQLBusinessConsistencyToolError,
     SQLExecutionTool,
     SQLExecutionToolError,
     SQLValidationTool,
@@ -63,6 +65,8 @@ class AnalysisState(TypedDict):
     prepared_sql: PreparedSQL | None
     sql_valid: bool | None
     sql_validation_error: str | None
+    business_sql_valid: bool | None
+    business_sql_validation_error: str | None
     query_risk: QueryRisk | None
     approval_status: ApprovalStatus
     reviewed_by: str | None
@@ -111,12 +115,14 @@ class WorkflowNodes:
     execute_sql: AnalysisNode
     summarize: AnalysisNode
     fail: AnalysisNode
+    validate_business_sql: AnalysisNode | None = None
 
 
 PLAN_NODE = "plan"
 RETRIEVE_NODE = "retrieve"
 GENERATE_SQL_NODE = "generate_sql"
 VALIDATE_SQL_NODE = "validate_sql"
+VALIDATE_BUSINESS_SQL_NODE = "validate_business_sql"
 ASSESS_RISK_NODE = "assess_risk"
 REQUEST_APPROVAL_NODE = "request_approval"
 EXECUTE_SQL_NODE = "execute_sql"
@@ -149,6 +155,8 @@ def create_initial_state(
         prepared_sql=None,
         sql_valid=None,
         sql_validation_error=None,
+        business_sql_valid=None,
+        business_sql_validation_error=None,
         query_risk=None,
         approval_status=ApprovalStatus.NOT_REQUIRED,
         reviewed_by=None,
@@ -217,10 +225,15 @@ def create_sql_generation_node(model: SQLGenerator) -> AnalysisNode:
                 plan=plan,
                 evidence=evidence,
                 access_role=state["access_role"],
-                validation_error=state["sql_validation_error"],
+                validation_error=(
+                    state["business_sql_validation_error"]
+                    or state["sql_validation_error"]
+                ),
             ),
             "prepared_sql": None,
             "sql_valid": None,
+            "business_sql_valid": None,
+            "business_sql_validation_error": None,
             "query_risk": None,
             "approval_status": ApprovalStatus.NOT_REQUIRED,
             "reviewed_by": None,
@@ -270,6 +283,42 @@ def create_sql_validation_node(tool: SQLValidationTool) -> AnalysisNode:
         }
 
     return validate_sql
+
+
+def create_sql_business_validation_node(
+    tool: SQLBusinessConsistencyTool,
+) -> AnalysisNode:
+    def validate_business_sql(state: AnalysisState) -> AnalysisStateUpdate:
+        sql = state["generated_sql"]
+        plan = state["plan"]
+        evidence = state["retrieved_context"]
+        if sql is None or plan is None or not evidence:
+            return {
+                "business_sql_valid": False,
+                "business_sql_validation_error": (
+                    "generated SQL, plan, and evidence are required"
+                ),
+                "retry_count": state["retry_count"] + 1,
+                "trace": [VALIDATE_BUSINESS_SQL_NODE],
+            }
+
+        try:
+            tool.validate(sql=sql, plan=plan, evidence=evidence)
+        except SQLBusinessConsistencyToolError as exc:
+            return {
+                "business_sql_valid": False,
+                "business_sql_validation_error": str(exc),
+                "retry_count": state["retry_count"] + 1,
+                "trace": [VALIDATE_BUSINESS_SQL_NODE],
+            }
+
+        return {
+            "business_sql_valid": True,
+            "business_sql_validation_error": None,
+            "trace": [VALIDATE_BUSINESS_SQL_NODE],
+        }
+
+    return validate_business_sql
 
 
 def create_query_risk_node(
@@ -443,6 +492,7 @@ def create_fail_node() -> AnalysisNode:
         reason = (
             state["execution_error"]
             or state["approval_reason"]
+            or state["business_sql_validation_error"]
             or state["sql_validation_error"]
             or "unknown workflow error"
         )
@@ -463,6 +513,7 @@ def create_workflow_nodes(
     approval_audit_sink: ApprovalAuditSink,
     execution_tool: SQLExecutionTool,
     summarizer: ResultSummarizer,
+    business_validation_tool: SQLBusinessConsistencyTool | None = None,
 ) -> WorkflowNodes:
     return WorkflowNodes(
         plan=create_plan_node(planner),
@@ -474,11 +525,32 @@ def create_workflow_nodes(
         execute_sql=create_sql_execution_node(execution_tool),
         summarize=create_summarize_node(summarizer),
         fail=create_fail_node(),
+        validate_business_sql=(
+            create_sql_business_validation_node(business_validation_tool)
+            if business_validation_tool is not None
+            else None
+        ),
     )
 
 
 def route_after_sql_validation(state: AnalysisState) -> str:
     if state["sql_valid"] is True:
+        return ASSESS_RISK_NODE
+    if state["retry_count"] <= state["max_retries"]:
+        return GENERATE_SQL_NODE
+    return FAIL_NODE
+
+
+def route_after_sql_safety(state: AnalysisState) -> str:
+    if state["sql_valid"] is True:
+        return VALIDATE_BUSINESS_SQL_NODE
+    if state["retry_count"] <= state["max_retries"]:
+        return GENERATE_SQL_NODE
+    return FAIL_NODE
+
+
+def route_after_sql_business_validation(state: AnalysisState) -> str:
+    if state["business_sql_valid"] is True:
         return ASSESS_RISK_NODE
     if state["retry_count"] <= state["max_retries"]:
         return GENERATE_SQL_NODE
@@ -512,6 +584,11 @@ def _node_trace_status(
     if update.get("execution_error") is not None:
         return TraceStatus.FAILED
     if node_name == VALIDATE_SQL_NODE and update.get("sql_valid") is False:
+        return TraceStatus.REJECTED
+    if (
+        node_name == VALIDATE_BUSINESS_SQL_NODE
+        and update.get("business_sql_valid") is False
+    ):
         return TraceStatus.REJECTED
     approval_status = update.get("approval_status")
     if approval_status is ApprovalStatus.PENDING:
@@ -582,6 +659,14 @@ def build_analysis_graph(
         VALIDATE_SQL_NODE,
         trace_workflow_node(VALIDATE_SQL_NODE, nodes.validate_sql),
     )
+    if nodes.validate_business_sql is not None:
+        graph.add_node(
+            VALIDATE_BUSINESS_SQL_NODE,
+            trace_workflow_node(
+                VALIDATE_BUSINESS_SQL_NODE,
+                nodes.validate_business_sql,
+            ),
+        )
     graph.add_node(
         ASSESS_RISK_NODE,
         trace_workflow_node(ASSESS_RISK_NODE, nodes.assess_risk),
@@ -604,15 +689,35 @@ def build_analysis_graph(
     graph.add_edge(PLAN_NODE, RETRIEVE_NODE)
     graph.add_edge(RETRIEVE_NODE, GENERATE_SQL_NODE)
     graph.add_edge(GENERATE_SQL_NODE, VALIDATE_SQL_NODE)
-    graph.add_conditional_edges(
-        VALIDATE_SQL_NODE,
-        route_after_sql_validation,
-        {
-            ASSESS_RISK_NODE: ASSESS_RISK_NODE,
-            GENERATE_SQL_NODE: GENERATE_SQL_NODE,
-            FAIL_NODE: FAIL_NODE,
-        },
-    )
+    if nodes.validate_business_sql is None:
+        graph.add_conditional_edges(
+            VALIDATE_SQL_NODE,
+            route_after_sql_validation,
+            {
+                ASSESS_RISK_NODE: ASSESS_RISK_NODE,
+                GENERATE_SQL_NODE: GENERATE_SQL_NODE,
+                FAIL_NODE: FAIL_NODE,
+            },
+        )
+    else:
+        graph.add_conditional_edges(
+            VALIDATE_SQL_NODE,
+            route_after_sql_safety,
+            {
+                VALIDATE_BUSINESS_SQL_NODE: VALIDATE_BUSINESS_SQL_NODE,
+                GENERATE_SQL_NODE: GENERATE_SQL_NODE,
+                FAIL_NODE: FAIL_NODE,
+            },
+        )
+        graph.add_conditional_edges(
+            VALIDATE_BUSINESS_SQL_NODE,
+            route_after_sql_business_validation,
+            {
+                ASSESS_RISK_NODE: ASSESS_RISK_NODE,
+                GENERATE_SQL_NODE: GENERATE_SQL_NODE,
+                FAIL_NODE: FAIL_NODE,
+            },
+        )
     graph.add_conditional_edges(
         ASSESS_RISK_NODE,
         route_after_risk_assessment,

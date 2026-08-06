@@ -57,6 +57,7 @@ from retail_analytics_agent.workflow import (
 from retail_analytics_agent.workflow_tools import (
     CatalogRetrievalTool,
     SafeSQLExecutionTool,
+    SQLConsistencyValidationTool,
     SQLGlotValidationTool,
 )
 
@@ -107,6 +108,7 @@ _NODE_STATUS_MESSAGES = {
     "retrieve": "指标口径和数据结构检索完成",
     "generate_sql": "查询语句生成完成",
     "validate_sql": "SQL 安全校验完成",
+    "validate_business_sql": "SQL 业务一致性校验完成",
     "assess_risk": "查询风险评估完成",
     "request_approval": "等待人工审批",
     "execute_sql": "零售数据库查询完成",
@@ -521,6 +523,7 @@ def get_analysis_runner() -> Iterator[AnalysisRunner]:
                 retry_policy=retry_policy,
             ),
             validation_tool=SQLGlotValidationTool(audit_sink),
+            business_validation_tool=SQLConsistencyValidationTool(),
             approval_audit_sink=approval_audit_sink,
             execution_tool=SafeSQLExecutionTool(
                 query_connection,

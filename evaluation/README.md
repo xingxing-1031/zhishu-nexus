@@ -125,4 +125,6 @@ validator. After SQLGlot parsing, it checks the plan and Evidence contract for
 approved tables, required JOIN pairs, versioned metric source columns, fixed
 filters, the sales deal-price formula and selected dimensions. It raises a
 stable reason code and never executes SQL. The validator is tested in
-isolation; it is not yet wired into the production workflow node.
+isolation and is wired into a separate `validate_business_sql` workflow node
+after SQLGlot safety validation. A rejection returns to SQL generation within
+the retry budget and cannot reach risk approval or PostgreSQL execution.

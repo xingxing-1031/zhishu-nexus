@@ -28,6 +28,7 @@ class AnalysisEvaluationObservation(BaseModel):
     evidence_source_ids: tuple[str, ...] = ()
     generated_sql: str | None = None
     sql_safe: bool | None = None
+    business_sql_valid: bool | None = None
     rows: tuple[dict[str, Any], ...] = ()
     chart_type: ChartType | None = None
     final_answer: str | None = None
@@ -35,6 +36,7 @@ class AnalysisEvaluationObservation(BaseModel):
     approval_status: ApprovalStatus
     sensitive_columns: tuple[str, ...] = ()
     sql_validation_error: str | None = None
+    business_sql_validation_error: str | None = None
     execution_error: str | None = None
     degradation_reason: str | None = None
     retry_count: int = Field(ge=0)
@@ -58,6 +60,7 @@ def observe_analysis_state(
         ),
         generated_sql=state["generated_sql"],
         sql_safe=state["sql_valid"],
+        business_sql_valid=state["business_sql_valid"],
         rows=tuple(state["query_rows"]),
         chart_type=chart.chart_type if chart is not None else None,
         final_answer=state["final_answer"],
@@ -67,6 +70,9 @@ def observe_analysis_state(
             risk.sensitive_columns if risk is not None else ()
         ),
         sql_validation_error=state["sql_validation_error"],
+        business_sql_validation_error=(
+            state["business_sql_validation_error"]
+        ),
         execution_error=state["execution_error"],
         degradation_reason=state["degradation_reason"],
         retry_count=state["retry_count"],
