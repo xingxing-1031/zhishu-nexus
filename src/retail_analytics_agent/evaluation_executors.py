@@ -8,14 +8,21 @@ from retail_analytics_agent.business_evaluation import (
     BusinessEvaluationCase,
     ExpectedOutcome,
 )
+from retail_analytics_agent.analysis_service import LangGraphAnalysisRunner
 from retail_analytics_agent.evaluation_observation import (
     AnalysisEvaluationObservation,
+    read_evaluation_observation,
 )
 from retail_analytics_agent.evaluation_runs import (
     EvaluationRunRecord,
     EvaluationVariant,
 )
-from retail_analytics_agent.models import AnalysisResultStatus, ApprovalStatus
+from retail_analytics_agent.models import (
+    AccessContext,
+    AnalysisRequest,
+    AnalysisResultStatus,
+    ApprovalStatus,
+)
 
 
 class EvaluationCaseWorkflow(Protocol):
@@ -27,6 +34,44 @@ class EvaluationCaseWorkflow(Protocol):
         *,
         request_id: str,
     ) -> AnalysisEvaluationObservation: ...
+
+
+@dataclass(frozen=True, slots=True)
+class LangGraphEvaluationCaseWorkflow:
+    """Run a real LangGraph request and read its trusted checkpoint state."""
+
+    runner: LangGraphAnalysisRunner
+    evaluator_user_id: str = "EVALUATION-USER"
+    max_rows: int = 1000
+
+    def run_case(
+        self,
+        case: BusinessEvaluationCase,
+        *,
+        request_id: str,
+    ) -> AnalysisEvaluationObservation:
+        request = AnalysisRequest(
+            request_id=request_id,
+            user_id=self.evaluator_user_id,
+            question=case.question,
+            max_rows=self.max_rows,
+        )
+        access_context = AccessContext(
+            user_id=self.evaluator_user_id,
+            role=case.access_role,
+        )
+        run_error: Exception | None = None
+        try:
+            self.runner.run(request, access_context)
+        except Exception as exc:
+            run_error = exc
+
+        try:
+            return read_evaluation_observation(self.runner.graph, request_id)
+        except ValueError:
+            if run_error is not None:
+                raise run_error
+            raise
 
 
 ReasonCodeResolver = Callable[
