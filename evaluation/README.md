@@ -72,3 +72,42 @@ and create a new independent holdout before reporting another final score.
 The `reports` directory contains the W4-3 retrieval baselines and the one-time
 holdout result. Those reports measure retrieval only; they are separate from
 the W6 end-to-end business benchmark.
+
+## W6-2 run records and scoring
+
+`EvaluationRunRecord` stores one raw Agent execution. `variant` identifies the
+controlled comparison (`baseline`, `retrieval` or `reranker`) and `run_index`
+identifies a repeated run of the same case. Every run is kept; the evaluator
+must not select only the best output.
+
+`score_case` evaluates these stages independently:
+
+```text
+plan -> evidence -> SQL/safety -> outcome -> rows -> chart -> answer
+```
+
+`core_result_score` covers the plan, evidence, SQL/safety, outcome, rows and
+chart stages. `answer_score` is separate because a correct database result can
+still be degraded when the summarizer fails. `summarize_variant` reports all
+runs for one variant, including stage pass rates, latency range and total
+retries. These functions are pure and do not call a model or PostgreSQL.
+
+`ControlledExperiment` is the comparison contract. It only permits the
+development split and requires identical model, dataset version, PostgreSQL
+snapshot, reference time, safety policy, access policy and timeout settings
+across variants. A mismatch is rejected before any comparison is reported.
+
+`run_development_experiment` is the orchestration layer for this contract. It
+checks that the suite is an unfrozen development suite, verifies the snapshot
+and reference conditions, invokes each supplied executor for every case and
+repetition, scores each raw run, and aggregates every run into an
+`ExperimentReport`. It does not implement retrieval, SQL generation, model
+calls or database access itself; those remain behind the variant executors.
+
+The real executors are intentionally still a follow-up task. The current
+`CatalogRetrievalTool` runs after an `AnalysisPlan` and returns deterministic
+catalog evidence, while the Hybrid/Reranker path recalls metrics from the raw
+natural-language query. They have different input and output contracts, so
+they cannot be swapped into the same method and called a fair baseline,
+retrieval and reranker comparison without first defining the exact variable
+that each variant changes.
