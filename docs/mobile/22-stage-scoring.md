@@ -84,3 +84,9 @@ W6-2 先建立单次运行记录和阶段级评分。一次运行不仅保存最
 `run_development_experiment` 只负责实验调度：确认套件是未冻结的 development、确认数据版本、数据库快照、参考时间和时区一致，再让每个 variant 的 executor 对每道题运行指定次数，保存每条原始运行记录，逐条评分，最后汇总成 `ExperimentReport`。它不负责调用模型、检索、生成 SQL 或连接 PostgreSQL；这些具体实现必须由 executor 提供。
 
 这里不能把现有的 Hybrid/Reranker 代码直接塞进 `CatalogRetrievalTool.retrieve(plan)` 后就宣称完成公平对照。目录检索是已经有 `AnalysisPlan` 后的确定性证据查找，而 Hybrid/Reranker 是从原始自然语言召回指标的另一条链路，输入输出契约不同。下一步要先明确 baseline、retrieval、reranker 各自改变的唯一变量，再分别实现 executor。
+
+## 为什么需要内部评测观测？
+
+普通用户响应只需要结论、rows 和图表，不应暴露生成 SQL、数据库错误和全部内部状态。评测 executor 却需要这些原始字段定位错误，因此 `AnalysisEvaluationObservation` 从可信 LangGraph 快照中复制 plan、Evidence source_id、SQL、安全状态、rows、chart、answer、错误、重试和 Trace，再交给 executor 转换为运行记录。它不会修改工作流，也不会把内部字段加入公开 FastAPI 响应。
+
+当前观测对象故意没有 `evidence_match`。项目只有评分字段，还没有实现运行时 SQL 与 Evidence 业务一致性校验，不能因为 SQL 可执行或结果成功就伪造为一致。后续必须由专用一致性校验器基于 SQLGlot AST、AnalysisPlan、Evidence 和指标字典给出这个结论。

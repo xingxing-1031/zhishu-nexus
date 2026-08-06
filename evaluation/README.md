@@ -111,3 +111,11 @@ natural-language query. They have different input and output contracts, so
 they cannot be swapped into the same method and called a fair baseline,
 retrieval and reranker comparison without first defining the exact variable
 that each variant changes.
+
+`AnalysisEvaluationObservation` is the internal observation boundary between
+the LangGraph checkpoint and an evaluation executor. It copies the plan,
+evidence source IDs, generated SQL, SQL safety result, rows, chart, answer,
+errors, retries and trace from the trusted snapshot. These fields are not
+added to the public `AnalysisResponse`. The observation deliberately has no
+`evidence_match` field because runtime SQL-to-evidence consistency validation
+has not been implemented; an executor must not invent a passing value.
