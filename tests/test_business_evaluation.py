@@ -2,7 +2,11 @@ from collections import Counter
 from pathlib import Path
 import re
 
+import pytest
+from pydantic import ValidationError
+
 from retail_analytics_agent.business_evaluation import (
+    BusinessEvaluationSuite,
     EvaluationCategory,
     EvaluationSplit,
     ExpectedOutcome,
@@ -35,6 +39,18 @@ def test_business_evaluation_has_40_development_and_20_holdout_cases() -> None:
     assert len(holdout.cases) == 20
     assert development.frozen is False
     assert holdout.frozen is True
+
+
+def test_development_suite_cannot_be_frozen() -> None:
+    development, _ = _load_suites()
+    payload = development.model_dump()
+    payload["frozen"] = True
+
+    with pytest.raises(
+        ValidationError,
+        match="development suites must not be frozen",
+    ):
+        BusinessEvaluationSuite.model_validate(payload)
 
 
 def test_business_evaluation_has_fixed_snapshot_contract() -> None:

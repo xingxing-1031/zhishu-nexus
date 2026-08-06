@@ -144,6 +144,8 @@ class BusinessEvaluationSuite(BaseModel):
             raise ValueError("evaluation case_id values must be unique")
         if self.split is EvaluationSplit.HOLDOUT and not self.frozen:
             raise ValueError("holdout suites must be frozen")
+        if self.split is EvaluationSplit.DEVELOPMENT and self.frozen:
+            raise ValueError("development suites must not be frozen")
         return self
 
 
