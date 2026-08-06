@@ -265,6 +265,9 @@ class _ModelAnalysisPlan(BaseModel):
     limit: int | None = Field(default=None, ge=1, le=1000)
 
     def to_analysis_plan(self, *, default_limit: int) -> AnalysisPlan:
+        selected_fields = {
+            item.value for item in [*self.metrics, *self.dimensions]
+        }
         return AnalysisPlan(
             analysis_goal=self.analysis_goal,
             metrics=self.metrics,
@@ -286,7 +289,11 @@ class _ModelAnalysisPlan(BaseModel):
                 if self.time_range_days > 0
                 else None
             ),
-            sort=self.sort,
+            sort=[
+                item
+                for item in self.sort
+                if item.field.value in selected_fields
+            ],
             limit=self.limit if self.limit is not None else default_limit,
         )
 
@@ -314,6 +321,99 @@ def _remove_redundant_fixed_filters(plan: AnalysisPlan) -> AnalysisPlan:
             ]
         }
     )
+
+
+def _explicit_metric_hints(question: str) -> tuple[AnalysisMetric, ...]:
+    normalized = question.casefold()
+    return tuple(
+        definition.metric
+        for definition in DEFAULT_METRIC_CATALOG.definitions
+        if any(alias.casefold() in normalized for alias in definition.aliases)
+    )
+
+
+def _planner_contract(question: str) -> dict[str, object]:
+    explicit_metrics = _explicit_metric_hints(question)
+    return {
+        "supported_metrics": [
+            {
+                "metric": definition.metric.value,
+                "display_name": definition.display_name,
+                "aliases": list(definition.aliases),
+                "supported_dimensions": [
+                    dimension.value
+                    for dimension in definition.supported_dimensions
+                ],
+            }
+            for definition in DEFAULT_METRIC_CATALOG.definitions
+        ],
+        "supported_dimensions": [
+            dimension.value for dimension in AnalysisDimension
+        ],
+        "explicit_metric_hints": [
+            metric.value for metric in explicit_metrics
+        ],
+        "hard_rule": (
+            "When explicit_metric_hints is not empty, metrics must contain "
+            "exactly those values and must not add unrequested metrics."
+        ),
+    }
+
+
+def _align_explicit_metrics(
+    plan: AnalysisPlan,
+    *,
+    question: str,
+) -> AnalysisPlan:
+    explicit_metrics = _explicit_metric_hints(question)
+    if not explicit_metrics or tuple(plan.metrics) == explicit_metrics:
+        return plan
+    selected_fields = {
+        item.value for item in [*explicit_metrics, *plan.dimensions]
+    }
+    return AnalysisPlan.model_validate(
+        {
+            **plan.model_dump(mode="json"),
+            "metrics": [item.value for item in explicit_metrics],
+            "sort": [
+                item.model_dump(mode="json")
+                for item in plan.sort
+                if item.field.value in selected_fields
+            ],
+        }
+    )
+
+
+_PLACEHOLDER_FILTER_VALUES = {
+    "*",
+    "all",
+    "any",
+    "全部",
+    "所有",
+    "任意",
+}
+
+
+def _remove_placeholder_filters(plan: AnalysisPlan) -> AnalysisPlan:
+    def is_placeholder(value: object) -> bool:
+        return isinstance(value, str) and value.casefold() in (
+            _PLACEHOLDER_FILTER_VALUES
+        )
+
+    filters = [
+        item
+        for item in plan.filters
+        if not (
+            is_placeholder(item.value)
+            or (
+                isinstance(item.value, list)
+                and any(is_placeholder(value) for value in item.value)
+            )
+        )
+    ]
+    if len(filters) == len(plan.filters):
+        return plan
+    return plan.model_copy(update={"filters": filters})
 
 
 _EXPLICIT_RESULT_LIMIT = re.compile(
@@ -591,6 +691,7 @@ class OllamaAnalysisPlanner:
                 "question": question,
                 "max_rows": max_rows,
                 "default_limit": default_limit,
+                "planner_contract": _planner_contract(question),
                 "planning_rules": [
                     "Only add a dimension for an explicit grouping, comparison, or breakdown request.",
                     "A status used only as a condition must not become a dimension.",
@@ -621,6 +722,8 @@ class OllamaAnalysisPlanner:
             max_rows=max_rows,
             default_limit=default_limit,
         )
+        plan = _align_explicit_metrics(plan, question=question)
+        plan = _remove_placeholder_filters(plan)
         return _remove_redundant_fixed_filters(plan)
 
 

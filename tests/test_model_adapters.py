@@ -100,6 +100,69 @@ def test_ollama_planner_returns_validated_analysis_plan() -> None:
             "question": "最近30天各渠道销售额是多少？",
             "max_rows": 10,
             "default_limit": 10,
+            "planner_contract": {
+                "supported_metrics": [
+                    {
+                        "metric": "sales_amount",
+                        "display_name": "销售额",
+                        "aliases": ["销售额", "销售金额", "成交金额"],
+                        "supported_dimensions": [
+                            "channel",
+                            "product",
+                            "category",
+                            "day",
+                        ],
+                    },
+                    {
+                        "metric": "order_count",
+                        "display_name": "订单数",
+                        "aliases": ["订单数", "订单量"],
+                        "supported_dimensions": ["channel", "day"],
+                    },
+                    {
+                        "metric": "units_sold",
+                        "display_name": "销售件数",
+                        "aliases": ["销售件数", "销量"],
+                        "supported_dimensions": [
+                            "channel",
+                            "product",
+                            "category",
+                            "day",
+                        ],
+                    },
+                    {
+                        "metric": "refund_amount",
+                        "display_name": "退款金额",
+                        "aliases": ["退款金额"],
+                        "supported_dimensions": ["refund_status", "day"],
+                    },
+                    {
+                        "metric": "refund_count",
+                        "display_name": "退款笔数",
+                        "aliases": ["退款笔数", "退款单数"],
+                        "supported_dimensions": ["refund_status", "day"],
+                    },
+                    {
+                        "metric": "average_order_value",
+                        "display_name": "平均订单金额",
+                        "aliases": ["平均订单金额", "客单价"],
+                        "supported_dimensions": ["channel", "day"],
+                    },
+                ],
+                "supported_dimensions": [
+                    "channel",
+                    "product",
+                    "category",
+                    "order_status",
+                    "refund_status",
+                    "day",
+                ],
+                "explicit_metric_hints": ["sales_amount"],
+                "hard_rule": (
+                    "When explicit_metric_hints is not empty, metrics must contain "
+                    "exactly those values and must not add unrequested metrics."
+                ),
+            },
             "planning_rules": [
                 "Only add a dimension for an explicit grouping, comparison, or breakdown request.",
                 "A status used only as a condition must not become a dimension.",
@@ -148,6 +211,65 @@ def test_ollama_planner_applies_default_limit_and_fixed_filter_rules() -> None:
     plan = planner.plan("calculate paid sales", max_rows=1000)
 
     assert plan.limit == 100
+    assert plan.filters == []
+
+
+def test_ollama_planner_aligns_explicit_metric_aliases() -> None:
+    model_output = {
+        "analysis_goal": "最近30天各品类销量",
+        "metrics": ["sales_amount", "order_count", "units_sold"],
+        "dimensions": ["category"],
+        "filters": [],
+        "time_range_days": 30,
+        "sort": [
+            {"field": "category", "direction": "ascending"},
+            {"field": "day", "direction": "ascending"},
+        ],
+        "limit": None,
+    }
+    planner = OllamaAnalysisPlanner(
+        client=_client(
+            lambda request: httpx.Response(
+                200,
+                json={"message": {"content": json.dumps(model_output)}},
+            )
+        )
+    )
+
+    plan = planner.plan("最近30天各品类销量", max_rows=1000)
+
+    assert plan.metrics == ["units_sold"]
+    assert plan.dimensions == ["category"]
+    assert [item.field.value for item in plan.sort] == ["category"]
+
+
+def test_ollama_planner_removes_model_placeholder_filters() -> None:
+    model_output = {
+        "analysis_goal": "各品类销量",
+        "metrics": ["units_sold"],
+        "dimensions": ["category"],
+        "filters": [
+            {
+                "field": "category",
+                "operator": "in",
+                "values": ["all"],
+            }
+        ],
+        "time_range_days": 0,
+        "sort": [],
+        "limit": None,
+    }
+    planner = OllamaAnalysisPlanner(
+        client=_client(
+            lambda request: httpx.Response(
+                200,
+                json={"message": {"content": json.dumps(model_output)}},
+            )
+        )
+    )
+
+    plan = planner.plan("各品类销量", max_rows=1000)
+
     assert plan.filters == []
 
 
