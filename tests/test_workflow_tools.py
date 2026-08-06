@@ -1,3 +1,4 @@
+from datetime import datetime
 from unittest.mock import Mock, call
 
 import pytest
@@ -285,6 +286,10 @@ def test_execution_node_writes_rows_to_state() -> None:
         ),
     )
     state = create_initial_state(_request())
+    state["reference_time"] = datetime.fromisoformat(
+        "2026-08-16T12:00:00+08:00"
+    )
+    state["plan"] = _plan()
     state["generated_sql"] = "SELECT channel FROM orders"
     state["prepared_sql"] = _prepared_sql()
 
@@ -297,6 +302,14 @@ def test_execution_node_writes_rows_to_state() -> None:
         user_id="USER-001",
         original_sql="SELECT channel FROM orders",
         prepared_sql=state["prepared_sql"],
+        query_parameters={
+            "start_time": datetime.fromisoformat(
+                "2026-07-17T12:00:00+08:00"
+            ),
+            "end_time": datetime.fromisoformat(
+                "2026-08-16T12:00:00+08:00"
+            ),
+        },
     )
 
 

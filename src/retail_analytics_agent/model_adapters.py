@@ -77,6 +77,14 @@ _DIMENSION_SQL_COLUMNS = {
     AnalysisDimension.REFUND_STATUS: "refunds.status",
 }
 
+_FILTER_SQL_COLUMNS = {
+    AnalysisFilterField.CHANNEL: "orders.channel",
+    AnalysisFilterField.ORDER_STATUS: "orders.status",
+    AnalysisFilterField.PRODUCT_ID: "products.product_id",
+    AnalysisFilterField.CATEGORY: "products.category",
+    AnalysisFilterField.REFUND_STATUS: "refunds.status",
+}
+
 
 def _sql_generation_contract(
     plan: AnalysisPlan,
@@ -104,6 +112,44 @@ def _sql_generation_contract(
         for join in DEFAULT_SCHEMA_CATALOG.joins
         if join.source_id in evidence_ids
     ]
+    time_column = (
+        "refunds.created_at"
+        if all(
+            "refunds" in definition.source_tables
+            for definition in metric_definitions
+        )
+        else "orders.created_at"
+    )
+    required_predicates = [
+        f"{_FILTER_SQL_COLUMNS[fixed_filter.field]} = '{fixed_filter.value}'"
+        for definition in metric_definitions
+        for fixed_filter in definition.fixed_filters
+    ]
+    required_group_by = [
+        (
+            "refunds.created_at"
+            if dimension is AnalysisDimension.DAY
+            and all(
+                "refunds" in definition.source_tables
+                for definition in metric_definitions
+            )
+            else "orders.created_at"
+            if dimension is AnalysisDimension.DAY
+            else _DIMENSION_SQL_COLUMNS[dimension]
+        )
+        for dimension in plan.dimensions
+    ]
+    required_order_by = [
+        f"{item.field.value} "
+        f"{'DESC' if item.direction is SortDirection.DESCENDING else 'ASC'}"
+        for item in plan.sort
+    ]
+    sorted_fields = {item.field.value for item in plan.sort}
+    required_order_by.extend(
+        f"{dimension.value} ASC"
+        for dimension in plan.dimensions
+        if dimension.value not in sorted_fields
+    )
     return {
         "required_tables": required_tables,
         "required_joins": required_joins,
@@ -150,6 +196,22 @@ def _sql_generation_contract(
                 *plan.filters,
             ]
         ],
+        "required_predicates": required_predicates,
+        "required_group_by": required_group_by,
+        "required_order_by": required_order_by,
+        "time_range": (
+            {
+                "days": plan.time_range.days,
+                "column": time_column,
+                "predicate": (
+                    f"{time_column} >= %(start_time)s AND "
+                    f"{time_column} < %(end_time)s"
+                ),
+                "parameter_source": "trusted workflow reference_time",
+            }
+            if plan.time_range is not None
+            else None
+        ),
         "hard_rule": (
             "Every required table and approved join must appear in SQL; "
             "every metric and dimension must be selected with its exact "
@@ -380,6 +442,21 @@ def _align_explicit_metrics(
                 for item in plan.sort
                 if item.field.value in selected_fields
             ],
+        }
+    )
+
+
+def _apply_default_grouped_sort(plan: AnalysisPlan) -> AnalysisPlan:
+    if not plan.dimensions or plan.sort:
+        return plan
+    return plan.model_copy(
+        update={
+            "sort": [
+                AnalysisSort(
+                    field=plan.metrics[0],
+                    direction=SortDirection.DESCENDING,
+                )
+            ]
         }
     )
 
@@ -723,6 +800,7 @@ class OllamaAnalysisPlanner:
             default_limit=default_limit,
         )
         plan = _align_explicit_metrics(plan, question=question)
+        plan = _apply_default_grouped_sort(plan)
         plan = _remove_placeholder_filters(plan)
         return _remove_redundant_fixed_filters(plan)
 
@@ -757,7 +835,10 @@ class OllamaSQLGenerator:
                 "必须修正该错误。SELECT 输出中的指标和维度必须使用分析计划枚举值作为别名，"
                 "例如 channel 和 sales_amount，供后续图表规格安全引用。"
                 "sql_generation_contract 是强制执行清单，其中每张表、每条 JOIN、"
-                "每个输出别名、固定筛选和分组要求都必须出现在 SQL 中。不要解释 SQL。"
+                "每个输出别名、固定筛选、时间参数和分组要求都必须出现在 SQL 中。"
+                "请直接复制 contract.required_predicates、contract.required_group_by "
+                "和 contract.time_range.predicate 的文本；不要自行改写时间条件。"
+                "禁止用 NOW() 或 CURRENT_TIMESTAMP 代替 start_time/end_time。不要解释 SQL。"
             ),
             user_payload={
                 "question": question,

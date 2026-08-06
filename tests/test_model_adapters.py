@@ -214,6 +214,32 @@ def test_ollama_planner_applies_default_limit_and_fixed_filter_rules() -> None:
     assert plan.filters == []
 
 
+def test_ollama_planner_applies_default_metric_sort_to_grouped_plan() -> None:
+    model_output = {
+        "analysis_goal": "units sold by category",
+        "metrics": ["units_sold"],
+        "dimensions": ["category"],
+        "filters": [],
+        "time_range_days": 30,
+        "sort": [],
+        "limit": None,
+    }
+    planner = OllamaAnalysisPlanner(
+        client=_client(
+            lambda request: httpx.Response(
+                200,
+                json={"message": {"content": json.dumps(model_output)}},
+            )
+        )
+    )
+
+    plan = planner.plan("units sold by category", max_rows=100)
+
+    assert [item.model_dump(mode="json") for item in plan.sort] == [
+        {"field": "units_sold", "direction": "descending"}
+    ]
+
+
 def test_ollama_planner_aligns_explicit_metric_aliases() -> None:
     model_output = {
         "analysis_goal": "最近30天各品类销量",
@@ -330,6 +356,15 @@ def test_ollama_sql_generator_receives_plan_evidence_and_retry_feedback() -> Non
                 "value": "paid",
             }
         ]
+        assert contract["time_range"] == {
+            "days": 30,
+            "column": "orders.created_at",
+            "predicate": (
+                "orders.created_at >= %(start_time)s AND "
+                "orders.created_at < %(end_time)s"
+            ),
+            "parameter_source": "trusted workflow reference_time",
+        }
         assert user_payload["previous_validation_error"] == (
             "wildcard columns are not allowed"
         )

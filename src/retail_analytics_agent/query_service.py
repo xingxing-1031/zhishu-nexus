@@ -1,3 +1,4 @@
+from collections.abc import Mapping
 from dataclasses import dataclass
 from time import perf_counter
 
@@ -75,6 +76,7 @@ def execute_prepared_query(
     user_id: str,
     original_sql: str,
     prepared_sql: PreparedSQL,
+    query_parameters: Mapping[str, object] | None = None,
     statement_timeout_ms: int = 2_000,
 ) -> SafeQueryResult:
     """Execute an already validated query and preserve its original SQL."""
@@ -103,6 +105,7 @@ def execute_prepared_query(
         user_id=user_id,
         original_sql=original_sql,
         prepared=prepared_sql,
+        query_parameters=query_parameters,
         statement_timeout_ms=statement_timeout_ms,
         started_at=started_at,
     )
@@ -118,6 +121,7 @@ def execute_safe_query(
     max_rows: int = 100,
     statement_timeout_ms: int = 2_000,
     access_role: AccessRole = AccessRole.ANALYST,
+    query_parameters: Mapping[str, object] | None = None,
 ) -> SafeQueryResult:
     """Validate, constrain, execute, and audit one generated query."""
     started_at = perf_counter()
@@ -151,6 +155,7 @@ def execute_safe_query(
         user_id=user_id,
         original_sql=sql,
         prepared=prepared,
+        query_parameters=query_parameters,
         statement_timeout_ms=statement_timeout_ms,
         started_at=started_at,
     )
@@ -164,6 +169,7 @@ def _execute_prepared_query(
     user_id: str,
     original_sql: str,
     prepared: PreparedSQL,
+    query_parameters: Mapping[str, object] | None,
     statement_timeout_ms: int,
     started_at: float,
 ) -> SafeQueryResult:
@@ -173,7 +179,11 @@ def _execute_prepared_query(
             SET_STATEMENT_TIMEOUT_SQL,
             {"statement_timeout": f"{statement_timeout_ms}ms"},
         )
-        rows = connection.execute(prepared.sql).fetchall()
+        rows = (
+            connection.execute(prepared.sql, dict(query_parameters)).fetchall()
+            if query_parameters
+            else connection.execute(prepared.sql).fetchall()
+        )
         connection.commit()
     except Exception as exc:
         connection.rollback()

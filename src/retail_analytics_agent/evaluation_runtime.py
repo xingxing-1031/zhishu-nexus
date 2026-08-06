@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
+from datetime import datetime
 
 import httpx
 
@@ -17,6 +18,9 @@ from retail_analytics_agent.evaluation_executors import (
     ObservedWorkflowExecutor,
 )
 from retail_analytics_agent.evaluation_runs import EvaluationVariant
+from retail_analytics_agent.evaluation_snapshot import (
+    temporary_evaluation_snapshot,
+)
 from retail_analytics_agent.evaluation_variants import create_variant_executors
 from retail_analytics_agent.hybrid_metric_retrieval import HybridMetricRetriever
 from retail_analytics_agent.metric_reranking import (
@@ -95,6 +99,7 @@ def open_real_evaluation_executors(
     reranker_model: str | None = None,
     candidate_k: int = 5,
     max_distance: float | None = None,
+    reference_time: datetime | None = None,
 ) -> Iterator[dict[EvaluationVariant, ObservedWorkflowExecutor]]:
     """Keep all shared real resources open for one controlled experiment."""
 
@@ -110,6 +115,7 @@ def open_real_evaluation_executors(
     approval_audit_sink = DatabaseApprovalAuditSink()
 
     with (
+        temporary_evaluation_snapshot(active_settings),
         httpx.Client(
             base_url=active_settings.ollama_base_url,
             timeout=active_settings.ollama_timeout_seconds,
@@ -168,6 +174,7 @@ def open_real_evaluation_executors(
                 workflow_timeout_seconds=(
                     active_settings.workflow_timeout_seconds
                 ),
+                reference_time=reference_time,
             )
             return LangGraphEvaluationCaseWorkflow(runner)
 

@@ -1,5 +1,6 @@
 from collections.abc import Iterator
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Protocol
 
 import httpx
@@ -126,6 +127,7 @@ class LangGraphAnalysisRunner:
     trace_store: ExecutionTraceStore | None = None
     fault_injector: FaultInjector | None = None
     workflow_timeout_seconds: float = 120
+    reference_time: datetime | None = None
 
     def run(
         self,
@@ -146,6 +148,7 @@ class LangGraphAnalysisRunner:
                     create_initial_state(
                         request,
                         access_context=access_context,
+                        reference_time=self.reference_time,
                     ),
                     create_thread_config(request.request_id),
                 )
@@ -283,6 +286,7 @@ class LangGraphAnalysisRunner:
                     create_initial_state(
                         request,
                         access_context=access_context,
+                        reference_time=self.reference_time,
                     ),
                     create_thread_config(request.request_id),
                     stream_mode="values",

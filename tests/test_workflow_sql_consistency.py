@@ -41,7 +41,10 @@ def _valid_sql() -> str:
         "SELECT o.channel, SUM(oi.quantity * oi.unit_price) AS sales_amount "
         "FROM orders AS o JOIN order_items AS oi "
         "ON oi.order_id = o.order_id "
-        "WHERE o.status = 'paid' GROUP BY o.channel"
+        "WHERE o.status = 'paid' "
+        "AND o.created_at >= %(start_time)s "
+        "AND o.created_at < %(end_time)s "
+        "GROUP BY o.channel"
     )
 
 
@@ -72,7 +75,10 @@ def test_business_validation_node_records_independent_success() -> None:
 
 
 def test_business_validation_node_records_reason_and_retry() -> None:
-    invalid_sql = _valid_sql().replace("WHERE o.status = 'paid' ", "")
+    invalid_sql = _valid_sql().replace(
+        "WHERE o.status = 'paid' AND ",
+        "WHERE ",
+    )
 
     update = create_sql_business_validation_node(
         SQLConsistencyValidationTool()
@@ -92,8 +98,8 @@ def test_business_invalid_sql_never_reaches_database() -> None:
     retrieval_tool = CatalogRetrievalTool()
     sql_generator = Mock()
     sql_generator.generate.return_value = _valid_sql().replace(
-        "WHERE o.status = 'paid' ",
-        "",
+        "WHERE o.status = 'paid' AND ",
+        "WHERE ",
     )
     safety_tool = Mock()
     safety_tool.validate.return_value = prepare_safe_sql(

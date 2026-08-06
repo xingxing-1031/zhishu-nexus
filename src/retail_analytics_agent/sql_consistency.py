@@ -146,6 +146,14 @@ def validate_sql_against_evidence(
             )
         )
 
+    if plan.time_range is not None:
+        time_column = (
+            "refunds.created_at"
+            if all("refunds" in item.source_tables for item in definitions)
+            else "orders.created_at"
+        )
+        reasons.extend(_check_time_range(statement, aliases, time_column))
+
     if plan.dimensions:
         group_columns = _group_columns(statement, aliases)
         for dimension in plan.dimensions:
@@ -154,6 +162,8 @@ def validate_sql_against_evidence(
                 reasons.append(f"unsupported_dimension:{dimension.value}")
             elif dimension_column not in group_columns:
                 reasons.append(f"dimension_not_grouped:{dimension.value}")
+
+    reasons.extend(_check_sort(statement, plan))
 
     if reasons:
         raise SQLBusinessConsistencyError("; ".join(dict.fromkeys(reasons)))
@@ -411,6 +421,33 @@ def _check_filter(
     return []
 
 
+def _check_time_range(
+    statement: exp.Expression,
+    aliases: dict[str, str],
+    expected_column: str,
+) -> list[str]:
+    has_start = any(
+        isinstance(predicate.expression, exp.Placeholder)
+        and predicate.expression.this.name == "start_time"
+        and isinstance(predicate.this, exp.Column)
+        and _qualified_column(predicate.this, aliases) == expected_column
+        for predicate in statement.find_all(exp.GTE)
+    )
+    has_end = any(
+        isinstance(predicate.expression, exp.Placeholder)
+        and predicate.expression.this.name == "end_time"
+        and isinstance(predicate.this, exp.Column)
+        and _qualified_column(predicate.this, aliases) == expected_column
+        for predicate in statement.find_all(exp.LT)
+    )
+    reasons: list[str] = []
+    if not has_start:
+        reasons.append(f"missing_time_lower_bound:{expected_column}")
+    if not has_end:
+        reasons.append(f"missing_time_upper_bound:{expected_column}")
+    return reasons
+
+
 def _group_columns(
     statement: exp.Expression,
     aliases: dict[str, str],
@@ -433,6 +470,40 @@ def _group_columns(
             continue
         columns.update(projection_aliases.get(column.name.lower(), set()))
     return columns
+
+
+def _check_sort(
+    statement: exp.Expression,
+    plan: AnalysisPlan,
+) -> list[str]:
+    if not plan.sort:
+        return []
+    order = statement.args.get("order")
+    if order is None:
+        return [
+            f"missing_required_sort:{item.field.value}"
+            for item in plan.sort
+        ]
+
+    actual: dict[str, bool] = {}
+    for item in order.expressions:
+        if not isinstance(item, exp.Ordered):
+            continue
+        expression = item.this
+        if not isinstance(expression, exp.Column) or expression.table:
+            continue
+        actual[expression.name.lower()] = bool(item.args.get("desc"))
+
+    reasons: list[str] = []
+    for item in plan.sort:
+        field = item.field.value
+        if field not in actual:
+            reasons.append(f"missing_required_sort:{field}")
+            continue
+        expected_descending = item.direction.value == "descending"
+        if actual[field] is not expected_descending:
+            reasons.append(f"sort_direction_mismatch:{field}")
+    return reasons
 
 
 def _dimension_column(

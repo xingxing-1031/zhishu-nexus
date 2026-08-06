@@ -72,6 +72,7 @@ def main() -> None:
     with open_real_evaluation_executors(
         execution_id=args.execution_id,
         settings=settings,
+        reference_time=suite.reference_time,
     ) as executors:
         report = run_development_experiment(experiment, suite, executors)
     rendered = report.model_dump_json(indent=2)

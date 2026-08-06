@@ -1,5 +1,6 @@
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from operator import add
 from time import monotonic
 from typing import Annotated, Protocol, TypedDict
@@ -61,6 +62,7 @@ class AnalysisState(TypedDict):
     access_role: AccessRole
     question: str
     max_rows: int
+    reference_time: datetime
     scope_supported: bool | None
     scope_rejection_reason: str | None
     plan: AnalysisPlan | None
@@ -141,6 +143,7 @@ def create_initial_state(
     *,
     max_retries: int = 2,
     access_context: AccessContext | None = None,
+    reference_time: datetime | None = None,
 ) -> AnalysisState:
     if max_retries < 0:
         raise ValueError("max_retries must be non-negative")
@@ -149,12 +152,16 @@ def create_initial_state(
         user_id=request.user_id,
         role=AccessRole.ANALYST,
     )
+    active_reference_time = reference_time or datetime.now(timezone.utc)
+    if active_reference_time.tzinfo is None:
+        raise ValueError("reference_time must be timezone-aware")
     return AnalysisState(
         request_id=request.request_id,
         user_id=active_access.user_id,
         access_role=active_access.role,
         question=request.question,
         max_rows=request.max_rows,
+        reference_time=active_reference_time,
         scope_supported=None,
         scope_rejection_reason=None,
         plan=None,
@@ -458,12 +465,22 @@ def create_sql_execution_node(tool: SQLExecutionTool) -> AnalysisNode:
                 "trace": [EXECUTE_SQL_NODE],
             }
 
+        query_parameters: dict[str, object] = {}
+        plan = state["plan"]
+        if plan is not None and plan.time_range is not None:
+            end_time = state["reference_time"]
+            query_parameters = {
+                "start_time": end_time - timedelta(days=plan.time_range.days),
+                "end_time": end_time,
+            }
+
         try:
             result = tool.execute(
                 request_id=state["request_id"],
                 user_id=state["user_id"],
                 original_sql=original_sql,
                 prepared_sql=prepared_sql,
+                query_parameters=query_parameters,
             )
         except SQLExecutionToolError as exc:
             return {

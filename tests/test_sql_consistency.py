@@ -40,6 +40,8 @@ def _valid_sql() -> str:
         "FROM orders AS o JOIN order_items AS oi "
         "ON oi.order_id = o.order_id "
         "WHERE o.status = 'paid' "
+        "AND o.created_at >= %(start_time)s "
+        "AND o.created_at < %(end_time)s "
         "GROUP BY o.channel"
     )
 
@@ -75,7 +77,10 @@ def test_all_trusted_development_gold_sql_passes_consistency() -> None:
 
 
 def test_consistency_rejects_missing_paid_filter() -> None:
-    sql = _valid_sql().replace("WHERE o.status = 'paid' ", "")
+    sql = _valid_sql().replace(
+        "WHERE o.status = 'paid' AND ",
+        "WHERE ",
+    )
 
     with pytest.raises(
         SQLBusinessConsistencyError,
@@ -154,6 +159,45 @@ def test_consistency_rejects_aggregate_without_dimension_group() -> None:
             sql,
             plan=_plan(),
             evidence=_evidence(_plan()),
+        )
+
+
+def test_consistency_rejects_missing_parameterized_time_range() -> None:
+    sql = _valid_sql().replace(
+        "AND o.created_at >= %(start_time)s "
+        "AND o.created_at < %(end_time)s ",
+        "",
+    )
+
+    with pytest.raises(
+        SQLBusinessConsistencyError,
+        match="missing_time_lower_bound:orders.created_at",
+    ):
+        validate_sql_against_evidence(
+            sql,
+            plan=_plan(),
+            evidence=_evidence(_plan()),
+        )
+
+
+def test_consistency_rejects_missing_planned_sort() -> None:
+    plan = AnalysisPlan.model_validate(
+        {
+            **_plan().model_dump(mode="json"),
+            "sort": [
+                {"field": "sales_amount", "direction": "descending"}
+            ],
+        }
+    )
+
+    with pytest.raises(
+        SQLBusinessConsistencyError,
+        match="missing_required_sort:sales_amount",
+    ):
+        validate_sql_against_evidence(
+            _valid_sql(),
+            plan=plan,
+            evidence=_evidence(plan),
         )
 
 

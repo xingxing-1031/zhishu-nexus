@@ -1,5 +1,5 @@
 from collections import deque
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -97,6 +97,7 @@ class SQLExecutionTool(Protocol):
         user_id: str,
         original_sql: str,
         prepared_sql: PreparedSQL,
+        query_parameters: Mapping[str, object] | None = None,
     ) -> SafeQueryResult: ...
 
 
@@ -308,6 +309,7 @@ class SafeSQLExecutionTool:
         user_id: str,
         original_sql: str,
         prepared_sql: PreparedSQL,
+        query_parameters: Mapping[str, object] | None = None,
     ) -> SafeQueryResult:
         try:
             statement_timeout_ms = self.statement_timeout_ms
@@ -328,6 +330,7 @@ class SafeSQLExecutionTool:
                 user_id=user_id,
                 original_sql=original_sql,
                 prepared_sql=prepared_sql,
+                query_parameters=query_parameters,
                 statement_timeout_ms=statement_timeout_ms,
             )
         except Exception as exc:
