@@ -257,7 +257,7 @@
             "direction": "descending"
           }
         ],
-        "limit": 10
+        "limit": 100
       },
       "expected_source_ids": [
         "metric.sales_amount.v1",
@@ -265,7 +265,7 @@
         "schema.order_items",
         "schema.join.orders.order_items"
       ],
-      "gold_sql": "SELECT o.channel AS channel,\n       SUM(oi.quantity * oi.unit_price) AS sales_amount\nFROM orders AS o\nJOIN order_items AS oi ON oi.order_id = o.order_id\nWHERE o.status = 'paid'\n  AND o.created_at >= %(start_time)s\n  AND o.created_at < %(end_time)s\nGROUP BY o.channel\nORDER BY sales_amount DESC, channel ASC\nLIMIT 10",
+      "gold_sql": "SELECT o.channel AS channel,\n       SUM(oi.quantity * oi.unit_price) AS sales_amount\nFROM orders AS o\nJOIN order_items AS oi ON oi.order_id = o.order_id\nWHERE o.status = 'paid'\n  AND o.created_at >= %(start_time)s\n  AND o.created_at < %(end_time)s\nGROUP BY o.channel\nORDER BY sales_amount DESC, channel ASC\nLIMIT 100",
       "expected_rows": [
         {
           "channel": "京东",

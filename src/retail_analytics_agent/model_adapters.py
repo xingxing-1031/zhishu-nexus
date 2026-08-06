@@ -126,17 +126,7 @@ def _sql_generation_contract(
         for fixed_filter in definition.fixed_filters
     ]
     required_group_by = [
-        (
-            "refunds.created_at"
-            if dimension is AnalysisDimension.DAY
-            and all(
-                "refunds" in definition.source_tables
-                for definition in metric_definitions
-            )
-            else "orders.created_at"
-            if dimension is AnalysisDimension.DAY
-            else _DIMENSION_SQL_COLUMNS[dimension]
-        )
+        _dimension_sql_expression(dimension, metric_definitions)
         for dimension in plan.dimensions
     ]
     required_order_by = [
@@ -164,17 +154,8 @@ def _sql_generation_contract(
         "dimension_outputs": [
             {
                 "plan_field": dimension.value,
-                "sql_expression": (
-                    (
-                        "refunds.created_at"
-                        if all(
-                            "refunds" in definition.source_tables
-                            for definition in metric_definitions
-                        )
-                        else "orders.created_at"
-                    )
-                    if dimension is AnalysisDimension.DAY
-                    else _DIMENSION_SQL_COLUMNS[dimension]
+                "sql_expression": _dimension_sql_expression(
+                    dimension, metric_definitions
                 ),
                 "output_alias": dimension.value,
                 "must_be_grouped": True,
@@ -228,6 +209,26 @@ def _sql_generation_contract(
             "output alias; every dimension must be in GROUP BY."
         ),
     }
+
+
+def _dimension_sql_expression(
+    dimension: AnalysisDimension,
+    metric_definitions: Sequence[MetricDefinition],
+) -> str:
+    if dimension is AnalysisDimension.DAY:
+        table = (
+            "refunds"
+            if all(
+                "refunds" in definition.source_tables
+                for definition in metric_definitions
+            )
+            else "orders"
+        )
+        return (
+            f"({table}.created_at AT TIME ZONE 'Asia/Shanghai')"
+            "::date::text"
+        )
+    return _DIMENSION_SQL_COLUMNS[dimension]
 
 
 class _OllamaMessage(BaseModel):
@@ -404,6 +405,12 @@ def _explicit_metric_hints(question: str) -> tuple[AnalysisMetric, ...]:
     )
     if matches:
         return matches
+    if (
+        "平均" in normalized
+        and "订单" in normalized
+        and any(term in normalized for term in ("金额", "多少钱", "钱"))
+    ):
+        return (AnalysisMetric.AVERAGE_ORDER_VALUE,)
     if "订单" in normalized and "退款" not in normalized:
         return (AnalysisMetric.ORDER_COUNT,)
     if "渠道" in normalized:
@@ -411,25 +418,46 @@ def _explicit_metric_hints(question: str) -> tuple[AnalysisMetric, ...]:
     return ()
 
 
-_DIMENSION_HINTS = {
-    AnalysisDimension.CHANNEL: ("渠道", "channel"),
-    AnalysisDimension.PRODUCT: ("商品", "product"),
-    AnalysisDimension.CATEGORY: ("品类", "类别", "category"),
-    AnalysisDimension.ORDER_STATUS: ("订单状态", "order status"),
-    AnalysisDimension.REFUND_STATUS: ("退款状态", "refund status"),
-    AnalysisDimension.DAY: ("每天", "每日", "按日", "day"),
-}
-
-
 def _explicit_dimension_hints(
     question: str,
 ) -> tuple[AnalysisDimension, ...]:
     normalized = question.casefold()
-    return tuple(
-        dimension
-        for dimension, terms in _DIMENSION_HINTS.items()
-        if any(term.casefold() in normalized for term in terms)
+    dimensions: list[AnalysisDimension] = []
+    if any(term in normalized for term in ("渠道", "channel")):
+        dimensions.append(AnalysisDimension.CHANNEL)
+    if any(term in normalized for term in ("品类", "类别", "category")):
+        dimensions.append(AnalysisDimension.CATEGORY)
+    product_breakdown = any(
+        term in normalized
+        for term in (
+            "每种商品",
+            "每个商品",
+            "各商品",
+            "按商品",
+            "商品分别",
+            "最高的两个商品",
+            "最高的2个商品",
+            "top product",
+            "by product",
+            "per product",
+        )
     )
+    if product_breakdown:
+        dimensions.append(AnalysisDimension.PRODUCT)
+    if "退款状态" in normalized or (
+        "退款" in normalized
+        and any(term in normalized for term in ("按状态", "不同状态"))
+    ):
+        dimensions.append(AnalysisDimension.REFUND_STATUS)
+    if "订单状态" in normalized or (
+        "订单" in normalized
+        and "退款" not in normalized
+        and any(term in normalized for term in ("按状态", "不同状态"))
+    ):
+        dimensions.append(AnalysisDimension.ORDER_STATUS)
+    if any(term in normalized for term in ("每天", "每日", "按日", "day")):
+        dimensions.append(AnalysisDimension.DAY)
+    return tuple(dict.fromkeys(dimensions))
 
 
 def _planner_contract(question: str) -> dict[str, object]:
@@ -489,31 +517,105 @@ def _align_explicit_dimensions(
     *,
     question: str,
 ) -> AnalysisPlan:
-    if plan.limit <= 100:
-        return plan
     dimensions = _explicit_dimension_hints(question)
+    aggregate_total = any(
+        term in question for term in ("总共", "一共", "合计", "累计")
+    )
+    preserved_model_dimensions = (
+        ()
+        if plan.limit > 100 or aggregate_total or dimensions
+        else tuple(
+            dimension
+            for dimension in plan.dimensions
+            if dimension
+            not in {
+                AnalysisDimension.ORDER_STATUS,
+                AnalysisDimension.REFUND_STATUS,
+                AnalysisDimension.DAY,
+            }
+        )
+    )
+    aligned_dimensions = tuple(
+        dict.fromkeys((*dimensions, *preserved_model_dimensions))
+    )
+    if tuple(plan.dimensions) == aligned_dimensions:
+        return plan
+    selected_fields = {
+        item.value for item in [*plan.metrics, *aligned_dimensions]
+    }
     return AnalysisPlan.model_validate(
         {
             **plan.model_dump(mode="json"),
-            "dimensions": [item.value for item in dimensions],
-            "sort": [],
-        }
-    )
-
-
-def _apply_default_grouped_sort(plan: AnalysisPlan) -> AnalysisPlan:
-    if not plan.dimensions or plan.sort or plan.limit > 100:
-        return plan
-    return plan.model_copy(
-        update={
+            "dimensions": [item.value for item in aligned_dimensions],
             "sort": [
-                AnalysisSort(
-                    field=plan.metrics[0],
-                    direction=SortDirection.DESCENDING,
-                )
-            ]
+                item.model_dump(mode="json")
+                for item in plan.sort
+                if item.field.value in selected_fields
+            ],
         }
     )
+
+
+_KNOWN_CHANNEL_VALUES = ("淘宝", "京东", "抖音", "拼多多")
+
+
+def _align_explicit_filters(
+    plan: AnalysisPlan,
+    *,
+    question: str,
+) -> AnalysisPlan:
+    channel = next(
+        (value for value in _KNOWN_CHANNEL_VALUES if value in question),
+        None,
+    )
+    if channel is None:
+        return plan
+    filters = [
+        item
+        for item in plan.filters
+        if item.field is not AnalysisFilterField.CHANNEL
+    ]
+    filters.append(
+        {
+            "field": AnalysisFilterField.CHANNEL,
+            "operator": AnalysisFilterOperator.EQUALS,
+            "value": channel,
+        }
+    )
+    return AnalysisPlan.model_validate(
+        {**plan.model_dump(mode="json"), "filters": filters}
+    )
+
+
+def _normalize_sort(plan: AnalysisPlan) -> AnalysisPlan:
+    if plan.limit > 100 or not plan.dimensions:
+        expected_sort: list[AnalysisSort] = []
+    elif all(
+        any(
+            item.field.value == dimension.value
+            and item.operator is AnalysisFilterOperator.EQUALS
+            for item in plan.filters
+        )
+        for dimension in plan.dimensions
+    ):
+        expected_sort = []
+    elif AnalysisDimension.DAY in plan.dimensions:
+        expected_sort = [
+            AnalysisSort(
+                field=AnalysisDimension.DAY,
+                direction=SortDirection.ASCENDING,
+            )
+        ]
+    else:
+        expected_sort = [
+            AnalysisSort(
+                field=plan.metrics[0],
+                direction=SortDirection.DESCENDING,
+            )
+        ]
+    if plan.sort == expected_sort:
+        return plan
+    return plan.model_copy(update={"sort": expected_sort})
 
 
 _PLACEHOLDER_FILTER_VALUES = {
@@ -856,7 +958,8 @@ class OllamaAnalysisPlanner:
         )
         plan = _align_explicit_metrics(plan, question=question)
         plan = _align_explicit_dimensions(plan, question=question)
-        plan = _apply_default_grouped_sort(plan)
+        plan = _align_explicit_filters(plan, question=question)
+        plan = _normalize_sort(plan)
         plan = _remove_placeholder_filters(plan)
         return _remove_redundant_fixed_filters(plan)
 

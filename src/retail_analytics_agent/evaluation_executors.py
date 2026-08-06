@@ -2,13 +2,15 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from time import perf_counter
-from typing import Callable, Protocol
+from typing import Callable, Protocol, cast
 
 import httpx
+from pydantic_core import to_jsonable_python
 
 from retail_analytics_agent.business_evaluation import (
     BusinessEvaluationCase,
     ExpectedOutcome,
+    JsonScalar,
 )
 from retail_analytics_agent.fault_injection import (
     FaultRule,
@@ -142,6 +144,17 @@ AnswerJudge = Callable[
 ]
 
 
+def _json_safe_rows(
+    rows: tuple[dict[str, object], ...],
+) -> tuple[dict[str, JsonScalar], ...]:
+    """Preserve database values in a JSON-safe evaluation record."""
+
+    return cast(
+        tuple[dict[str, JsonScalar], ...],
+        tuple(to_jsonable_python(row) for row in rows),
+    )
+
+
 def observation_outcome(
     observation: AnalysisEvaluationObservation,
 ) -> ExpectedOutcome:
@@ -251,7 +264,7 @@ class ObservedWorkflowExecutor:
             sql_safe=observation.sql_safe,
             evidence_match=observation.business_sql_valid,
             scope_rejection_reason=observation.scope_rejection_reason,
-            actual_rows=observation.rows,
+            actual_rows=_json_safe_rows(observation.rows),
             actual_reason_code=self.reason_code_resolver(observation, error),
             actual_sensitive_columns=observation.sensitive_columns,
             actual_chart_type=observation.chart_type,

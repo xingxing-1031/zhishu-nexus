@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import Mock
 
@@ -98,6 +99,26 @@ def test_executor_converts_observation_to_raw_run_without_scoring() -> None:
     assert workflow.request_ids == [
         f"EXP-001:retrieval:{case.case_id}:2"
     ]
+
+
+def test_executor_serializes_database_datetime_rows_without_changing_meaning() -> None:
+    case = _case()
+    observed_at = datetime(2026, 8, 7, tzinfo=timezone.utc)
+    observation = _observation(case).model_copy(
+        update={"rows": ({"day": observed_at},)}
+    )
+
+    run = ObservedWorkflowExecutor(
+        variant=EvaluationVariant.BASELINE,
+        workflow=_Workflow(observation),
+        execution_id="EXP-DATETIME",
+    ).execute(
+        case,
+        variant=EvaluationVariant.BASELINE,
+        run_index=1,
+    )
+
+    assert run.actual_rows == ({"day": "2026-08-07T00:00:00Z"},)
 
 
 def test_pending_observation_maps_to_approval_required() -> None:

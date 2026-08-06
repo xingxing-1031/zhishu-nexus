@@ -309,7 +309,128 @@ def test_ollama_planner_aligns_explicit_metric_aliases() -> None:
 
     assert plan.metrics == ["units_sold"]
     assert plan.dimensions == ["category"]
-    assert [item.field.value for item in plan.sort] == ["category"]
+    assert [item.field.value for item in plan.sort] == ["units_sold"]
+
+
+def test_ollama_planner_removes_unrequested_status_dimension() -> None:
+    model_output = {
+        "analysis_goal": "统计已支付订单数",
+        "metrics": ["order_count"],
+        "dimensions": ["order_status"],
+        "filters": [],
+        "time_range_days": 0,
+        "sort": [{"field": "order_status", "direction": "ascending"}],
+        "limit": None,
+    }
+    planner = OllamaAnalysisPlanner(
+        client=_client(
+            lambda request: httpx.Response(
+                200,
+                json={"message": {"content": json.dumps(model_output)}},
+            )
+        )
+    )
+
+    plan = planner.plan("一共有多少个已支付订单", max_rows=100)
+
+    assert plan.metrics == ["order_count"]
+    assert plan.dimensions == []
+    assert plan.sort == []
+
+
+def test_ollama_planner_aligns_average_per_order_metric() -> None:
+    model_output = {
+        "analysis_goal": "平均每个已支付订单多少钱",
+        "metrics": ["order_count"],
+        "dimensions": ["order_status"],
+        "filters": [],
+        "time_range_days": 0,
+        "sort": [],
+        "limit": None,
+    }
+    planner = OllamaAnalysisPlanner(
+        client=_client(
+            lambda request: httpx.Response(
+                200,
+                json={"message": {"content": json.dumps(model_output)}},
+            )
+        )
+    )
+
+    plan = planner.plan("平均每个已支付订单多少钱", max_rows=100)
+
+    assert plan.metrics == ["average_order_value"]
+    assert plan.dimensions == []
+
+
+def test_ollama_planner_adds_explicit_channel_filter() -> None:
+    model_output = {
+        "analysis_goal": "查询淘宝渠道销售额",
+        "metrics": ["sales_amount"],
+        "dimensions": ["channel"],
+        "filters": [],
+        "time_range_days": 0,
+        "sort": [{"field": "sales_amount", "direction": "descending"}],
+        "limit": None,
+    }
+    planner = OllamaAnalysisPlanner(
+        client=_client(
+            lambda request: httpx.Response(
+                200,
+                json={"message": {"content": json.dumps(model_output)}},
+            )
+        )
+    )
+
+    plan = planner.plan("只看淘宝渠道的销售额", max_rows=100)
+
+    assert [item.model_dump(mode="json") for item in plan.filters] == [
+        {"field": "channel", "operator": "equals", "value": "淘宝"}
+    ]
+    assert plan.sort == []
+
+
+@pytest.mark.parametrize(
+    ("question", "model_dimensions", "expected_dimensions"),
+    [
+        ("总共卖出了多少件商品", ["product"], []),
+        ("不同商品类别贡献了多少销售额", ["product", "category"], ["category"]),
+        ("最近30天按状态看退款金额和退款笔数", [], ["refund_status"]),
+    ],
+)
+def test_ollama_planner_aligns_grouping_semantics(
+    question: str,
+    model_dimensions: list[str],
+    expected_dimensions: list[str],
+) -> None:
+    metrics = (
+        ["refund_amount", "refund_count"]
+        if "退款" in question
+        else ["sales_amount"]
+        if "销售额" in question
+        else ["units_sold"]
+    )
+    model_output = {
+        "analysis_goal": question,
+        "metrics": metrics,
+        "dimensions": model_dimensions,
+        "filters": [],
+        "time_range_days": 30 if "30天" in question else 0,
+        "sort": [],
+        "limit": None,
+    }
+    planner = OllamaAnalysisPlanner(
+        client=_client(
+            lambda request: httpx.Response(
+                200,
+                json={"message": {"content": json.dumps(model_output)}},
+            )
+        )
+    )
+
+    plan = planner.plan(question, max_rows=100)
+
+    assert [item.value for item in plan.dimensions] == expected_dimensions
 
 
 def test_ollama_planner_removes_model_placeholder_filters() -> None:

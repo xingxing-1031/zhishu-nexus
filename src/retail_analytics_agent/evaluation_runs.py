@@ -232,20 +232,26 @@ def _rows_match(
         for field in expected_row:
             expected_value = expected_row[field]
             actual_value = actual_row[field]
-            if (
+            numeric_values = (
                 isinstance(expected_value, (int, float))
                 and not isinstance(expected_value, bool)
             ) or (
                 isinstance(actual_value, (int, float))
                 and not isinstance(actual_value, bool)
-            ):
+            ) or (
+                isinstance(expected_value, str)
+                and isinstance(actual_value, str)
+                and ("." in expected_value or "." in actual_value)
+            )
+            if numeric_values:
                 try:
                     if Decimal(str(expected_value)) != Decimal(
                         str(actual_value)
                     ):
                         return False
                 except InvalidOperation:
-                    return False
+                    if expected_value != actual_value:
+                        return False
             elif expected_value != actual_value:
                 return False
     return True

@@ -161,6 +161,14 @@ def validate_sql_against_evidence(
             dimension_column = _dimension_column(dimension, definitions)
             if dimension_column is None:
                 reasons.append(f"unsupported_dimension:{dimension.value}")
+            elif dimension is AnalysisDimension.DAY:
+                reasons.extend(
+                    _check_day_dimension(
+                        statement,
+                        aliases,
+                        dimension_column,
+                    )
+                )
             elif dimension_column not in group_columns:
                 reasons.append(f"dimension_not_grouped:{dimension.value}")
 
@@ -471,6 +479,69 @@ def _group_columns(
             continue
         columns.update(projection_aliases.get(column.name.lower(), set()))
     return columns
+
+
+def _check_day_dimension(
+    statement: exp.Expression,
+    aliases: dict[str, str],
+    expected_column: str,
+) -> list[str]:
+    """Require the approved timezone-aware natural-day grouping expression."""
+
+    day_projection = next(
+        (
+            selection.this
+            for selection in statement.selects
+            if selection.alias_or_name.casefold() == "day"
+            and isinstance(selection, exp.Alias)
+        ),
+        None,
+    )
+    reasons: list[str] = []
+    if day_projection is None or not _is_business_day_expression(
+        day_projection, aliases, expected_column
+    ):
+        reasons.append("day_dimension_must_use_business_timezone")
+
+    group = statement.args.get("group")
+    grouped_natural_day = False
+    if group is not None:
+        for item in group.expressions:
+            if (
+                isinstance(item, exp.Column)
+                and not item.table
+                and item.name.casefold() == "day"
+            ) or _is_business_day_expression(item, aliases, expected_column):
+                grouped_natural_day = True
+                break
+    if not grouped_natural_day:
+        reasons.append("day_dimension_not_grouped_by_natural_day")
+    return reasons
+
+
+def _is_business_day_expression(
+    expression: exp.Expression,
+    aliases: dict[str, str],
+    expected_column: str,
+) -> bool:
+    columns = _expression_columns(expression, aliases)
+    if expected_column not in columns:
+        return False
+
+    has_shanghai_timezone = any(
+        isinstance(node, exp.AtTimeZone)
+        and isinstance(node.args.get("zone"), exp.Literal)
+        and node.args["zone"].is_string
+        and str(node.args["zone"].this).casefold() == "asia/shanghai"
+        for node in expression.find_all(exp.AtTimeZone)
+    )
+    has_date_cast = any(
+        isinstance(node, exp.Cast)
+        and isinstance(node.args.get("to"), exp.DataType)
+        and node.args["to"].this is exp.DataType.Type.DATE
+        for node in expression.find_all(exp.Cast)
+    ) or expression.find(exp.Date) is not None
+    return has_shanghai_timezone and has_date_cast
 
 
 def _check_sort(

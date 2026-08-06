@@ -227,3 +227,32 @@ def test_consistency_rejects_dimension_alias_drift() -> None:
             plan=_plan(),
             evidence=_evidence(_plan()),
         )
+
+
+def test_consistency_rejects_raw_timestamp_for_day_dimension() -> None:
+    plan = AnalysisPlan.model_validate(
+        {
+            **_plan(dimensions=["day"]).model_dump(mode="json"),
+            "sort": [{"field": "day", "direction": "ascending"}],
+        }
+    )
+    sql = (
+        "SELECT o.created_at AS day, "
+        "SUM(oi.quantity * oi.unit_price) AS sales_amount "
+        "FROM orders AS o JOIN order_items AS oi "
+        "ON oi.order_id = o.order_id "
+        "WHERE o.status = 'paid' "
+        "AND o.created_at >= %(start_time)s "
+        "AND o.created_at < %(end_time)s "
+        "GROUP BY o.created_at ORDER BY day ASC"
+    )
+
+    with pytest.raises(
+        SQLBusinessConsistencyError,
+        match="day_dimension_must_use_business_timezone",
+    ):
+        validate_sql_against_evidence(
+            sql,
+            plan=plan,
+            evidence=_evidence(plan),
+        )

@@ -200,6 +200,53 @@ def test_approval_required_is_validated_but_not_executed() -> None:
     assert next(item for item in score.stages if item.stage is EvaluationStage.ROWS).applicable is False
 
 
+def test_rows_match_equivalent_decimal_string_scales() -> None:
+    case = _case("dev-complex-channel-aov")
+    run = _trusted_run(
+        case.case_id,
+        outcome=ExpectedOutcome.SUCCEEDED,
+    ).model_copy(
+        update={
+            "actual_rows": (
+                {
+                    "channel": "抖音",
+                    "average_order_value": "12000.000000",
+                },
+                {
+                    "channel": "京东",
+                    "average_order_value": "5650.0000",
+                },
+                {
+                    "channel": "淘宝",
+                    "average_order_value": "4800.000",
+                },
+            ),
+        }
+    )
+
+    score = score_case(case, run)
+
+    assert next(
+        stage for stage in score.stages if stage.stage is EvaluationStage.ROWS
+    ).passed is True
+
+
+def test_rows_match_non_numeric_dotted_strings_strictly() -> None:
+    case = _case("dev-basic-sales-total").model_copy(
+        update={"expected_rows": ({"version": "v1.0"},)}
+    )
+    run = _trusted_run(
+        case.case_id,
+        outcome=ExpectedOutcome.SUCCEEDED,
+    ).model_copy(update={"actual_rows": ({"version": "v1.0"},)})
+
+    score = score_case(case, run)
+
+    assert next(
+        stage for stage in score.stages if stage.stage is EvaluationStage.ROWS
+    ).passed is True
+
+
 def test_rejected_run_cannot_claim_database_execution() -> None:
     with pytest.raises(ValidationError, match="must not call the database"):
         EvaluationRunRecord(
