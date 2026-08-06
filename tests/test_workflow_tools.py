@@ -95,6 +95,35 @@ def test_retrieve_node_requires_a_validated_plan() -> None:
         create_retrieve_node(Mock())(state)
 
 
+def test_retrieve_node_passes_question_to_query_aware_adapter() -> None:
+    class QueryAwareStub:
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, AnalysisPlan]] = []
+
+        def retrieve_with_query(
+            self,
+            *,
+            query: str,
+            plan: AnalysisPlan,
+        ) -> list[RetrievalEvidence]:
+            self.calls.append((query, plan))
+            return [
+                RetrievalEvidence(
+                    source_id="metric.sales_amount.v1",
+                    content="approved sales metric",
+                )
+            ]
+
+    tool = QueryAwareStub()
+    state = create_initial_state(_request())
+    state["plan"] = _plan()
+
+    update = create_retrieve_node(tool)(state)
+
+    assert update["retrieved_context"][0].source_id == "metric.sales_amount.v1"
+    assert tool.calls == [(_request().question, state["plan"])]
+
+
 def test_catalog_retrieval_returns_product_sales_evidence() -> None:
     plan = AnalysisPlan(
         analysis_goal="按商品统计销售额",

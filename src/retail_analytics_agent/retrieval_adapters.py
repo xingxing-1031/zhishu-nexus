@@ -58,6 +58,14 @@ class CatalogEvidenceAdapter:
             candidate_metrics=tuple(plan.metrics),
         )
 
+    def retrieve_with_query(
+        self,
+        *,
+        query: str,
+        plan: AnalysisPlan,
+    ) -> list[RetrievalEvidence]:
+        return list(self.retrieve(query=query, plan=plan).evidence)
+
 
 @dataclass(frozen=True, slots=True)
 class MetricCandidateEvidenceAdapter:
@@ -100,3 +108,11 @@ class MetricCandidateEvidenceAdapter:
             evidence=evidence,
             candidate_metrics=candidates,
         )
+
+    def retrieve_with_query(
+        self,
+        *,
+        query: str,
+        plan: AnalysisPlan,
+    ) -> list[RetrievalEvidence]:
+        return list(self.retrieve(query=query, plan=plan).evidence)

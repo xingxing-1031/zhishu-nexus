@@ -56,6 +56,17 @@ class RetrievalTool(Protocol):
     def retrieve(self, plan: AnalysisPlan) -> list[RetrievalEvidence]: ...
 
 
+class QueryAwareRetrievalTool(Protocol):
+    """Optional retrieval boundary that also receives the raw question."""
+
+    def retrieve_with_query(
+        self,
+        *,
+        query: str,
+        plan: AnalysisPlan,
+    ) -> list[RetrievalEvidence]: ...
+
+
 class SQLValidationTool(Protocol):
     def validate(
         self,

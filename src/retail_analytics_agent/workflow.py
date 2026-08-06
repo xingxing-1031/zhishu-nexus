@@ -44,6 +44,7 @@ from retail_analytics_agent.tracing import (
 )
 from retail_analytics_agent.workflow_tools import (
     RetrievalTool,
+    QueryAwareRetrievalTool,
     SQLBusinessConsistencyTool,
     SQLBusinessConsistencyToolError,
     SQLExecutionTool,
@@ -196,14 +197,25 @@ def create_plan_node(model: AnalysisPlanner) -> AnalysisNode:
     return plan
 
 
-def create_retrieve_node(tool: RetrievalTool) -> AnalysisNode:
+def create_retrieve_node(
+    tool: RetrievalTool | QueryAwareRetrievalTool,
+) -> AnalysisNode:
     def retrieve(state: AnalysisState) -> AnalysisStateUpdate:
         plan = state["plan"]
         if plan is None:
             raise ValueError("analysis plan is required before retrieval")
 
+        query_aware_method = getattr(type(tool), "retrieve_with_query", None)
+        if query_aware_method is not None:
+            evidence = tool.retrieve_with_query(
+                query=state["question"],
+                plan=plan,
+            )
+        else:
+            evidence = tool.retrieve(plan)
+
         return {
-            "retrieved_context": tool.retrieve(plan),
+            "retrieved_context": evidence,
             "trace": [RETRIEVE_NODE],
         }
 
