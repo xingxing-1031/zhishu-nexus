@@ -23,16 +23,28 @@ DEVELOPMENT_SUITE = PROJECT_ROOT / "evaluation" / "business_development.json"
 
 def main() -> None:
     parser = ArgumentParser()
-    parser.add_argument("--case-id", default="dev-basic-sales-total")
+    parser.add_argument(
+        "--case-id",
+        default=None,
+        help="run one development case; omit to run the full development suite",
+    )
     parser.add_argument("--execution-id", default="w6-2-smoke")
+    parser.add_argument("--repetitions", type=int, default=1)
+    parser.add_argument("--output", type=Path, default=None)
     args = parser.parse_args()
 
+    if args.repetitions < 1:
+        raise ValueError("repetitions must be positive")
+
     full_suite = load_business_evaluation_suite(DEVELOPMENT_SUITE)
-    selected = tuple(
-        case for case in full_suite.cases if case.case_id == args.case_id
-    )
-    if len(selected) != 1:
-        raise ValueError(f"development case not found: {args.case_id}")
+    if args.case_id is None:
+        selected = full_suite.cases
+    else:
+        selected = tuple(
+            case for case in full_suite.cases if case.case_id == args.case_id
+        )
+        if len(selected) != 1:
+            raise ValueError(f"development case not found: {args.case_id}")
     suite = BusinessEvaluationSuite.model_validate(
         {**full_suite.model_dump(), "cases": selected}
     )
@@ -46,19 +58,29 @@ def main() -> None:
         safety_policy_version="sqlglot-and-business-v1",
         access_policy_version="retail-access-v1",
         timeout_ms=int(settings.workflow_timeout_seconds * 1000),
+        model_retry_max_attempts=settings.model_retry_max_attempts,
+        model_retry_initial_backoff_seconds=(
+            settings.model_retry_initial_backoff_seconds
+        ),
     )
     experiment = ControlledExperiment(
         experiment_id=args.execution_id,
         conditions=conditions,
         variants=tuple(EvaluationVariant),
-        repetitions=1,
+        repetitions=args.repetitions,
     )
     with open_real_evaluation_executors(
         execution_id=args.execution_id,
         settings=settings,
     ) as executors:
         report = run_development_experiment(experiment, suite, executors)
-    print(report.model_dump_json(indent=2))
+    rendered = report.model_dump_json(indent=2)
+    if args.output is None:
+        print(rendered)
+    else:
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        args.output.write_text(rendered + "\n", encoding="utf-8")
+        print(f"evaluation report written to {args.output}")
 
 
 if __name__ == "__main__":

@@ -50,6 +50,12 @@ class ExperimentConditions(BaseModel):
     safety_policy_version: str = Field(min_length=1)
     access_policy_version: str = Field(min_length=1)
     timeout_ms: int = Field(ge=1)
+    model_retry_max_attempts: int = Field(default=3, ge=1, le=5)
+    model_retry_initial_backoff_seconds: float = Field(
+        default=0.25,
+        ge=0,
+        le=10,
+    )
 
     @model_validator(mode="after")
     def validate_conditions(self) -> Self:

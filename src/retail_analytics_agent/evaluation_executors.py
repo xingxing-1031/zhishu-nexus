@@ -1,12 +1,18 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from time import perf_counter
 from typing import Callable, Protocol
+
+import httpx
 
 from retail_analytics_agent.business_evaluation import (
     BusinessEvaluationCase,
     ExpectedOutcome,
+)
+from retail_analytics_agent.fault_injection import (
+    FaultRule,
+    ScriptedFaultInjector,
 )
 from retail_analytics_agent.analysis_service import LangGraphAnalysisRunner
 from retail_analytics_agent.evaluation_observation import (
@@ -36,6 +42,40 @@ class EvaluationCaseWorkflow(Protocol):
     ) -> AnalysisEvaluationObservation: ...
 
 
+def _fault_exception(error_type: str) -> Exception:
+    if error_type == "ConnectTimeout":
+        return httpx.ConnectTimeout("injected evaluation timeout")
+    if error_type == "ServiceUnavailable":
+        service_unavailable = type(
+            "ServiceUnavailable",
+            (httpx.ConnectError,),
+            {},
+        )
+        return service_unavailable("injected evaluation service outage")
+    fault_type = type(error_type, (RuntimeError,), {})
+    return fault_type(f"injected evaluation fault: {error_type}")
+
+
+def _case_fault_injector(
+    case: BusinessEvaluationCase,
+) -> ScriptedFaultInjector | None:
+    if case.fault is None:
+        return None
+    component = case.fault.component
+    if component == "execute_sql":
+        component = "node.execute_sql"
+    return ScriptedFaultInjector(
+        tuple(
+            FaultRule(
+                component=component,
+                occurrence=occurrence,
+                error=_fault_exception(case.fault.error_type),
+            )
+            for occurrence in case.fault.occurrences
+        )
+    )
+
+
 @dataclass(frozen=True, slots=True)
 class LangGraphEvaluationCaseWorkflow:
     """Run a real LangGraph request and read its trusted checkpoint state."""
@@ -61,8 +101,14 @@ class LangGraphEvaluationCaseWorkflow:
             role=case.access_role,
         )
         run_error: Exception | None = None
+        injector = _case_fault_injector(case)
+        active_runner = (
+            replace(self.runner, fault_injector=injector)
+            if injector is not None
+            else self.runner
+        )
         try:
-            self.runner.run(request, access_context)
+            active_runner.run(request, access_context)
         except Exception as exc:
             run_error = exc
 
@@ -138,6 +184,10 @@ def _default_reason_code(
     )
     if not message:
         return None
+    if message.startswith("ModelInvocationError:"):
+        return "model_retry_exhausted"
+    if message.startswith("QueryCanceled:"):
+        return "statement_timeout"
     return message.split(":", maxsplit=1)[0].strip()
 
 

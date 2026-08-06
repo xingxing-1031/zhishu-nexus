@@ -1357,7 +1357,8 @@
         "component": "model.plan",
         "occurrences": [
           1,
-          2
+          2,
+          3
         ],
         "error_type": "ConnectTimeout"
       },
@@ -1494,7 +1495,8 @@
         "component": "model.summarize",
         "occurrences": [
           1,
-          2
+          2,
+          3
         ],
         "error_type": "ConnectTimeout"
       },

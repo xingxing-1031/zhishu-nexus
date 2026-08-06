@@ -1,5 +1,10 @@
 from typing import cast
 
+from retail_analytics_agent.fault_injection import (
+    FaultRule,
+    ScriptedFaultInjector,
+    fault_injection_context,
+)
 from retail_analytics_agent.models import AnalysisResultStatus
 from retail_analytics_agent.tracing import (
     ExecutionTraceEvent,
@@ -97,3 +102,24 @@ def test_trace_store_failure_does_not_break_business_operation() -> None:
 
     with execution_trace_context("REQ-TRACE-FAIL", FailingStore()):
         record_execution_trace("node.plan", TraceStatus.STARTED)
+
+
+def test_injected_trace_store_failure_is_fail_open() -> None:
+    store = InMemoryExecutionTraceStore()
+    injector = ScriptedFaultInjector(
+        (
+            FaultRule(
+                "trace.store",
+                1,
+                RuntimeError("injected trace failure"),
+            ),
+        )
+    )
+
+    with (
+        execution_trace_context("REQ-INJECTED-TRACE", store),
+        fault_injection_context(injector),
+    ):
+        record_execution_trace("node.plan", TraceStatus.STARTED)
+
+    assert store.list_for_request("REQ-INJECTED-TRACE") == ()

@@ -11,6 +11,7 @@ from retail_analytics_agent.business_evaluation import (
 from retail_analytics_agent.evaluation_executors import (
     LangGraphEvaluationCaseWorkflow,
     ObservedWorkflowExecutor,
+    _case_fault_injector,
     observation_outcome,
 )
 from retail_analytics_agent.evaluation_observation import (
@@ -31,6 +32,13 @@ def _case() -> BusinessEvaluationCase:
         EVALUATION_ROOT / "business_development.json"
     )
     return next(case for case in suite.cases if case.expected_plan is not None)
+
+
+def _case_by_id(case_id: str) -> BusinessEvaluationCase:
+    suite = load_business_evaluation_suite(
+        EVALUATION_ROOT / "business_development.json"
+    )
+    return next(case for case in suite.cases if case.case_id == case_id)
 
 
 def _observation(case: BusinessEvaluationCase) -> AnalysisEvaluationObservation:
@@ -224,3 +232,39 @@ def test_langgraph_workflow_attaches_error_to_existing_checkpoint() -> None:
 
     assert observation.workflow_error == "ValueError: unsupported dimension"
     assert observation_outcome(observation) is ExpectedOutcome.FAILED
+
+
+def test_case_fault_injector_uses_real_component_boundaries() -> None:
+    injector = _case_fault_injector(
+        _case_by_id("dev-resilience-statement-timeout")
+    )
+
+    assert injector is not None
+    with pytest.raises(RuntimeError) as exc_info:
+        injector.raise_if_scheduled("node.execute_sql")
+
+    assert type(exc_info.value).__name__ == "QueryCanceled"
+
+
+def test_executor_maps_injected_failure_reason_codes() -> None:
+    case = _case()
+    observation = _observation(case).model_copy(
+        update={
+            "workflow_error": "QueryCanceled: injected evaluation fault",
+            "result_status": None,
+            "rows": (),
+            "database_called": False,
+        }
+    )
+    run = ObservedWorkflowExecutor(
+        variant=EvaluationVariant.BASELINE,
+        workflow=_Workflow(observation),
+        execution_id="EXP-FAULT",
+    ).execute(
+        case,
+        variant=EvaluationVariant.BASELINE,
+        run_index=1,
+    )
+
+    assert run.actual_outcome is ExpectedOutcome.FAILED
+    assert run.actual_reason_code == "statement_timeout"

@@ -12,6 +12,7 @@ from typing import Protocol
 from pydantic import BaseModel, ConfigDict, Field
 
 from retail_analytics_agent.database import connect_to_database
+from retail_analytics_agent.fault_injection import inject_fault
 
 
 logger = logging.getLogger(__name__)
@@ -174,6 +175,7 @@ def record_execution_trace(
         return
     request_id, store = active
     try:
+        inject_fault("trace.store")
         store.record(
             ExecutionTraceEvent(
                 request_id=request_id,

@@ -1,0 +1,36 @@
+{
+  "report_id": "w6-2-development-20260807-r3-diagnostic",
+  "split": "development",
+  "case_count": 40,
+  "variants": {
+    "baseline": {
+      "core_pass_rate": 0.2,
+      "evidence_pass_rate": 0.88,
+      "average_latency_ms": 4627.675
+    },
+    "retrieval": {
+      "core_pass_rate": 0.2,
+      "evidence_pass_rate": 0.92,
+      "average_latency_ms": 5247.65
+    },
+    "reranker": {
+      "core_pass_rate": 0.2,
+      "evidence_pass_rate": 0.88,
+      "average_latency_ms": 6008.675
+    }
+  },
+  "valid_for_final_variant_selection": false,
+  "diagnosis": [
+    "Most failures were identical across variants and originated in shared planning, SQL generation, access-boundary, or resilience stages.",
+    "The first run revealed that evaluation fault contracts were not yet applied to the real LangGraph runner.",
+    "Retrieval improved evidence pass rate in this run, but did not improve the core result pass rate."
+  ],
+  "post_diagnostic_verification": {
+    "planner_retry_exhausted": "all variants passed the targeted failed/model_retry_exhausted contract",
+    "summary_retry_exhausted": "all variants preserved trusted rows and passed the degraded contract",
+    "statement_timeout": "all variants passed the failed/statement_timeout contract",
+    "trace_store_fail_open": "all variants kept the business request succeeded"
+  },
+  "holdout_used": false,
+  "next_action": "Repair remaining shared evaluation and workflow boundaries before rerunning the full development suite."
+}

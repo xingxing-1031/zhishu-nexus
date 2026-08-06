@@ -4,10 +4,10 @@ __pycache__/
 .pytest_cache/
 .coverage
 htmlcov/
+artifacts/
 .env
 .idea/
 .vscode/
 dist/
 build/
 *.egg-info/
-
