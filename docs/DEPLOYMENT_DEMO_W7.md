@@ -39,6 +39,12 @@ docker compose up -d --wait
 .\.venv\Scripts\python.exe -m uvicorn retail_analytics_agent.app:app --host 0.0.0.0 --port 8004
 ```
 
+需要验证 API 容器时使用 `demo` profile。它会把 PostgreSQL 服务名注入为 `postgres`，默认以分析员身份运行，并把宿主机 Ollama 作为开发演示模型服务；公网环境不能照搬这个宿主机地址。
+
+```powershell
+docker compose --profile demo up -d --build --wait
+```
+
 另开终端检查：
 
 ```powershell
@@ -55,3 +61,5 @@ Invoke-WebRequest http://127.0.0.1:8004/ready
 - `/health`：`200 {"status":"ok"}`
 - `/ready`：`200 {"status":"ready"}`
 - 全量回归：`390 passed in 2.13s`
+- `docker compose --profile demo config --quiet`：通过。
+- 本地 API 镜像构建：Dockerfile 已进入 CI；本机拉取 `python:3.12-slim` 时 Docker Hub IPv6 连接超时，不能记录为本地构建通过。

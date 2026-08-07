@@ -156,6 +156,15 @@ ollama serve
 
 浏览器打开 `http://127.0.0.1:8000/`。演示使用 `.env` 中由服务器配置的 `LOCAL_ACCESS_USER_ID` 和 `LOCAL_ACCESS_ROLE`，客户端不能自行把 analyst 改成 admin。API 文档位于 `http://127.0.0.1:8000/docs`。
 
+也可以使用 `demo` profile 启动 API 容器。容器默认以分析员身份运行，数据库通过 Compose 服务名访问，模型地址默认指向宿主机 Ollama；公网部署不能直接使用这个宿主机地址。
+
+```powershell
+$env:API_PORT = "8005"
+docker compose --profile demo up -d --build --wait
+```
+
+浏览器打开 `http://127.0.0.1:8005/`；就绪检查使用 `http://127.0.0.1:8005/ready`。
+
 ## 目录结构
 
 ```text
