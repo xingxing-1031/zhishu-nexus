@@ -47,7 +47,8 @@
 
 ### FastAPI 接口基础
 
-- `GET /health`：返回应用存活状态。
+- `GET /health`：返回应用存活状态，不检查数据库。
+- `GET /ready`：检查 PostgreSQL 连接和分析工作流所需的业务关系是否就绪；未就绪时返回 `503`。
 - `POST /analysis/validate`：使用 `AnalysisRequest` 校验分析请求，并自动返回 200 或 422。
 - 使用 TestClient 验证路由、模型默认值、非法行数限制和 JSON 响应。
 - 第一轮代码审查处理了测试依赖弃用 warning，并在格式整理后完成 15 项回归测试。

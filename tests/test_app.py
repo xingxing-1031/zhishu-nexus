@@ -82,6 +82,32 @@ def test_health_check() -> None:
     assert response.json() == {"status": "ok"}
 
 
+def test_readiness_check_returns_ready_when_database_is_ready(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "retail_analytics_agent.app.check_database_readiness",
+        lambda: True,
+    )
+
+    response = client.get("/ready")
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ready"}
+
+
+def test_readiness_check_returns_503_when_business_data_is_not_ready(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "retail_analytics_agent.app.check_database_readiness",
+        lambda: False,
+    )
+
+    response = client.get("/ready")
+
+    assert response.status_code == 503
+    assert response.json() == {
+        "detail": "数据库和业务数据尚未就绪，请稍后重试。"
+    }
+
+
 def test_validate_analysis_request_accepts_valid_data() -> None:
     response = client.post(
         "/analysis/validate",
@@ -308,6 +334,28 @@ def test_stream_analysis_returns_sse_status_and_result_events() -> None:
     assert "京东渠道销售额为 11300.00 元" in response.text
     runner.stream.assert_called_once()
     assert runner.stream.call_args.args[1] == _access_context()
+
+
+def test_stream_analysis_rejects_mismatched_trusted_identity() -> None:
+    runner = Mock()
+    app.dependency_overrides[get_analysis_runner] = lambda: runner
+    app.dependency_overrides[get_access_context] = _access_context
+
+    try:
+        response = client.post(
+            "/analysis/stream",
+            json={
+                "request_id": "REQ-STREAM-FORGED-001",
+                "user_id": "USER-999",
+                "question": "查询销售额",
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 403
+    assert response.json() == {"detail": "当前登录身份与请求用户不一致。"}
+    runner.stream.assert_not_called()
 
 
 def test_stream_analysis_returns_assistant_message_event() -> None:

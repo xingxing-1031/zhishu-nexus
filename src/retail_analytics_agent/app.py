@@ -17,6 +17,7 @@ from retail_analytics_agent.analysis_service import (
 )
 from retail_analytics_agent.database import (
     DatabaseConnection,
+    check_database_readiness,
     get_database_connection,
 )
 from retail_analytics_agent.models import (
@@ -61,6 +62,16 @@ def read_demo() -> FileResponse:
 @app.get("/health")
 def health_check() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.get("/ready")
+def readiness_check() -> dict[str, str]:
+    if not check_database_readiness():
+        raise HTTPException(
+            status_code=503,
+            detail="数据库和业务数据尚未就绪，请稍后重试。",
+        )
+    return {"status": "ready"}
 
 
 @app.get("/session", response_model=AccessContext)
@@ -220,7 +231,7 @@ def stream_analysis(
     if request.user_id != access_context.user_id:
         raise HTTPException(
             status_code=403,
-            detail="request user_id does not match authenticated user",
+            detail="当前登录身份与请求用户不一致。",
         )
     return StreamingResponse(
         _encode_analysis_events(runner, request, access_context),
