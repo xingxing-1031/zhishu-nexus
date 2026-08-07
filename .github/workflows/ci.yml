@@ -16,6 +16,10 @@ jobs:
   python-tests:
     name: Python ${{ matrix.python-version }} tests
     runs-on: ubuntu-latest
+    env:
+      POSTGRES_DB: retail_analytics_ci
+      POSTGRES_USER: retail_user_ci
+      POSTGRES_PASSWORD: ci-only-password
     strategy:
       fail-fast: false
       matrix:
