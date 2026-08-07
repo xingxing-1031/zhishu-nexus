@@ -36,7 +36,7 @@ MODEL_TIMEOUT_SECONDS=120
 
 `MODEL_API_KEY` 只允许进入托管平台的服务器 Secret；不能进入前端响应、日志、镜像层、Compose 文件或 Git。`qwen-plus` 是部署示例，正式选择前仍需单独比较结构化输出稳定性、延迟、费用和数据出境边界。
 
-不能把开发机的 `127.0.0.1:11434` 直接写进公网服务。当前测试证明 OpenAI 兼容请求能进入结构化 Planner 和领域门禁，但在没有真实 API Key 时不能记录为远程模型端到端通过。
+不能把开发机的 `127.0.0.1:11434` 直接写进公网服务。2026-08-08 已使用服务器环境变量中的真实凭据完成远程 Qwen 端到端验收；这证明远程模型适配器可以进入既有安全工作流，但不等于公网部署或模型泛化评测已经完成。
 
 ## 本地发布前验收
 
@@ -67,8 +67,13 @@ Invoke-WebRequest http://127.0.0.1:8004/ready
 - 最新服务：http://127.0.0.1:8005
 - `/health`：`200 {"status":"ok"}`
 - `/ready`：`200 {"status":"ready"}`
-- 全量回归：`390 passed in 2.13s`
+- 全量回归：`399 passed in 2.26s`
 - `docker compose --profile demo config --quiet`：通过。
 - 本地 API 镜像构建：Dockerfile 已进入 CI；本机拉取 `python:3.12-slim` 时 Docker Hub IPv6 连接超时，不能记录为本地构建通过。
 - 模型协议改造后，本地 Ollama 向后兼容验收通过：最新服务 `http://127.0.0.1:8007` 使用 UTF-8 请求完成“最近30天各渠道销售额是多少？”，状态 `succeeded`、重试 `0`，请求编号 `REQ-W7-UTF8-a5418099-3f6e-4207-96b2-4fec870f847c`。
-- 远程 Qwen 目前只有 MockTransport 协议与结构化节点测试，没有真实 API Key，因此尚未完成远程端到端验收。
+- 远程 Qwen 真实端到端验收通过，服务为 `http://127.0.0.1:8008`：
+  - “你是谁？”返回中文助手身份说明，轨迹为 `scope -> respond`，未生成或执行 SQL；请求编号 `REQ-W7-REMOTE-IDENTITY-216a4ec5`。
+  - “删除订单数据”返回 `rejected/non_read_only`，轨迹为 `scope -> fail`，在访问数据库前拒绝；请求编号 `REQ-W7-REMOTE-WRITE-8ba8000f`。
+  - “最近30天各渠道销售额是多少？”返回 `succeeded`、重试 `0`，结果为淘宝 `9000.00` 元、京东 `800.00` 元；轨迹覆盖远程领域门禁、Planner、SQL 生成、两层校验、PostgreSQL 执行和远程总结；请求编号 `REQ-W7-REMOTE-SALES-4e15b5e1`。
+- 销售额请求中四个远程模型阶段均一次成功：领域门禁约 `2703 ms`、Planner 约 `2203 ms`、SQL 生成约 `2141 ms`、总结约 `2235 ms`。这些是单次本机验收记录，不代表 p50/p95 或费用结论。
+- 请求与执行记录中未出现 API Key；密钥仅由服务器进程从 `.env` 读取并进入 Bearer 请求头，`.env` 不进入 Git。
