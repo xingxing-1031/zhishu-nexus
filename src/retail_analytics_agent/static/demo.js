@@ -272,6 +272,23 @@ function localizeValue(value) {
   return String(value);
 }
 
+function localizeAnswer(answer) {
+  let localized = String(answer || "");
+  for (const [field, label] of Object.entries(FIELD_LABELS)) {
+    localized = localized.replace(
+      new RegExp(`\\b${field}\\b`, "gi"),
+      label,
+    );
+  }
+  for (const [value, label] of Object.entries(VALUE_LABELS)) {
+    localized = localized.replace(
+      new RegExp(`\\b${value}\\b`, "gi"),
+      label,
+    );
+  }
+  return localized;
+}
+
 function formatPlan(plan) {
   if (!plan) return "未生成分析计划";
   const metrics = (plan.metrics || []).map(localizeField).join("、") || "未指定";
@@ -358,11 +375,11 @@ function localizeErrorMessage(message) {
 function renderResult(result) {
   state.requestId = result.request_id;
   elements.requestId.textContent = state.requestId;
-  elements.answerText.textContent = result.answer;
+  elements.answerText.textContent = localizeAnswer(result.answer);
   elements.answerText.className = "answer-text";
   elements.resultStatus.textContent = result.status === "degraded" ? "已降级返回" : "分析成功";
   elements.degradation.hidden = !result.degradation_reason;
-  elements.degradation.textContent = result.degradation_reason || "";
+  elements.degradation.textContent = localizeErrorMessage(result.degradation_reason || "");
   elements.planOutput.textContent = formatPlan(result.plan);
   elements.retryCount.textContent = `重试 ${result.retry_count} 次`;
   renderEvidence(result.evidence_source_ids);
