@@ -22,3 +22,18 @@ def test_public_demo_environment_is_documented_and_wired_to_compose() -> None:
     ):
         assert name in env_example
         assert name in compose
+
+
+def test_managed_database_url_is_wired_only_to_api_service() -> None:
+    compose = (PROJECT_ROOT / "compose.yaml").read_text(encoding="utf-8")
+
+    assert "DATABASE_URL: ${DATABASE_URL:-}" in compose
+    postgres_block, api_block = compose.split("  api:", maxsplit=1)
+    assert "DATABASE_URL:" not in postgres_block
+    assert "DATABASE_URL: ${DATABASE_URL:-}" in api_block
+
+
+def test_image_contains_database_migrations_for_release_command() -> None:
+    dockerfile = (PROJECT_ROOT / "Dockerfile").read_text(encoding="utf-8")
+
+    assert "COPY db ./db" in dockerfile

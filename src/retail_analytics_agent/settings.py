@@ -8,9 +8,10 @@ from retail_analytics_agent.structured_chat import StructuredChatProtocol
 
 
 class Settings(BaseSettings):
-    postgres_db: str
-    postgres_user: str
-    postgres_password: SecretStr
+    database_url: SecretStr | None = None
+    postgres_db: str | None = None
+    postgres_user: str | None = None
+    postgres_password: SecretStr | None = None
     postgres_host: str = "127.0.0.1"
     postgres_port: int = 5432
     ollama_base_url: str = "http://127.0.0.1:11434"
@@ -42,6 +43,23 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_remote_model_configuration(self) -> "Settings":
+        has_database_url = bool(
+            self.database_url
+            and self.database_url.get_secret_value().strip()
+        )
+        has_split_database_config = all(
+            (
+                self.postgres_db,
+                self.postgres_user,
+                self.postgres_password
+                and self.postgres_password.get_secret_value().strip(),
+            )
+        )
+        if not has_database_url and not has_split_database_config:
+            raise ValueError(
+                "configure DATABASE_URL or complete POSTGRES_DB, "
+                "POSTGRES_USER and POSTGRES_PASSWORD"
+            )
         if (
             self.public_demo_mode
             and self.local_access_role is not AccessRole.ANALYST
@@ -97,6 +115,14 @@ class Settings(BaseSettings):
 
     @property
     def postgres_connection_kwargs(self) -> dict[str, str | int]:
+        if self.database_url and self.database_url.get_secret_value().strip():
+            return {"conninfo": self.database_url.get_secret_value()}
+        if (
+            self.postgres_db is None
+            or self.postgres_user is None
+            or self.postgres_password is None
+        ):
+            raise ValueError("database connection configuration is incomplete")
         return {
             "dbname": self.postgres_db,
             "user": self.postgres_user,

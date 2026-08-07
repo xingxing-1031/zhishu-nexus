@@ -35,6 +35,27 @@ def test_settings_builds_postgres_connection_kwargs() -> None:
     assert settings.public_demo_max_rows == 20
 
 
+def test_settings_prefers_managed_database_url_without_exposing_secret() -> None:
+    settings = Settings(
+        database_url=SecretStr(
+            "postgresql://cloud_user:cloud_password@db.example:5432/retail"
+        ),
+        _env_file=None,
+    )
+
+    assert settings.postgres_connection_kwargs == {
+        "conninfo": (
+            "postgresql://cloud_user:cloud_password@db.example:5432/retail"
+        )
+    }
+    assert "cloud_password" not in repr(settings)
+
+
+def test_settings_rejects_incomplete_database_configuration() -> None:
+    with pytest.raises(ValueError, match="DATABASE_URL or complete"):
+        Settings(postgres_db="only_db", _env_file=None)
+
+
 def test_settings_builds_remote_model_configuration() -> None:
     settings = Settings(
         postgres_db="test_db",
