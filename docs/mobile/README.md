@@ -39,7 +39,7 @@
 | 20 | [故障注入与完整执行 Trace](20-fault-injection-execution-trace.md) | 20 分钟 | W5-4 已完成 |
 | 21 | [独立业务评测集](21-independent-business-evaluation.md) | 20 分钟 | W6-1 已完成 |
 | 22 | [单次运行与阶段评分](22-stage-scoring.md) | 20 分钟 | W6-2 已完成 |
-| 23 | [Docker Compose、pytest 与 GitHub Actions](23-docker-compose-ci.md) | 20 分钟 | W6-3 工程与口述完成，远端 CI 待确认 |
+| 23 | [Docker Compose、pytest 与 GitHub Actions](23-docker-compose-ci.md) | 20 分钟 | W6-3 已完成 |
 
 ## 复习节奏
 

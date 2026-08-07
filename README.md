@@ -4,10 +4,10 @@
 
 ## 当前状态
 
-- 当前计划任务：`W6-3` Docker Compose、pytest 和 GitHub Actions 交付
-- 总体进度：`22 / 32` 个项目里程碑，W6-2 已完成
+- 当前计划任务：`W6-4` README、架构图、评测报告和 v0.1 演示
+- 总体进度：`23 / 32` 个项目里程碑，W6-3 已完成
 - 已实现：真实 `qwen3:4b` 端到端分析、权限与人工审批、有限重试、请求幂等、可信结果降级、确定性故障注入和结构化执行 Trace
-- 自动化验证：Python 回归测试 `358 passed`；W6-2 完成 40 条 development × 3 个检索方案的 120 次受控评测，核心阶段通过率均为 `100%`
+- 自动化验证：Python 回归测试 `358 passed`；W6-2 完成 120 次受控评测；W6-3 本地空卷 pgvector smoke 和 GitHub Actions Python 3.11/3.12、PostgreSQL smoke 均通过
 - 当前边界：仍是本地身份和小规模种子数据；尚未完成正式登录、生产部署、前端图表渲染和 frozen holdout 最终验收
 
 ## 手机学习
@@ -160,9 +160,9 @@ retail-analytics-agent/
 
 ## 下一阶段
 
-1. 完成 Docker Compose、pytest 和 GitHub Actions 交付链路。
-2. 完善 README、架构图和 v0.1 演示。
-3. 评估正式登录、生产部署和前端图表渲染方案。
+1. 完善 README、架构图、评测报告和 v0.1 演示。
+2. 评估正式登录、生产部署和前端图表渲染方案。
+3. 根据真实演示反馈整理项目答辩材料。
 
 ## 完成定义
 
