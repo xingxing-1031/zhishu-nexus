@@ -13,7 +13,7 @@
   <body>
     <header class="app-header">
       <div>
-        <p class="product-mark">RETAIL ANALYTICS / V0.1</p>
+        <p class="product-mark">零售运营分析 / 演示版 0.2</p>
         <h1>零售运营分析台</h1>
       </div>
       <div class="session-status" aria-live="polite">
@@ -85,7 +85,7 @@
         </section>
 
         <div class="request-meta">
-          <span>REQUEST ID</span>
+          <span>请求编号</span>
           <code id="request-id">尚未创建</code>
         </div>
       </aside>
@@ -112,7 +112,7 @@
               </div>
             </div>
             <button type="button" class="secondary-action" id="trace-button" disabled>
-              查看 Trace
+              查看执行记录
             </button>
           </div>
           <p class="answer-text empty" id="answer-text">运行分析后，这里显示可信结果或明确的拒绝原因。</p>
@@ -151,7 +151,7 @@
           <section aria-labelledby="evidence-title">
             <div class="band-title">
               <h2 id="evidence-title">证据来源</h2>
-              <span id="retry-count">重试 0 次</span>
+          <span id="retry-count">重试 0 次</span>
             </div>
             <ul class="evidence-list" id="evidence-list">
               <li>尚无证据</li>
@@ -161,7 +161,7 @@
 
         <section class="trace-band" id="trace-band" hidden aria-labelledby="trace-title">
           <div class="band-title">
-            <h2 id="trace-title">执行 Trace</h2>
+            <h2 id="trace-title">执行记录</h2>
             <button type="button" class="secondary-action" id="close-trace">收起</button>
           </div>
           <div class="trace-list" id="trace-list"></div>

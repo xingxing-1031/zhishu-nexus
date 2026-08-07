@@ -35,6 +35,7 @@ from retail_analytics_agent.models import (
     RefundStatusSummary,
 )
 from retail_analytics_agent.model_adapters import ModelInvocationError
+from retail_analytics_agent.public_errors import public_error_message
 from retail_analytics_agent.queries import (
     get_channel_sales_summary,
     get_order_status_summary,
@@ -45,7 +46,7 @@ from retail_analytics_agent.tracing import ExecutionTraceResponse
 
 
 app = FastAPI(
-    title="Retail Analytics Agent",
+    title="零售运营可审计分析助手",
     version="0.1.0",
 )
 _STATIC_DIR = Path(__file__).with_name("static")
@@ -86,7 +87,7 @@ def run_analysis(
     if request.user_id != access_context.user_id:
         raise HTTPException(
             status_code=403,
-            detail="request user_id does not match authenticated user",
+            detail="当前登录身份与请求用户不一致。",
         )
     try:
         result = runner.run(request, access_context)
@@ -97,13 +98,13 @@ def run_analysis(
             response.status_code = 202
         return result
     except AnalysisRequestConflictError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+        raise HTTPException(status_code=409, detail=public_error_message(exc)) from exc
     except ModelInvocationError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+        raise HTTPException(status_code=502, detail=public_error_message(exc)) from exc
     except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+        raise HTTPException(status_code=422, detail=public_error_message(exc)) from exc
     except AnalysisRunError as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        raise HTTPException(status_code=500, detail=public_error_message(exc)) from exc
 
 
 @app.post(
@@ -119,7 +120,7 @@ def resolve_analysis_approval(
     if access_context.role is not AccessRole.ADMIN:
         raise HTTPException(
             status_code=403,
-            detail="only an admin can resolve approvals",
+            detail="只有管理员可以处理人工审批。",
         )
     try:
         return runner.resume_approval(
@@ -128,9 +129,9 @@ def resolve_analysis_approval(
             access_context,
         )
     except PermissionError as exc:
-        raise HTTPException(status_code=403, detail=str(exc)) from exc
+        raise HTTPException(status_code=403, detail="当前身份无权处理这个请求。") from exc
     except ValueError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+        raise HTTPException(status_code=409, detail=public_error_message(exc)) from exc
 
 
 @app.get(
@@ -145,9 +146,9 @@ def read_analysis_status(
     try:
         return runner.get_status(request_id, access_context)
     except PermissionError as exc:
-        raise HTTPException(status_code=403, detail=str(exc)) from exc
+        raise HTTPException(status_code=403, detail="当前身份无权查看这个请求。") from exc
     except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+        raise HTTPException(status_code=404, detail="没有找到对应的分析请求。") from exc
 
 
 @app.get(
@@ -162,9 +163,9 @@ def read_analysis_trace(
     try:
         return runner.get_trace(request_id, access_context)
     except PermissionError as exc:
-        raise HTTPException(status_code=403, detail=str(exc)) from exc
+        raise HTTPException(status_code=403, detail="当前身份无权查看这个执行记录。") from exc
     except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+        raise HTTPException(status_code=404, detail="没有找到对应的执行记录。") from exc
 
 
 _STREAM_DONE = object()
@@ -200,7 +201,7 @@ async def _encode_analysis_events(
         if isinstance(item, BaseException):
             event = AnalysisStreamEvent(
                 event="error",
-                message=str(item),
+                message=public_error_message(item),
             )
         else:
             event = item

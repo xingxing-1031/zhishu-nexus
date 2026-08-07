@@ -1,12 +1,78 @@
 const STAGES = [
   ["plan", "计划"],
   ["retrieve", "检索"],
-  ["generate_sql", "生成 SQL"],
+  ["generate_sql", "生成查询"],
   ["validate_sql", "安全校验"],
   ["validate_business_sql", "业务校验"],
   ["execute_sql", "执行"],
   ["summarize", "总结"],
 ];
+
+const ROLE_LABELS = {
+  analyst: "分析员",
+  admin: "管理员",
+};
+
+const FIELD_LABELS = {
+  sales_amount: "销售额",
+  order_count: "订单数",
+  units_sold: "销售件数",
+  refund_amount: "退款金额",
+  refund_count: "退款笔数",
+  average_order_value: "平均订单金额",
+  channel: "销售渠道",
+  product: "商品",
+  category: "品类",
+  order_status: "订单状态",
+  refund_status: "退款状态",
+  day: "日期",
+  product_id: "商品编号",
+};
+
+const VALUE_LABELS = {
+  pending: "待处理",
+  paid: "已支付",
+  shipped: "已发货",
+  completed: "已完成",
+  cancelled: "已取消",
+  requested: "已申请",
+  approved: "已批准",
+  rejected: "已拒绝",
+};
+
+const TRACE_COMPONENT_LABELS = {
+  "node.scope": "请求范围检查",
+  "node.respond": "助手答复",
+  "node.plan": "分析计划",
+  "node.retrieve": "业务证据检索",
+  "node.generate_sql": "查询生成",
+  "node.validate_sql": "查询安全校验",
+  "node.validate_business_sql": "业务一致性校验",
+  "node.assess_risk": "风险评估",
+  "node.request_approval": "人工审批",
+  "node.execute_sql": "数据查询",
+  "node.summarize": "结果总结",
+  "node.fail": "失败处理",
+  "model.plan": "计划模型",
+  "model.generate_sql": "查询生成模型",
+  "model.summarize": "结果总结模型",
+};
+
+const TRACE_STATUS_LABELS = {
+  started: "已开始",
+  succeeded: "已完成",
+  failed: "失败",
+  retry_scheduled: "等待重试",
+  rejected: "已拒绝",
+  pending: "等待处理",
+  degraded: "已降级",
+};
+
+const CHART_TYPE_LABELS = {
+  bar: "柱状图",
+  line: "趋势图",
+  kpi: "指标卡",
+};
 
 const stageAliases = {
   assess_risk: "validate_business_sql",
@@ -68,9 +134,9 @@ function initializeStages() {
 
 function makeRequestId() {
   if (globalThis.crypto?.randomUUID) {
-    return `demo-${crypto.randomUUID()}`;
+    return `请求-${crypto.randomUUID()}`;
   }
-  return `demo-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  return `请求-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
 async function loadSession() {
@@ -85,13 +151,13 @@ async function loadSession() {
     state.session = await sessionResponse.json();
     elements.serverDot.className = "status-dot online";
     elements.serverStatus.textContent = "服务在线";
-    elements.sessionRole.textContent = state.session.role.toUpperCase();
-    elements.sessionUser.textContent = state.session.user_id;
+    elements.sessionRole.textContent = ROLE_LABELS[state.session.role] || "当前用户";
+    elements.sessionUser.textContent = "已认证";
   } catch (error) {
     elements.serverDot.className = "status-dot offline";
     elements.serverStatus.textContent = "服务离线";
     elements.sessionRole.textContent = "--";
-    elements.sessionUser.textContent = error.message;
+    elements.sessionUser.textContent = "无法读取登录状态";
     elements.runButton.disabled = true;
   }
 }
@@ -196,6 +262,99 @@ function handleStreamEvent(event) {
   }
 }
 
+function localizeField(field) {
+  return FIELD_LABELS[field] || "其他数据";
+}
+
+function localizeValue(value) {
+  if (Array.isArray(value)) return value.map(localizeValue).join("、");
+  if (typeof value === "string") return VALUE_LABELS[value] || value;
+  return String(value);
+}
+
+function formatPlan(plan) {
+  if (!plan) return "未生成分析计划";
+  const metrics = (plan.metrics || []).map(localizeField).join("、") || "未指定";
+  const dimensions = (plan.dimensions || []).map(localizeField).join("、") || "不分组";
+  const filters = (plan.filters || []).map((item) => {
+    const operator = item.operator === "in" ? "属于" : "等于";
+    return `${localizeField(item.field)}${operator}${localizeValue(item.value)}`;
+  }).join("；") || "无额外筛选";
+  const timeRange = plan.time_range?.days
+    ? `最近 ${plan.time_range.days} 天`
+    : "未限定";
+  const sort = (plan.sort || []).map((item) => {
+    const direction = item.direction === "ascending" ? "从低到高" : "从高到低";
+    return `${localizeField(item.field)}（${direction}）`;
+  }).join("；") || "不额外排序";
+  return [
+    `分析目标：${plan.analysis_goal}`,
+    `计算指标：${metrics}`,
+    `分组维度：${dimensions}`,
+    `筛选条件：${filters}`,
+    `时间范围：${timeRange}`,
+    `排序方式：${sort}`,
+    `返回上限：${plan.limit} 行`,
+  ].join("\n");
+}
+
+function localizeEvidence(sourceId) {
+  const metricMatch = /^metric\.([a-z_]+)(?:\.v(\d+))?$/i.exec(sourceId);
+  if (metricMatch) {
+    const version = metricMatch[2] ? `（第 ${metricMatch[2]} 版）` : "";
+    return `指标口径：${localizeField(metricMatch[1])}${version}`;
+  }
+  const tableLabels = {
+    orders: "订单表",
+    products: "商品表",
+    order_items: "订单明细表",
+    refunds: "退款表",
+  };
+  const joinMatch = /^schema\.join\.([a-z_]+)\.([a-z_]+)$/i.exec(sourceId);
+  if (joinMatch) {
+    const left = tableLabels[joinMatch[1]] || "业务数据表";
+    const right = tableLabels[joinMatch[2]] || "业务数据表";
+    return `关联规则：${left}与${right}`;
+  }
+  const tableMatch = /^schema\.([a-z_]+)$/i.exec(sourceId);
+  if (tableMatch) return `数据来源：${tableLabels[tableMatch[1]] || "业务数据表"}`;
+  return "业务规则证据";
+}
+
+function localizeErrorMessage(message) {
+  const text = String(message || "").trim();
+  const normalized = text.toLowerCase();
+  if (normalized.includes("does not support dimensions")) {
+    return "当前指标不支持所选分组维度，请调整指标或分组方式。";
+  }
+  if (normalized.includes("already bound") || normalized.includes("different analysis input")) {
+    return "这个请求编号已经对应其他问题，请重新发起分析。";
+  }
+  if (normalized.includes("timeout") || normalized.includes("timed out") || normalized.includes("deadline")) {
+    return "分析服务响应超时，请稍后重试。";
+  }
+  if (normalized.includes("ollama") || normalized.includes("model invocation")) {
+    return "分析模型暂时不可用，请稍后重试。";
+  }
+  if (normalized.includes("query reads sensitive columns")) {
+    return "查询包含敏感字段，需要管理员审批后才能执行。";
+  }
+  if (normalized.includes("result limit") || normalized.includes("approval threshold")) {
+    return "本次查询返回范围较大，需要管理员审批后才能执行。";
+  }
+  if (normalized.includes("database") || normalized.includes("postgres") || normalized.includes("connection")) {
+    return "数据服务暂时不可用，请稍后重试。";
+  }
+  if (normalized.includes("sql") || normalized.includes("unsafe") || normalized.includes("validation failed")) {
+    return "生成的查询未通过安全或业务校验，系统已停止执行。";
+  }
+  if (normalized.includes("http") || normalized.includes("request failed")) {
+    return "请求未能完成，请稍后重试。";
+  }
+  if (/[一-鿿]/.test(text) && !/[A-Za-z]{3,}/.test(text)) return text;
+  return "内部处理未能完成，请调整问题后重试。";
+}
+
 function renderResult(result) {
   state.requestId = result.request_id;
   elements.requestId.textContent = state.requestId;
@@ -204,7 +363,7 @@ function renderResult(result) {
   elements.resultStatus.textContent = result.status === "degraded" ? "已降级返回" : "分析成功";
   elements.degradation.hidden = !result.degradation_reason;
   elements.degradation.textContent = result.degradation_reason || "";
-  elements.planOutput.textContent = JSON.stringify(result.plan, null, 2);
+  elements.planOutput.textContent = formatPlan(result.plan);
   elements.retryCount.textContent = `重试 ${result.retry_count} 次`;
   renderEvidence(result.evidence_source_ids);
   renderTable(result.rows, result.plan);
@@ -217,7 +376,7 @@ function renderEvidence(sourceIds) {
   elements.evidenceList.replaceChildren(
     ...(sourceIds.length ? sourceIds : ["无检索证据"]).map((sourceId) => {
       const item = document.createElement("li");
-      item.textContent = sourceId;
+      item.textContent = localizeEvidence(sourceId);
       return item;
     }),
   );
@@ -241,7 +400,7 @@ function renderTable(rows, plan = null) {
   const head = table.createTHead().insertRow();
   columns.forEach((column) => {
     const cell = document.createElement("th");
-    cell.textContent = column;
+    cell.textContent = localizeField(column);
     head.append(cell);
   });
   const body = table.createTBody();
@@ -258,7 +417,7 @@ function renderTable(rows, plan = null) {
 function formatCell(value) {
   if (value === null || value === undefined) return "--";
   if (typeof value === "object") return JSON.stringify(value);
-  return String(value);
+  return localizeValue(value);
 }
 
 function numericValue(value) {
@@ -272,14 +431,14 @@ function renderChart(spec, rows) {
     elements.chartStage.innerHTML = '<p class="empty-state">当前结果没有图表规格</p>';
     return;
   }
-  elements.chartKind.textContent = spec.chart_type.toUpperCase();
+  elements.chartKind.textContent = CHART_TYPE_LABELS[spec.chart_type] || "数据图表";
   if (spec.chart_type === "kpi") {
     const field = spec.y_fields[0];
     const value = document.createElement("div");
     value.className = "kpi-value";
     value.textContent = formatCell(rows[0][field]);
     const label = document.createElement("span");
-    label.textContent = `${spec.title} / ${field}`;
+    label.textContent = `${spec.title} / ${localizeField(field)}`;
     value.append(label);
     elements.chartStage.replaceChildren(value);
     return;
@@ -393,7 +552,11 @@ function renderApproval(approval) {
   elements.chartStage.innerHTML = '<p class="empty-state">审批前不生成数据图表</p>';
   elements.tableStage.innerHTML = '<p class="empty-state">审批前不访问数据库</p>';
   elements.rowCount.textContent = "0 行";
-  elements.approvalReasons.textContent = approval.reasons.join("；");
+  elements.chartKind.textContent = "--";
+  elements.planOutput.textContent = "等待审批，不展示分析计划";
+  elements.evidenceList.innerHTML = "<li>审批前不展示业务证据</li>";
+  elements.retryCount.textContent = "重试 0 次";
+  elements.approvalReasons.textContent = approval.reasons.map(localizeErrorMessage).join("；");
   elements.approvalSql.textContent = approval.sql;
   elements.approvalPane.hidden = false;
   const isAdmin = state.session?.role === "admin";
@@ -430,7 +593,7 @@ function renderAssistant(assistant) {
     : "助手答复";
   elements.answerText.textContent = assistant.answer;
   elements.answerText.className = "answer-text";
-  elements.workflowMessage.textContent = "请求未进入 SQL 分析流程";
+  elements.workflowMessage.textContent = "请求未进入数据查询流程";
   elements.chartKind.textContent = "--";
   elements.chartStage.innerHTML = '<p class="empty-state">本次答复不需要数据图表</p>';
   elements.tableStage.innerHTML = '<p class="empty-state">本次答复未访问数据库</p>';
@@ -444,13 +607,17 @@ function renderAssistant(assistant) {
 
 function renderError(message) {
   elements.resultStatus.textContent = "分析失败";
-  elements.answerText.textContent = message;
+  elements.answerText.textContent = localizeErrorMessage(message);
   elements.answerText.className = "answer-text";
   elements.workflowMessage.textContent = "请求未能完成";
   elements.chartKind.textContent = "--";
   elements.chartStage.innerHTML = '<p class="empty-state">分析失败，未生成图表</p>';
   elements.tableStage.innerHTML = '<p class="empty-state">分析失败，未返回可信数据</p>';
   elements.rowCount.textContent = "0 行";
+  elements.planOutput.textContent = "未生成分析计划";
+  elements.evidenceList.innerHTML = "<li>未检索业务证据</li>";
+  elements.retryCount.textContent = "重试 0 次";
+  elements.approvalPane.hidden = true;
   elements.traceButton.disabled = !state.requestId;
   setRunning(false);
 }
@@ -488,12 +655,12 @@ async function loadTrace() {
   try {
     const response = await fetch(`/analysis/${encodeURIComponent(state.requestId)}/trace`);
     const body = await response.json();
-    if (!response.ok) throw new Error(body.detail || "Trace 读取失败");
+    if (!response.ok) throw new Error(body.detail || "执行记录读取失败");
     renderTrace(body.events);
     elements.traceBand.hidden = false;
     elements.traceBand.scrollIntoView({ behavior: "smooth", block: "start" });
   } catch (error) {
-    elements.traceList.textContent = error.message;
+    elements.traceList.textContent = localizeErrorMessage(error.message);
     elements.traceBand.hidden = false;
   } finally {
     elements.traceButton.disabled = false;
@@ -502,7 +669,7 @@ async function loadTrace() {
 
 function renderTrace(events) {
   if (!events.length) {
-    elements.traceList.textContent = "当前请求没有 Trace 事件。";
+    elements.traceList.textContent = "当前请求没有执行记录。";
     return;
   }
   elements.traceList.replaceChildren(
@@ -510,14 +677,16 @@ function renderTrace(events) {
       const row = document.createElement("div");
       row.className = "trace-event";
       const component = document.createElement("code");
-      component.textContent = event.component;
+      component.textContent = TRACE_COMPONENT_LABELS[event.component] || "内部处理步骤";
       const status = document.createElement("span");
       status.className = `trace-status ${event.status}`;
-      status.textContent = event.status;
+      status.textContent = TRACE_STATUS_LABELS[event.status] || "处理中";
       const duration = document.createElement("span");
-      duration.textContent = event.duration_ms === null ? "--" : `${event.duration_ms} ms`;
+      duration.textContent = event.duration_ms === null ? "--" : `${event.duration_ms} 毫秒`;
       const detail = document.createElement("span");
-      detail.textContent = event.error_message || `attempt ${event.attempt}`;
+      detail.textContent = event.error_message
+        ? localizeErrorMessage(event.error_message)
+        : `第 ${event.attempt} 次处理`;
       row.append(component, status, duration, detail);
       return row;
     }),

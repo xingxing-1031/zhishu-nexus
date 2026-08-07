@@ -16,6 +16,16 @@ def test_identity_and_greeting_requests_use_assistant_route(query: str) -> None:
     assert "零售运营分析助手" in decision.message
 
 
+@pytest.mark.parametrize("query", ["好吧", "好的。", "懂了", "谢谢！"])
+def test_acknowledgements_do_not_enter_analysis(query: str) -> None:
+    decision = classify_preflight_request(query)
+
+    assert decision is not None
+    assert decision.route is RequestRoute.ASSISTANT
+    assert decision.reason_code == "assistant_acknowledgement"
+    assert "继续提出零售运营分析问题" in decision.message
+
+
 @pytest.mark.parametrize(
     "query",
     ["哪个渠道最好？", "经营情况怎么样", "帮我分析一下"],

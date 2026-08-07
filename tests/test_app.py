@@ -49,6 +49,11 @@ def test_demo_homepage_and_static_assets_are_available() -> None:
     assert page.status_code == 200
     assert page.headers["content-type"].startswith("text/html")
     assert "零售运营分析台" in page.text
+    assert "零售运营分析 / 演示版 0.2" in page.text
+    assert "查看执行记录" in page.text
+    assert "执行记录" in page.text
+    assert "RETAIL ANALYTICS" not in page.text
+    assert ">执行 Trace<" not in page.text
     assert stylesheet.status_code == 200
     assert "--accent" in stylesheet.text
     assert script.status_code == 200
@@ -191,7 +196,7 @@ def test_run_analysis_returns_502_when_model_is_unavailable() -> None:
         app.dependency_overrides.clear()
 
     assert response.status_code == 502
-    assert response.json() == {"detail": "Ollama unavailable"}
+    assert response.json() == {"detail": "分析模型暂时不可用，请稍后重试。"}
 
 
 def test_run_analysis_returns_202_for_duplicate_still_running() -> None:
@@ -240,7 +245,9 @@ def test_run_analysis_returns_409_for_reused_request_id() -> None:
         app.dependency_overrides.clear()
 
     assert response.status_code == 409
-    assert "different analysis input" in response.json()["detail"]
+    assert response.json()["detail"] == (
+        "这个请求编号已经对应其他问题，请重新发起分析。"
+    )
 
 
 def test_stream_analysis_returns_sse_status_and_result_events() -> None:
@@ -396,9 +403,7 @@ def test_run_analysis_rejects_mismatched_trusted_identity() -> None:
         app.dependency_overrides.clear()
 
     assert response.status_code == 403
-    assert response.json() == {
-        "detail": "request user_id does not match authenticated user"
-    }
+    assert response.json() == {"detail": "当前登录身份与请求用户不一致。"}
     runner.run.assert_not_called()
 
 

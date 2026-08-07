@@ -34,6 +34,18 @@ _IDENTITY_QUERIES = frozenset(
     }
 )
 
+_ACKNOWLEDGEMENT_QUERIES = frozenset(
+    {
+        "好吧",
+        "好的",
+        "知道了",
+        "明白了",
+        "懂了",
+        "谢谢",
+        "感谢",
+    }
+)
+
 _AMBIGUOUS_QUERIES = frozenset(
     {
         "哪个渠道最好",
@@ -75,6 +87,12 @@ def classify_preflight_request(query: str) -> PreflightDecision | None:
             route=RequestRoute.ASSISTANT,
             reason_code="assistant_identity",
             message=_CAPABILITY_MESSAGE,
+        )
+    if normalized in _ACKNOWLEDGEMENT_QUERIES:
+        return PreflightDecision(
+            route=RequestRoute.ASSISTANT,
+            reason_code="assistant_acknowledgement",
+            message="好的，你可以继续提出零售运营分析问题，我会先确认口径，再查询数据。",
         )
     if normalized in _AMBIGUOUS_QUERIES:
         return PreflightDecision(
