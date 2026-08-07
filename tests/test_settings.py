@@ -51,7 +51,14 @@ def test_settings_prefers_managed_database_url_without_exposing_secret() -> None
     assert "cloud_password" not in repr(settings)
 
 
-def test_settings_rejects_incomplete_database_configuration() -> None:
+def test_settings_rejects_incomplete_database_configuration(monkeypatch) -> None:
+    for name in (
+        "DATABASE_URL",
+        "POSTGRES_DB",
+        "POSTGRES_USER",
+        "POSTGRES_PASSWORD",
+    ):
+        monkeypatch.delenv(name, raising=False)
     with pytest.raises(ValueError, match="DATABASE_URL or complete"):
         Settings(postgres_db="only_db", _env_file=None)
 
