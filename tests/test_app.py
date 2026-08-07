@@ -21,7 +21,10 @@ from retail_analytics_agent.models import (
 from retail_analytics_agent.tracing import (
     ExecutionTraceEvent,
     ExecutionTraceResponse,
+    InMemoryExecutionTraceStore,
     TraceStatus,
+    execution_trace_context,
+    record_execution_trace,
 )
 
 
@@ -34,6 +37,35 @@ def _access_context() -> AccessContext:
 
 def _admin_access_context() -> AccessContext:
     return AccessContext(user_id="ADMIN-001", role=AccessRole.ADMIN)
+
+
+def test_demo_homepage_and_static_assets_are_available() -> None:
+    page = client.get("/")
+    stylesheet = client.get("/static/demo.css")
+    script = client.get("/static/demo.js")
+
+    assert page.status_code == 200
+    assert page.headers["content-type"].startswith("text/html")
+    assert "零售运营分析台" in page.text
+    assert stylesheet.status_code == 200
+    assert "--accent" in stylesheet.text
+    assert script.status_code == 200
+    assert 'fetch("/analysis/stream"' in script.text
+
+
+def test_session_returns_server_configured_access_context() -> None:
+    app.dependency_overrides[get_access_context] = _access_context
+
+    try:
+        response = client.get("/session")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "user_id": "USER-001",
+        "role": "analyst",
+    }
 
 
 def test_health_check() -> None:
@@ -267,6 +299,44 @@ def test_stream_analysis_returns_sse_status_and_result_events() -> None:
     assert "京东渠道销售额为 11300.00 元" in response.text
     runner.stream.assert_called_once()
     assert runner.stream.call_args.args[1] == _access_context()
+
+
+def test_stream_analysis_keeps_contextvars_in_one_worker_context() -> None:
+    trace_store = InMemoryExecutionTraceStore()
+    runner = Mock()
+
+    def stream_with_context():
+        with execution_trace_context("REQ-STREAM-CONTEXT", trace_store):
+            record_execution_trace("model.plan", TraceStatus.STARTED)
+            yield AnalysisStreamEvent(
+                event="status",
+                node="plan",
+                message="正在理解分析问题",
+            )
+            record_execution_trace("model.plan", TraceStatus.SUCCEEDED)
+
+    runner.stream.side_effect = lambda *_: stream_with_context()
+    app.dependency_overrides[get_analysis_runner] = lambda: runner
+    app.dependency_overrides[get_access_context] = _access_context
+
+    try:
+        response = client.post(
+            "/analysis/stream",
+            json={
+                "request_id": "REQ-STREAM-CONTEXT",
+                "user_id": "USER-001",
+                "question": "查询销售额",
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert "created in a different Context" not in response.text
+    assert "event: status" in response.text
+    assert [event.status for event in trace_store.list_for_request(
+        "REQ-STREAM-CONTEXT"
+    )] == [TraceStatus.STARTED, TraceStatus.SUCCEEDED]
 
 
 def test_run_analysis_rejects_mismatched_trusted_identity() -> None:

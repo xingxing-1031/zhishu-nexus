@@ -4,11 +4,11 @@
 
 ## 当前状态
 
-- 当前计划任务：`W6-4` README、架构图、评测报告和 v0.1 演示
+- 当前计划任务：`W6-4` 工程交付已完成，等待口述验收
 - 总体进度：`23 / 32` 个项目里程碑，W6-3 已完成
 - 已实现：真实 `qwen3:4b` 端到端分析、权限与人工审批、有限重试、请求幂等、可信结果降级、确定性故障注入和结构化执行 Trace
-- 自动化验证：Python 回归测试 `358 passed`；W6-2 完成 120 次受控评测；W6-3 本地空卷 pgvector smoke 和 GitHub Actions Python 3.11/3.12、PostgreSQL smoke 均通过
-- 当前边界：仍是本地身份和小规模种子数据；尚未完成正式登录、生产部署、前端图表渲染和 frozen holdout 最终验收
+- 自动化验证：Python 回归测试 `361 passed`；W6-2 完成 120 次受控评测；W6-3 本地空卷 pgvector smoke 和 GitHub Actions Python 3.11/3.12、PostgreSQL smoke 均通过
+- 当前边界：仍是本地可信身份和 10 条演示订单；尚未完成正式登录、生产部署和 frozen holdout 最终验收
 
 ## 手机学习
 
@@ -58,7 +58,7 @@
 - 使用七个可注入节点组织计划、检索、SQL 生成、校验、执行、总结和失败处理。
 - 使用普通边固定主链路，使用条件边处理 SQL 重新生成、执行成功和执行失败。
 - 将零行查询结果视为成功，仅在 `execution_error` 存在时进入失败节点。
-- 使用固定输出的假节点验证图结构；当前不宣称已经接入大模型或真实工具节点。
+- 已将真实 Ollama 规划、目录检索、SQL 生成、双重校验、PostgreSQL 执行和总结工具接入同一工作流。
 
 ### 容错与可观测性
 
@@ -84,7 +84,16 @@
 - 使用 `SchemaCatalog` 记录 4 张业务表的字段、主键和 3 条允许 JOIN 关系。
 - 为指标、表和关联生成稳定 `source_id`，支持后续检索证据和审计回溯。
 - 使用固定种子数据在真实 PostgreSQL 中验证销售额、订单数、销售件数、退款金额、退款笔数和平均订单金额。
-- 当前目录已接入 LangGraph 检索节点，并能根据结构化分析计划返回最小充分证据；尚未实现关键词、向量或混合检索。
+- 目录已接入 LangGraph 检索节点，并实现关键词、bge-m3/pgvector 向量召回、RRF 混合融合、域判断和可选 LLM Reranker。
+
+### 业务评测与持续集成
+
+- 建立 40 条 development 与 20 条 frozen holdout，按 plan、evidence、SQL、outcome、rows、chart 和 answer 分阶段评分。
+- 在固定模型、数据库快照、时间和策略下运行 40 条 development × 3 个方案，共保存 120 条真实工作流原始记录。
+- 三方案本轮六个核心阶段均为 `100%`，平均延迟约为 `3.835s / 4.101s / 4.877s`；该结果不等于通用 Agent 准确率。
+- GitHub Actions 在 Python 3.11/3.12 运行完整 pytest，并从空数据卷验证 pgvector、迁移和种子。
+
+详细实验条件、结果和边界见 [W6-2 受控评测报告](docs/EVALUATION_REPORT.md)。
 
 ## 项目范围
 
@@ -103,9 +112,17 @@
 
 当前仓库已实现自然语言到安全 SQL、真实查询、结果解释、权限控制和可恢复审批链路。范围与非目标见 [PROJECT_SCOPE.md](docs/PROJECT_SCOPE.md)，后续工程任务见 [UPGRADE_BACKLOG.md](docs/UPGRADE_BACKLOG.md)。
 
+完整组件和安全边界见 [系统架构](docs/ARCHITECTURE.md)。
+
+## v0.1 演示
+
+演示界面与 FastAPI 同源，不需要单独安装前端依赖。它展示 SSE 节点进度、结构化计划、证据 source ID、真实查询 rows、后端 `ChartSpec` 图表和结构化 Trace；高风险请求会停在人工审批状态。
+
+![v0.1 零售运营分析台](docs/assets/v0.1-demo.png)
+
 ## 本地运行
 
-环境要求：Python 3.12。
+环境要求：Python 3.11 或 3.12、Docker Desktop、Ollama 与本地 `qwen3:4b`。
 
 ```powershell
 python -m venv .venv
@@ -129,6 +146,15 @@ docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U retail_user -d retail
 
 GitHub Actions 使用同一份 Compose 配置启动临时 pgvector 数据库，并执行 `db/verification/verify_delivery.sql`；Python 3.11 和 3.12 矩阵分别执行完整 pytest。工作流文件见 [.github/workflows/ci.yml](.github/workflows/ci.yml)。
 
+启动模型和 FastAPI 演示：
+
+```powershell
+ollama serve
+.\.venv\Scripts\python.exe -m uvicorn retail_analytics_agent.app:app --reload
+```
+
+浏览器打开 `http://127.0.0.1:8000/`。演示使用 `.env` 中由服务器配置的 `LOCAL_ACCESS_USER_ID` 和 `LOCAL_ACCESS_ROLE`，客户端不能自行把 analyst 改成 admin。API 文档位于 `http://127.0.0.1:8000/docs`。
+
 ## 目录结构
 
 ```text
@@ -148,10 +174,17 @@ retail-analytics-agent/
 |   |-- test_smoke.py
 |   `-- test_workflow.py
 |-- docs/
+|   |-- ARCHITECTURE.md
+|   |-- EVALUATION_REPORT.md
+|   |-- assets/
+|   |-- mobile/
 |   |-- sql/
 |   |-- ER_MODEL.md
 |   |-- PROJECT_SCOPE.md
 |   `-- UPGRADE_BACKLOG.md
+|-- evaluation/
+|   |-- reports/
+|   `-- business_development.json
 |-- compose.yaml
 |-- .github/workflows/ci.yml
 |-- pyproject.toml
@@ -160,8 +193,8 @@ retail-analytics-agent/
 
 ## 下一阶段
 
-1. 完善 README、架构图、评测报告和 v0.1 演示。
-2. 评估正式登录、生产部署和前端图表渲染方案。
+1. 完成 W6-4 口述验收，并确认 v0.1 演示边界。
+2. 评估正式登录和生产部署方案。
 3. 根据真实演示反馈整理项目答辩材料。
 
 ## 完成定义

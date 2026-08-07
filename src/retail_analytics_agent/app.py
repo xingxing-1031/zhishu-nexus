@@ -1,7 +1,12 @@
+import asyncio
+from pathlib import Path
+from queue import Queue
+from threading import Thread
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Response
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 
 from retail_analytics_agent.access_control import get_access_context
 from retail_analytics_agent.analysis_service import (
@@ -43,11 +48,25 @@ app = FastAPI(
     title="Retail Analytics Agent",
     version="0.1.0",
 )
+_STATIC_DIR = Path(__file__).with_name("static")
+app.mount("/static", StaticFiles(directory=_STATIC_DIR), name="static")
+
+
+@app.get("/", include_in_schema=False)
+def read_demo() -> FileResponse:
+    return FileResponse(_STATIC_DIR / "index.html")
 
 
 @app.get("/health")
 def health_check() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.get("/session", response_model=AccessContext)
+def read_session(
+    access_context: Annotated[AccessContext, Depends(get_access_context)],
+) -> AccessContext:
+    return access_context
 
 
 @app.post("/analysis/validate")
@@ -148,20 +167,47 @@ def read_analysis_trace(
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
-def _encode_analysis_events(
+_STREAM_DONE = object()
+
+
+async def _encode_analysis_events(
     runner: AnalysisRunner,
     request: AnalysisRequest,
     access_context: AccessContext,
 ):
-    try:
-        for event in runner.stream(request, access_context):
-            yield f"event: {event.event.value}\ndata: {event.model_dump_json()}\n\n"
-    except Exception as exc:
-        event = AnalysisStreamEvent(
-            event="error",
-            message=str(exc),
+    events: Queue[AnalysisStreamEvent | BaseException | object] = Queue()
+
+    def produce_events() -> None:
+        try:
+            for event in runner.stream(request, access_context):
+                events.put(event)
+        except BaseException as exc:
+            events.put(exc)
+        finally:
+            events.put(_STREAM_DONE)
+
+    worker = Thread(
+        target=produce_events,
+        name=f"analysis-stream-{request.request_id}",
+        daemon=True,
+    )
+    worker.start()
+
+    while True:
+        item = await asyncio.to_thread(events.get)
+        if item is _STREAM_DONE:
+            break
+        if isinstance(item, BaseException):
+            event = AnalysisStreamEvent(
+                event="error",
+                message=str(item),
+            )
+        else:
+            event = item
+        yield (
+            f"event: {event.event.value}\n"
+            f"data: {event.model_dump_json()}\n\n"
         )
-        yield f"event: error\ndata: {event.model_dump_json()}\n\n"
 
 
 @app.post("/analysis/stream")

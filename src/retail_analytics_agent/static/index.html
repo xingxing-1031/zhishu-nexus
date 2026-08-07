@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="面向零售运营人员的可审计数据分析工作台"
+    />
+    <title>零售运营分析台</title>
+    <link rel="stylesheet" href="/static/demo.css" />
+  </head>
+  <body>
+    <header class="app-header">
+      <div>
+        <p class="product-mark">RETAIL ANALYTICS / V0.1</p>
+        <h1>零售运营分析台</h1>
+      </div>
+      <div class="session-status" aria-live="polite">
+        <span class="status-dot" id="server-dot"></span>
+        <span id="server-status">正在连接服务</span>
+        <span class="session-divider"></span>
+        <strong id="session-role">--</strong>
+        <span id="session-user">--</span>
+      </div>
+    </header>
+
+    <div class="workspace">
+      <aside class="query-pane">
+        <form id="analysis-form">
+          <div class="section-heading">
+            <span class="section-index">01</span>
+            <div>
+              <h2>分析请求</h2>
+              <p>自然语言业务问题</p>
+            </div>
+          </div>
+
+          <label for="question">问题</label>
+          <textarea
+            id="question"
+            name="question"
+            rows="6"
+            maxlength="800"
+            required
+          >最近30天各渠道销售额是多少？</textarea>
+
+          <div class="examples" aria-label="示例问题">
+            <button type="button" data-question="最近30天各渠道销售额是多少？">
+              渠道销售额
+            </button>
+            <button type="button" data-question="各商品销量从高到低排列">
+              商品销量
+            </button>
+            <button type="button" data-question="各退款状态的退款金额是多少？">
+              退款状态
+            </button>
+          </div>
+
+          <div class="form-row">
+            <label for="max-rows">最大返回行数</label>
+            <input id="max-rows" name="max-rows" type="number" min="1" max="1000" value="100" />
+          </div>
+
+          <button class="primary-action" id="run-button" type="submit">
+            运行分析
+          </button>
+        </form>
+
+        <section class="approval-pane" id="approval-pane" hidden>
+          <div class="section-heading compact">
+            <span class="section-index warning">!</span>
+            <div>
+              <h2>人工审批</h2>
+              <p id="approval-reasons"></p>
+            </div>
+          </div>
+          <pre id="approval-sql"></pre>
+          <label for="approval-reason">拒绝原因</label>
+          <input id="approval-reason" maxlength="500" placeholder="拒绝时必填" />
+          <div class="approval-actions">
+            <button type="button" class="primary-action" id="approve-button">批准执行</button>
+            <button type="button" class="danger-action" id="reject-button">拒绝</button>
+          </div>
+        </section>
+
+        <div class="request-meta">
+          <span>REQUEST ID</span>
+          <code id="request-id">尚未创建</code>
+        </div>
+      </aside>
+
+      <main class="result-pane">
+        <section class="workflow-band" aria-labelledby="workflow-title">
+          <div class="section-heading inline-heading">
+            <span class="section-index">02</span>
+            <div>
+              <h2 id="workflow-title">工作流状态</h2>
+              <p id="workflow-message" aria-live="polite">等待分析请求</p>
+            </div>
+          </div>
+          <ol class="workflow-steps" id="workflow-steps"></ol>
+        </section>
+
+        <section class="answer-band" aria-labelledby="answer-title">
+          <div class="answer-header">
+            <div class="section-heading inline-heading">
+              <span class="section-index">03</span>
+              <div>
+                <h2 id="answer-title">分析结论</h2>
+                <p id="result-status">尚无结果</p>
+              </div>
+            </div>
+            <button type="button" class="secondary-action" id="trace-button" disabled>
+              查看 Trace
+            </button>
+          </div>
+          <p class="answer-text empty" id="answer-text">运行分析后，这里显示可信结果或明确的拒绝原因。</p>
+          <p class="degradation" id="degradation" hidden></p>
+        </section>
+
+        <div class="data-grid">
+          <section class="chart-band" aria-labelledby="chart-title">
+            <div class="band-title">
+              <h2 id="chart-title">数据图表</h2>
+              <span id="chart-kind">--</span>
+            </div>
+            <div class="chart-stage" id="chart-stage">
+              <p class="empty-state">暂无图表</p>
+            </div>
+          </section>
+
+          <section class="table-band" aria-labelledby="table-title">
+            <div class="band-title">
+              <h2 id="table-title">结果表格</h2>
+              <span id="row-count">0 行</span>
+            </div>
+            <div class="table-scroll" id="table-stage">
+              <p class="empty-state">暂无数据</p>
+            </div>
+          </section>
+        </div>
+
+        <div class="audit-grid">
+          <section aria-labelledby="plan-title">
+            <div class="band-title">
+              <h2 id="plan-title">结构化计划</h2>
+            </div>
+            <pre id="plan-output">尚无计划</pre>
+          </section>
+          <section aria-labelledby="evidence-title">
+            <div class="band-title">
+              <h2 id="evidence-title">证据来源</h2>
+              <span id="retry-count">重试 0 次</span>
+            </div>
+            <ul class="evidence-list" id="evidence-list">
+              <li>尚无证据</li>
+            </ul>
+          </section>
+        </div>
+
+        <section class="trace-band" id="trace-band" hidden aria-labelledby="trace-title">
+          <div class="band-title">
+            <h2 id="trace-title">执行 Trace</h2>
+            <button type="button" class="secondary-action" id="close-trace">收起</button>
+          </div>
+          <div class="trace-list" id="trace-list"></div>
+        </section>
+      </main>
+    </div>
+
+    <script src="/static/demo.js" defer></script>
+  </body>
+</html>

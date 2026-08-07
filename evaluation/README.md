@@ -104,23 +104,21 @@ repetition, scores each raw run, and aggregates every run into an
 `ExperimentReport`. It does not implement retrieval, SQL generation, model
 calls or database access itself; those remain behind the variant executors.
 
-The real executors are intentionally still a follow-up task. The current
-`CatalogRetrievalTool` runs after an `AnalysisPlan` and returns deterministic
-catalog evidence, while the Hybrid/Reranker path recalls metrics from the raw
-natural-language query. They have different input and output contracts, so
-they cannot be swapped into the same method and called a fair baseline,
-retrieval and reranker comparison without first defining the exact variable
-that each variant changes.
+`evaluation_executors.py` now contains the real LangGraph evaluation executor.
+The controlled variants keep Planner, SQL generation, validation, PostgreSQL,
+timeouts and scoring fixed while changing only the retrieval adapter. The
+accepted development run contains 40 cases for each of `baseline`,
+`retrieval` and `reranker`, for 120 raw executions in total.
 
 `AnalysisEvaluationObservation` is the internal observation boundary between
 the LangGraph checkpoint and an evaluation executor. It copies the plan,
 evidence source IDs, generated SQL, SQL safety result, rows, chart, answer,
 errors, retries and trace from the trusted snapshot. These fields are not
-added to the public `AnalysisResponse`. The observation deliberately has no
-`evidence_match` field because runtime SQL-to-evidence consistency validation
-has not been implemented; an executor must not invent a passing value.
+added to the public `AnalysisResponse`. Evaluation fields are derived from the
+trusted checkpoint and the real business-consistency node; the executor does
+not infer success from fluent text.
 
-`sql_consistency.py` now provides the first pure business-consistency
+`sql_consistency.py` provides the pure business-consistency
 validator. After SQLGlot parsing, it checks the plan and Evidence contract for
 approved tables, required JOIN pairs, versioned metric source columns, fixed
 filters, the sales deal-price formula and selected dimensions. It raises a
@@ -128,3 +126,10 @@ stable reason code and never executes SQL. The validator is tested in
 isolation and is wired into a separate `validate_business_sql` workflow node
 after SQLGlot safety validation. A rejection returns to SQL generation within
 the retry budget and cannot reach risk approval or PostgreSQL execution.
+
+The accepted report is `reports/w6_2_development_accepted.json`. All three
+variants reached a 100% core pass rate on this tuned development suite, with
+average latency of approximately 3835 ms, 4101 ms and 4877 ms respectively.
+This does not establish general Agent accuracy: each case ran once, no
+independent answer judge was configured and frozen holdout was not run. See
+`docs/EVALUATION_REPORT.md` for the complete Chinese report and limitations.
