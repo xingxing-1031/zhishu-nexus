@@ -40,7 +40,7 @@
 | 21 | [独立业务评测集](21-independent-business-evaluation.md) | 20 分钟 | W6-1 已完成 |
 | 22 | [单次运行与阶段评分](22-stage-scoring.md) | 20 分钟 | W6-2 已完成 |
 | 23 | [Docker Compose、pytest 与 GitHub Actions](23-docker-compose-ci.md) | 20 分钟 | W6-3 已完成 |
-| 24 | [架构、评测报告与 v0.1 演示](24-v01-delivery-demo.md) | 20 分钟 | W6-4 工程完成，口述待验收 |
+| 24 | [架构、评测报告与 v0.1 演示](24-v01-delivery-demo.md) | 20 分钟 | W6-4 已完成 |
 
 ## 复习节奏
 
