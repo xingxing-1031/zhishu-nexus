@@ -38,6 +38,8 @@
 | 19 | [超时、重试、幂等与降级](19-timeout-retry-idempotency.md) | 20 分钟 | W5-3 已完成 |
 | 20 | [故障注入与完整执行 Trace](20-fault-injection-execution-trace.md) | 20 分钟 | W5-4 已完成 |
 | 21 | [独立业务评测集](21-independent-business-evaluation.md) | 20 分钟 | W6-1 已完成 |
+| 22 | [单次运行与阶段评分](22-stage-scoring.md) | 20 分钟 | W6-2 已完成 |
+| 23 | [Docker Compose、pytest 与 GitHub Actions](23-docker-compose-ci.md) | 20 分钟 | W6-3 工程完成，口述待验收 |
 
 ## 复习节奏
 

@@ -4,11 +4,11 @@
 
 ## 当前状态
 
-- 当前计划任务：`W6-1` 建立至少 60 条独立业务评测集
-- 总体进度：`20 / 32` 个项目里程碑，W5-4 已完成
+- 当前计划任务：`W6-3` Docker Compose、pytest 和 GitHub Actions 交付
+- 总体进度：`22 / 32` 个项目里程碑，W6-2 已完成
 - 已实现：真实 `qwen3:4b` 端到端分析、权限与人工审批、有限重试、请求幂等、可信结果降级、确定性故障注入和结构化执行 Trace
-- 自动化验证：Python 回归测试 `262 passed`；W5-4 真实 PostgreSQL Trace 迁移和故障注入验收通过
-- 当前边界：仍是本地身份和小规模种子数据；尚未完成 60 至 100 条独立评测集、CI、部署和前端图表渲染
+- 自动化验证：Python 回归测试 `358 passed`；W6-2 完成 40 条 development × 3 个检索方案的 120 次受控评测，核心阶段通过率均为 `100%`
+- 当前边界：仍是本地身份和小规模种子数据；尚未完成正式登录、生产部署、前端图表渲染和 frozen holdout 最终验收
 
 ## 手机学习
 
@@ -117,27 +117,17 @@ python -m pytest
 启动并验证本地数据库：
 
 ```powershell
-Copy-Item .env.example .env
-docker compose up -d
-docker compose cp db/migrations/001_initial_schema.sql postgres:/tmp/001_initial_schema.sql
-docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U retail_user -d retail_analytics -f /tmp/001_initial_schema.sql
-docker compose cp db/migrations/002_query_audit_logs.sql postgres:/tmp/002_query_audit_logs.sql
-docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U retail_user -d retail_analytics -f /tmp/002_query_audit_logs.sql
-docker compose cp db/migrations/003_knowledge_chunks.sql postgres:/tmp/003_knowledge_chunks.sql
-docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U retail_user -d retail_analytics -f /tmp/003_knowledge_chunks.sql
-docker compose cp db/migrations/004_query_approval_logs.sql postgres:/tmp/004_query_approval_logs.sql
-docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U retail_user -d retail_analytics -f /tmp/004_query_approval_logs.sql
-docker compose cp db/migrations/005_resilience_and_idempotency.sql postgres:/tmp/005_resilience_and_idempotency.sql
-docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U retail_user -d retail_analytics -f /tmp/005_resilience_and_idempotency.sql
-docker compose cp db/migrations/006_execution_trace.sql postgres:/tmp/006_execution_trace.sql
-docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U retail_user -d retail_analytics -f /tmp/006_execution_trace.sql
-docker compose cp db/seeds/001_demo_data.sql postgres:/tmp/001_demo_data.sql
-docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U retail_user -d retail_analytics -f /tmp/001_demo_data.sql
-docker compose cp db/verification/verify_w2_1.sql postgres:/tmp/verify_w2_1.sql
-docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U retail_user -d retail_analytics -f /tmp/verify_w2_1.sql
+if (!(Test-Path .env)) { Copy-Item .env.example .env }
+# 首次使用空数据卷时，Compose 会按文件名顺序自动执行 6 个迁移和种子脚本。
+docker compose up -d --wait
+docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U retail_user -d retail_analytics -f /opt/retail-db/verification/verify_delivery.sql
+docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U retail_user -d retail_analytics -f /opt/retail-db/verification/verify_w2_1.sql
+docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U retail_user -d retail_analytics -f /opt/retail-db/verification/verify_w4_1_metrics.sql
 ```
 
-首次运行前请把 `.env` 中的示例密码改为本地密码。不要提交 `.env`，也不要使用 `docker compose down -v` 删除数据库数据卷。
+首次运行前请把 `.env` 中的示例密码改为本地密码。初始化脚本只对空数据卷执行；已有数据卷不会重复创建表或导入种子。不要提交 `.env`，也不要使用 `docker compose down -v` 删除本地数据库数据卷。需要验证全新初始化时，请使用独立 Compose 项目名和端口。
+
+GitHub Actions 使用同一份 Compose 配置启动临时 pgvector 数据库，并执行 `db/verification/verify_delivery.sql`；Python 3.11 和 3.12 矩阵分别执行完整 pytest。工作流文件见 [.github/workflows/ci.yml](.github/workflows/ci.yml)。
 
 ## 目录结构
 
@@ -163,15 +153,16 @@ retail-analytics-agent/
 |   |-- PROJECT_SCOPE.md
 |   `-- UPGRADE_BACKLOG.md
 |-- compose.yaml
+|-- .github/workflows/ci.yml
 |-- pyproject.toml
 `-- README.md
 ```
 
 ## 下一阶段
 
-1. 建立至少 60 条独立业务评测集并保存原始结果。
-2. 对比基础 SQL、检索与 Reranker 链路并完成错误分析。
-3. 完成 Docker Compose、pytest 和 GitHub Actions 交付链路。
+1. 完成 Docker Compose、pytest 和 GitHub Actions 交付链路。
+2. 完善 README、架构图和 v0.1 演示。
+3. 评估正式登录、生产部署和前端图表渲染方案。
 
 ## 完成定义
 

@@ -1,20 +1,32 @@
 services:
   postgres:
     image: pgvector/pgvector:pg16
-    container_name: retail-analytics-postgres
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     ports:
-      - "${POSTGRES_PORT}:5432"
+      - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./db/migrations/001_initial_schema.sql:/docker-entrypoint-initdb.d/001_initial_schema.sql:ro
+      - ./db/migrations/002_query_audit_logs.sql:/docker-entrypoint-initdb.d/002_query_audit_logs.sql:ro
+      - ./db/migrations/003_knowledge_chunks.sql:/docker-entrypoint-initdb.d/003_knowledge_chunks.sql:ro
+      - ./db/migrations/004_query_approval_logs.sql:/docker-entrypoint-initdb.d/004_query_approval_logs.sql:ro
+      - ./db/migrations/005_resilience_and_idempotency.sql:/docker-entrypoint-initdb.d/005_resilience_and_idempotency.sql:ro
+      - ./db/migrations/006_execution_trace.sql:/docker-entrypoint-initdb.d/006_execution_trace.sql:ro
+      - ./db/seeds/001_demo_data.sql:/docker-entrypoint-initdb.d/007_demo_data.sql:ro
+      - ./db/verification:/opt/retail-db/verification:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}",
+        ]
       interval: 5s
       timeout: 5s
       retries: 10
+      start_period: 10s
 
 volumes:
   postgres_data:
