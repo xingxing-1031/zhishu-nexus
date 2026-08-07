@@ -85,6 +85,8 @@ const state = {
   requestId: null,
   approval: null,
   running: false,
+  lastQuestion: null,
+  pendingClarification: null,
 };
 
 const elements = {
@@ -188,6 +190,11 @@ function resetOutput() {
   elements.traceBand.hidden = true;
   elements.approvalPane.hidden = true;
   state.approval = null;
+}
+
+function clearPendingClarification() {
+  state.pendingClarification = null;
+  elements.question.placeholder = "";
 }
 
 function setActiveStage(node) {
@@ -373,6 +380,7 @@ function localizeErrorMessage(message) {
 }
 
 function renderResult(result) {
+  clearPendingClarification();
   state.requestId = result.request_id;
   elements.requestId.textContent = state.requestId;
   elements.answerText.textContent = localizeAnswer(result.answer);
@@ -560,6 +568,7 @@ function truncate(value, length) {
 }
 
 function renderApproval(approval) {
+  clearPendingClarification();
   state.approval = approval;
   state.requestId = approval.request_id;
   elements.requestId.textContent = state.requestId;
@@ -584,6 +593,7 @@ function renderApproval(approval) {
 }
 
 function renderRejection(rejection) {
+  clearPendingClarification();
   state.requestId = rejection.request_id;
   elements.requestId.textContent = state.requestId;
   elements.resultStatus.textContent = "请求已拒绝";
@@ -619,10 +629,18 @@ function renderAssistant(assistant) {
   elements.evidenceList.innerHTML = "<li>未检索业务证据</li>";
   elements.retryCount.textContent = "重试 0 次";
   elements.traceButton.disabled = false;
+  if (assistant.status === "needs_clarification") {
+    state.pendingClarification = { question: state.lastQuestion };
+    elements.question.value = "";
+    elements.question.placeholder = "请补充指标、时间范围或分组条件";
+  } else {
+    clearPendingClarification();
+  }
   setRunning(false);
 }
 
 function renderError(message) {
+  clearPendingClarification();
   elements.resultStatus.textContent = "分析失败";
   elements.answerText.textContent = localizeErrorMessage(message);
   elements.answerText.className = "answer-text";
@@ -713,6 +731,12 @@ function renderTrace(events) {
 elements.form.addEventListener("submit", async (event) => {
   event.preventDefault();
   if (state.running || !state.session) return;
+  const enteredQuestion = elements.question.value.trim();
+  const effectiveQuestion = state.pendingClarification
+    ? `原始问题：${state.pendingClarification.question}\n用户补充：${enteredQuestion}`
+    : enteredQuestion;
+  state.lastQuestion = effectiveQuestion;
+  clearPendingClarification();
   state.requestId = makeRequestId();
   elements.requestId.textContent = state.requestId;
   resetOutput();
@@ -721,7 +745,7 @@ elements.form.addEventListener("submit", async (event) => {
     await streamAnalysis({
       request_id: state.requestId,
       user_id: state.session.user_id,
-      question: elements.question.value.trim(),
+      question: effectiveQuestion,
       max_rows: Number(elements.maxRows.value),
     });
   } catch (error) {
