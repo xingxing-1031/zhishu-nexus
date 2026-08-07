@@ -15,6 +15,8 @@ from retail_analytics_agent.models import (
     AnalysisResponse,
     AnalysisRunningResponse,
     AnalysisStreamEvent,
+    AssistantResponse,
+    AssistantResponseStatus,
     ApprovalRequiredResponse,
     ApprovalRejectedResponse,
 )
@@ -299,6 +301,43 @@ def test_stream_analysis_returns_sse_status_and_result_events() -> None:
     assert "京东渠道销售额为 11300.00 元" in response.text
     runner.stream.assert_called_once()
     assert runner.stream.call_args.args[1] == _access_context()
+
+
+def test_stream_analysis_returns_assistant_message_event() -> None:
+    runner = Mock()
+    runner.stream.return_value = [
+        AnalysisStreamEvent(
+            event="assistant_message",
+            node="respond",
+            message="我是零售运营分析助手。",
+            assistant=AssistantResponse(
+                request_id="REQ-ASSISTANT-001",
+                status=AssistantResponseStatus.ANSWERED,
+                access_role=AccessRole.ANALYST,
+                reason_code="assistant_identity",
+                answer="我是零售运营分析助手。",
+                trace=("scope", "respond"),
+            ),
+        )
+    ]
+    app.dependency_overrides[get_analysis_runner] = lambda: runner
+    app.dependency_overrides[get_access_context] = _access_context
+
+    try:
+        response = client.post(
+            "/analysis/stream",
+            json={
+                "request_id": "REQ-ASSISTANT-001",
+                "user_id": "USER-001",
+                "question": "你是谁？",
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert "event: assistant_message\n" in response.text
+    assert "我是零售运营分析助手" in response.text
 
 
 def test_stream_analysis_keeps_contextvars_in_one_worker_context() -> None:

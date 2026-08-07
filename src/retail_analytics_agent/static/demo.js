@@ -189,6 +189,8 @@ function handleStreamEvent(event) {
     renderApproval(event.approval);
   } else if (event.event === "rejected" && event.rejection) {
     renderRejection(event.rejection);
+  } else if (event.event === "assistant_message" && event.assistant) {
+    renderAssistant(event.assistant);
   } else if (event.event === "error") {
     renderError(event.message);
   }
@@ -410,7 +412,32 @@ function renderRejection(rejection) {
   elements.chartStage.innerHTML = '<p class="empty-state">拒绝请求没有数据图表</p>';
   elements.tableStage.innerHTML = '<p class="empty-state">拒绝请求未访问数据库</p>';
   elements.rowCount.textContent = "0 行";
+  elements.chartKind.textContent = "--";
+  elements.planOutput.textContent = "请求在生成分析计划前被拒绝";
+  elements.evidenceList.innerHTML = "<li>未检索业务证据</li>";
+  elements.retryCount.textContent = "重试 0 次";
   elements.workflowMessage.textContent = "工作流在安全边界终止";
+  elements.traceButton.disabled = false;
+  setRunning(false);
+}
+
+function renderAssistant(assistant) {
+  state.requestId = assistant.request_id;
+  elements.requestId.textContent = state.requestId;
+  for (const item of elements.workflowSteps.children) item.className = "";
+  elements.resultStatus.textContent = assistant.status === "needs_clarification"
+    ? "需要补充信息"
+    : "助手答复";
+  elements.answerText.textContent = assistant.answer;
+  elements.answerText.className = "answer-text";
+  elements.workflowMessage.textContent = "请求未进入 SQL 分析流程";
+  elements.chartKind.textContent = "--";
+  elements.chartStage.innerHTML = '<p class="empty-state">本次答复不需要数据图表</p>';
+  elements.tableStage.innerHTML = '<p class="empty-state">本次答复未访问数据库</p>';
+  elements.rowCount.textContent = "0 行";
+  elements.planOutput.textContent = "未生成分析计划";
+  elements.evidenceList.innerHTML = "<li>未检索业务证据</li>";
+  elements.retryCount.textContent = "重试 0 次";
   elements.traceButton.disabled = false;
   setRunning(false);
 }
@@ -420,6 +447,11 @@ function renderError(message) {
   elements.answerText.textContent = message;
   elements.answerText.className = "answer-text";
   elements.workflowMessage.textContent = "请求未能完成";
+  elements.chartKind.textContent = "--";
+  elements.chartStage.innerHTML = '<p class="empty-state">分析失败，未生成图表</p>';
+  elements.tableStage.innerHTML = '<p class="empty-state">分析失败，未返回可信数据</p>';
+  elements.rowCount.textContent = "0 行";
+  elements.traceButton.disabled = !state.requestId;
   setRunning(false);
 }
 

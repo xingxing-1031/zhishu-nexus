@@ -144,6 +144,22 @@ class AnalysisRejectedResponse(BaseModel):
     trace: tuple[str, ...]
 
 
+class AssistantResponseStatus(StrEnum):
+    ANSWERED = "answered"
+    NEEDS_CLARIFICATION = "needs_clarification"
+
+
+class AssistantResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    request_id: str = Field(min_length=1)
+    status: AssistantResponseStatus
+    access_role: AccessRole
+    reason_code: str = Field(min_length=1)
+    answer: str = Field(min_length=1)
+    trace: tuple[str, ...]
+
+
 class AnalysisMetric(StrEnum):
     SALES_AMOUNT = "sales_amount"
     ORDER_COUNT = "order_count"
@@ -306,6 +322,7 @@ AnalysisOutcome = (
     AnalysisResponse
     | AnalysisRunningResponse
     | AnalysisRejectedResponse
+    | AssistantResponse
     | ApprovalRequiredResponse
     | ApprovalRejectedResponse
 )
@@ -317,6 +334,7 @@ class AnalysisEventType(StrEnum):
     ERROR = "error"
     APPROVAL_REQUIRED = "approval_required"
     REJECTED = "rejected"
+    ASSISTANT_MESSAGE = "assistant_message"
 
 
 class AnalysisStreamEvent(BaseModel):
@@ -326,6 +344,7 @@ class AnalysisStreamEvent(BaseModel):
     node: str | None = None
     message: str = Field(min_length=1)
     response: AnalysisResponse | None = None
+    assistant: AssistantResponse | None = None
     approval: ApprovalRequiredResponse | None = None
     rejection: AnalysisRejectedResponse | ApprovalRejectedResponse | None = None
 

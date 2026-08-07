@@ -34,7 +34,10 @@ from retail_analytics_agent.models import (
     AnalysisResultStatus,
     AnalysisRunningResponse,
     AnalysisStreamEvent,
+    AssistantResponse,
+    AssistantResponseStatus,
 )
+from retail_analytics_agent.request_routing import RequestRoute
 from retail_analytics_agent.request_registry import (
     AnalysisRequestStore,
     DatabaseAnalysisRequestStore,
@@ -107,6 +110,8 @@ class AnalysisRunner(Protocol):
 
 
 _NODE_STATUS_MESSAGES = {
+    "scope": "请求类型与业务范围检查完成",
+    "respond": "助手已生成说明",
     "plan": "分析问题已转换为结构化计划",
     "retrieve": "指标口径和数据结构检索完成",
     "generate_sql": "查询语句生成完成",
@@ -117,6 +122,23 @@ _NODE_STATUS_MESSAGES = {
     "execute_sql": "零售数据库查询完成",
     "summarize": "分析结论和图表规格生成完成",
     "fail": "分析流程执行失败",
+}
+
+_PUBLIC_REJECTION_MESSAGES = {
+    "unsupported_metric": (
+        "当前演示支持销售额、订单数、销量、退款金额、退款笔数和平均订单金额；"
+        "暂不支持库存、利润、物流或投诉分析。"
+    ),
+    "unsupported_dimension": (
+        "当前演示支持按渠道、商品、品类、订单状态、退款状态和日期分析；"
+        "暂不支持用户年龄、性别等维度。"
+    ),
+    "identity_mismatch": "不能通过问题内容提升权限，当前身份由服务器认证配置决定。",
+    "non_read_only": "该请求包含写入或删除意图，已在访问数据库前拒绝。",
+    "select_star_forbidden": (
+        "为避免暴露无关字段，本系统不允许读取全部字段。请明确要查看的业务指标。"
+    ),
+    "forbidden_column": "当前分析员角色无权查看该敏感字段。",
 }
 
 
@@ -337,6 +359,14 @@ class LangGraphAnalysisRunner:
                 approval=outcome,
             )
             return
+        if isinstance(outcome, AssistantResponse):
+            yield AnalysisStreamEvent(
+                event="assistant_message",
+                node="respond",
+                message=outcome.answer,
+                assistant=outcome,
+            )
+            return
         if isinstance(
             outcome,
             (AnalysisRejectedResponse, ApprovalRejectedResponse),
@@ -423,6 +453,8 @@ class LangGraphAnalysisRunner:
             status = RequestRunStatus.REJECTED
         elif isinstance(outcome, AnalysisRunningResponse):
             status = RequestRunStatus.RUNNING
+        elif isinstance(outcome, AssistantResponse):
+            status = RequestRunStatus.COMPLETED
         elif outcome.status is AnalysisResultStatus.DEGRADED:
             status = RequestRunStatus.DEGRADED
         else:
@@ -441,6 +473,26 @@ class LangGraphAnalysisRunner:
 
     @staticmethod
     def _to_outcome(result) -> AnalysisOutcome:
+        request_route = RequestRoute(
+            result.get("request_route", RequestRoute.ANALYSIS)
+        )
+        if request_route != RequestRoute.ANALYSIS:
+            answer = result["final_answer"] or result.get("assistant_message")
+            reason_code = result.get("request_reason_code")
+            if answer is None or reason_code is None:
+                raise AnalysisRunError("assistant response is incomplete")
+            return AssistantResponse(
+                request_id=result["request_id"],
+                status=(
+                    AssistantResponseStatus.NEEDS_CLARIFICATION
+                    if request_route == RequestRoute.CLARIFICATION
+                    else AssistantResponseStatus.ANSWERED
+                ),
+                access_role=result["access_role"],
+                reason_code=reason_code,
+                answer=answer,
+                trace=tuple(result["trace"]),
+            )
         if result["scope_supported"] is False:
             reason_code = (
                 result["scope_rejection_reason"] or "unsupported_metric"
@@ -449,7 +501,10 @@ class LangGraphAnalysisRunner:
                 request_id=result["request_id"],
                 access_role=result["access_role"],
                 reason_code=reason_code,
-                reason="当前分析能力不支持该指标或维度",
+                reason=_PUBLIC_REJECTION_MESSAGES.get(
+                    reason_code,
+                    "当前分析能力不支持该请求，请换一种业务问题。",
+                ),
                 trace=tuple(result["trace"]),
             )
         if result["approval_status"] is ApprovalStatus.PENDING:

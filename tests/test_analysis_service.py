@@ -18,9 +18,12 @@ from retail_analytics_agent.models import (
     AnalysisRequest,
     AnalysisResultStatus,
     AnalysisRunningResponse,
+    AssistantResponse,
+    AssistantResponseStatus,
     ChartSpec,
     QueryRisk,
 )
+from retail_analytics_agent.request_routing import RequestRoute
 from retail_analytics_agent.request_registry import (
     RequestClaim,
     RequestClaimStatus,
@@ -154,6 +157,57 @@ def test_runner_returns_business_scope_rejection_without_planner_result() -> Non
     assert isinstance(outcome, AnalysisRejectedResponse)
     assert outcome.reason_code == "unsupported_metric"
     assert outcome.trace == ("scope", "fail")
+
+
+def test_runner_returns_assistant_response_without_analysis_plan() -> None:
+    graph = Mock()
+    state = create_initial_state(_request())
+    state.update(
+        {
+            "request_route": RequestRoute.ASSISTANT,
+            "request_reason_code": "assistant_identity",
+            "assistant_message": "我是零售运营分析助手。",
+            "scope_supported": True,
+            "final_answer": "我是零售运营分析助手。",
+            "trace": ["scope", "respond"],
+        }
+    )
+    graph.invoke.return_value = state
+
+    outcome = LangGraphAnalysisRunner(graph).run(
+        _request(),
+        _access_context(),
+    )
+
+    assert isinstance(outcome, AssistantResponse)
+    assert outcome.status is AssistantResponseStatus.ANSWERED
+    assert outcome.reason_code == "assistant_identity"
+    assert outcome.trace == ("scope", "respond")
+
+
+def test_runner_accepts_serialized_request_route_from_checkpoint() -> None:
+    graph = Mock()
+    state = create_initial_state(_request())
+    state.update(
+        {
+            "request_route": "clarification",
+            "request_reason_code": "ambiguous_request",
+            "assistant_message": "请补充指标和时间范围。",
+            "scope_supported": True,
+            "final_answer": "请补充指标和时间范围。",
+            "trace": ["scope", "respond"],
+        }
+    )
+    graph.invoke.return_value = state
+
+    outcome = LangGraphAnalysisRunner(graph).run(
+        _request(),
+        _access_context(),
+    )
+
+    assert isinstance(outcome, AssistantResponse)
+    assert outcome.status is AssistantResponseStatus.NEEDS_CLARIFICATION
+    assert outcome.reason_code == "ambiguous_request"
 
 
 def test_runner_rejects_failed_execution_state() -> None:

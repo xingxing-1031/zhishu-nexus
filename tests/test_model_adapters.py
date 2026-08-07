@@ -122,7 +122,15 @@ def test_ollama_planner_returns_validated_analysis_plan() -> None:
                     {
                         "metric": "units_sold",
                         "display_name": "销售件数",
-                        "aliases": ["销售件数", "销量"],
+                        "aliases": [
+                            "销售件数",
+                            "销量",
+                            "最好卖",
+                            "最畅销",
+                            "卖得最多",
+                            "卖得最好",
+                            "销量最高",
+                        ],
                         "supported_dimensions": [
                             "channel",
                             "product",
@@ -310,6 +318,34 @@ def test_ollama_planner_aligns_explicit_metric_aliases() -> None:
     assert plan.metrics == ["units_sold"]
     assert plan.dimensions == ["category"]
     assert [item.field.value for item in plan.sort] == ["units_sold"]
+
+
+def test_ollama_planner_maps_best_seller_to_product_units() -> None:
+    model_output = {
+        "analysis_goal": "什么东西最好卖",
+        "metrics": ["order_count"],
+        "dimensions": ["category", "product"],
+        "filters": [],
+        "time_range_days": 0,
+        "sort": [{"field": "order_count", "direction": "descending"}],
+        "limit": 10,
+    }
+    planner = OllamaAnalysisPlanner(
+        client=_client(
+            lambda request: httpx.Response(
+                200,
+                json={"message": {"content": json.dumps(model_output)}},
+            )
+        )
+    )
+
+    plan = planner.plan("什么东西最好卖？", max_rows=100)
+
+    assert [item.value for item in plan.metrics] == ["units_sold"]
+    assert [item.value for item in plan.dimensions] == ["product"]
+    assert [item.model_dump(mode="json") for item in plan.sort] == [
+        {"field": "units_sold", "direction": "descending"}
+    ]
 
 
 def test_ollama_planner_removes_unrequested_status_dimension() -> None:

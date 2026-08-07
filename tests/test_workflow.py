@@ -323,6 +323,43 @@ def test_domain_scope_rejection_ends_graph_before_planner() -> None:
     planner.assert_not_called()
 
 
+@pytest.mark.parametrize(
+    ("question", "expected_code"),
+    [
+        ("你是谁？", "assistant_identity"),
+        ("哪个渠道最好？", "ambiguous_request"),
+    ],
+)
+def test_conversational_request_ends_before_planner(
+    question: str,
+    expected_code: str,
+) -> None:
+    gate = Mock()
+    planner = Mock(side_effect=AssertionError("planner must not run"))
+    graph = build_analysis_graph(
+        _base_nodes(
+            scope=create_domain_scope_node(gate),
+            plan_node=planner,
+        )
+    )
+    state = create_initial_state(
+        AnalysisRequest(
+            request_id="REQ-CONVERSATION-001",
+            user_id="USER-001",
+            question=question,
+        )
+    )
+
+    result = graph.invoke(state)
+
+    assert result["trace"] == ["scope", "respond"]
+    assert result["request_reason_code"] == expected_code
+    assert result["final_answer"]
+    assert result["plan"] is None
+    gate.classify.assert_not_called()
+    planner.assert_not_called()
+
+
 def test_create_initial_state_rejects_negative_max_retries() -> None:
     with pytest.raises(ValueError, match="max_retries must be non-negative"):
         create_initial_state(_request(), max_retries=-1)

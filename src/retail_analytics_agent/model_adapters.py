@@ -442,6 +442,20 @@ def _explicit_dimension_hints(
             "per product",
         )
     )
+    best_seller_breakdown = any(
+        term in normalized
+        for term in (
+            "什么东西最好卖",
+            "什么商品最好卖",
+            "哪些商品最好卖",
+            "最畅销商品",
+            "卖得最多的商品",
+            "卖得最好的商品",
+            "销量最高的商品",
+        )
+    )
+    if best_seller_breakdown and AnalysisDimension.CATEGORY not in dimensions:
+        product_breakdown = True
     if product_breakdown:
         dimensions.append(AnalysisDimension.PRODUCT)
     if "退款状态" in normalized or (

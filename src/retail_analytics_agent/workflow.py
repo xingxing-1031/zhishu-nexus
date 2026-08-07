@@ -40,6 +40,10 @@ from retail_analytics_agent.models import (
     RetrievalEvidence,
     QueryRisk,
 )
+from retail_analytics_agent.request_routing import (
+    RequestRoute,
+    classify_preflight_request,
+)
 from retail_analytics_agent.model_adapters import (
     AnalysisPlanner,
     ModelInvocationError,
@@ -70,6 +74,9 @@ class AnalysisState(TypedDict):
     question: str
     max_rows: int
     reference_time: datetime
+    request_route: RequestRoute
+    request_reason_code: str | None
+    assistant_message: str | None
     scope_supported: bool | None
     scope_rejection_reason: str | None
     plan: AnalysisPlan | None
@@ -130,9 +137,11 @@ class WorkflowNodes:
     fail: AnalysisNode
     validate_business_sql: AnalysisNode | None = None
     scope: AnalysisNode | None = None
+    respond: AnalysisNode | None = None
 
 
 SCOPE_NODE = "scope"
+RESPOND_NODE = "respond"
 PLAN_NODE = "plan"
 RETRIEVE_NODE = "retrieve"
 GENERATE_SQL_NODE = "generate_sql"
@@ -169,6 +178,9 @@ def create_initial_state(
         question=request.question,
         max_rows=request.max_rows,
         reference_time=active_reference_time,
+        request_route=RequestRoute.ANALYSIS,
+        request_reason_code=None,
+        assistant_message=None,
         scope_supported=None,
         scope_rejection_reason=None,
         plan=None,
@@ -204,6 +216,17 @@ def create_thread_config(thread_id: str) -> RunnableConfig:
 
 def create_domain_scope_node(gate: MetricDomainGate) -> AnalysisNode:
     def scope(state: AnalysisState) -> AnalysisStateUpdate:
+        preflight = classify_preflight_request(state["question"])
+        if preflight is not None:
+            return {
+                "request_route": preflight.route,
+                "request_reason_code": preflight.reason_code,
+                "assistant_message": preflight.message,
+                "scope_supported": True,
+                "scope_rejection_reason": None,
+                "trace": [SCOPE_NODE],
+            }
+
         if requests_role_elevation(
             state["question"],
             state["access_role"],
@@ -271,6 +294,20 @@ def create_domain_scope_node(gate: MetricDomainGate) -> AnalysisNode:
         }
 
     return scope
+
+
+def create_conversation_response_node() -> AnalysisNode:
+    def respond(state: AnalysisState) -> AnalysisStateUpdate:
+        if state["request_route"] == RequestRoute.ANALYSIS:
+            raise ValueError("analysis requests cannot use the response node")
+        if state["assistant_message"] is None:
+            raise ValueError("assistant message is required")
+        return {
+            "final_answer": state["assistant_message"],
+            "trace": [RESPOND_NODE],
+        }
+
+    return respond
 
 
 def create_plan_node(model: AnalysisPlanner) -> AnalysisNode:
@@ -656,10 +693,13 @@ def create_workflow_nodes(
             if domain_gate is not None
             else None
         ),
+        respond=create_conversation_response_node(),
     )
 
 
 def route_after_scope(state: AnalysisState) -> str:
+    if state.get("request_route", RequestRoute.ANALYSIS) != RequestRoute.ANALYSIS:
+        return RESPOND_NODE
     if state["prepared_sql"] is not None:
         return ASSESS_RISK_NODE
     if state["scope_supported"] is True:
@@ -787,6 +827,13 @@ def build_analysis_graph(
             SCOPE_NODE,
             trace_workflow_node(SCOPE_NODE, nodes.scope),
         )
+    graph.add_node(
+        RESPOND_NODE,
+        trace_workflow_node(
+            RESPOND_NODE,
+            nodes.respond or create_conversation_response_node(),
+        ),
+    )
     graph.add_node(PLAN_NODE, trace_workflow_node(PLAN_NODE, nodes.plan))
     graph.add_node(
         RETRIEVE_NODE,
@@ -836,6 +883,7 @@ def build_analysis_graph(
             {
                 PLAN_NODE: PLAN_NODE,
                 ASSESS_RISK_NODE: ASSESS_RISK_NODE,
+                RESPOND_NODE: RESPOND_NODE,
                 FAIL_NODE: FAIL_NODE,
             },
         )
@@ -896,6 +944,7 @@ def build_analysis_graph(
         },
     )
     graph.add_edge(SUMMARIZE_NODE, END)
+    graph.add_edge(RESPOND_NODE, END)
     graph.add_edge(FAIL_NODE, END)
 
     return graph.compile(
