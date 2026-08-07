@@ -4,7 +4,7 @@ from queue import Queue
 from threading import Thread
 from typing import Annotated
 
-from fastapi import Depends, FastAPI, HTTPException, Query, Response
+from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -34,6 +34,7 @@ from retail_analytics_agent.models import (
     OrderStatusSummary,
     ProductSalesSummary,
     RefundStatusSummary,
+    SessionInfo,
 )
 from retail_analytics_agent.model_adapters import ModelInvocationError
 from retail_analytics_agent.public_errors import public_error_message
@@ -43,6 +44,8 @@ from retail_analytics_agent.queries import (
     get_product_sales_summary,
     get_refund_status_summary,
 )
+from retail_analytics_agent.rate_limit import SlidingWindowRateLimiter
+from retail_analytics_agent.settings import Settings, get_settings
 from retail_analytics_agent.tracing import ExecutionTraceResponse
 
 
@@ -52,6 +55,48 @@ app = FastAPI(
 )
 _STATIC_DIR = Path(__file__).with_name("static")
 app.mount("/static", StaticFiles(directory=_STATIC_DIR), name="static")
+analysis_rate_limiter = SlidingWindowRateLimiter()
+
+
+def _enforce_public_demo_request(
+    http_request: Request,
+    analysis_request: AnalysisRequest,
+    settings: Settings,
+) -> None:
+    if not settings.public_demo_mode:
+        return
+    if analysis_request.max_rows > settings.public_demo_max_rows:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "公开演示环境单次最多返回 "
+                f"{settings.public_demo_max_rows} 行数据。"
+            ),
+        )
+    client_host = (
+        http_request.client.host
+        if http_request.client is not None
+        else "unknown"
+    )
+    retry_after = analysis_rate_limiter.consume(
+        client_host,
+        limit=settings.public_demo_rate_limit_per_minute,
+        window_seconds=60,
+    )
+    if retry_after is not None:
+        raise HTTPException(
+            status_code=429,
+            detail="请求过于频繁，请稍后再试。",
+            headers={"Retry-After": str(retry_after)},
+        )
+
+
+def _reject_public_internal_endpoint(settings: Settings) -> None:
+    if settings.public_demo_mode:
+        raise HTTPException(
+            status_code=403,
+            detail="公开演示环境不提供内部执行接口。",
+        )
 
 
 @app.get("/", include_in_schema=False)
@@ -74,11 +119,18 @@ def readiness_check() -> dict[str, str]:
     return {"status": "ready"}
 
 
-@app.get("/session", response_model=AccessContext)
+@app.get("/session", response_model=SessionInfo)
 def read_session(
     access_context: Annotated[AccessContext, Depends(get_access_context)],
-) -> AccessContext:
-    return access_context
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> SessionInfo:
+    return SessionInfo(
+        user_id=access_context.user_id,
+        role=access_context.role,
+        public_demo_mode=settings.public_demo_mode,
+        trace_visible=not settings.public_demo_mode,
+        max_rows=(settings.public_demo_max_rows if settings.public_demo_mode else 100),
+    )
 
 
 @app.post("/analysis/validate")
@@ -90,18 +142,21 @@ def validate_analysis_request(
 
 @app.post("/analysis/run", response_model=AnalysisOutcome)
 def run_analysis(
-    request: AnalysisRequest,
+    analysis_request: AnalysisRequest,
+    http_request: Request,
     response: Response,
     runner: Annotated[AnalysisRunner, Depends(get_analysis_runner)],
     access_context: Annotated[AccessContext, Depends(get_access_context)],
+    settings: Annotated[Settings, Depends(get_settings)],
 ) -> AnalysisOutcome:
-    if request.user_id != access_context.user_id:
+    if analysis_request.user_id != access_context.user_id:
         raise HTTPException(
             status_code=403,
             detail="当前登录身份与请求用户不一致。",
         )
+    _enforce_public_demo_request(http_request, analysis_request, settings)
     try:
-        result = runner.run(request, access_context)
+        result = runner.run(analysis_request, access_context)
         if isinstance(
             result,
             (ApprovalRequiredResponse, AnalysisRunningResponse),
@@ -127,7 +182,9 @@ def resolve_analysis_approval(
     resolution: ApprovalResolutionRequest,
     runner: Annotated[AnalysisRunner, Depends(get_analysis_runner)],
     access_context: Annotated[AccessContext, Depends(get_access_context)],
+    settings: Annotated[Settings, Depends(get_settings)],
 ) -> AnalysisOutcome:
+    _reject_public_internal_endpoint(settings)
     if access_context.role is not AccessRole.ADMIN:
         raise HTTPException(
             status_code=403,
@@ -153,7 +210,9 @@ def read_analysis_status(
     request_id: str,
     runner: Annotated[AnalysisRunner, Depends(get_analysis_runner)],
     access_context: Annotated[AccessContext, Depends(get_access_context)],
+    settings: Annotated[Settings, Depends(get_settings)],
 ) -> AnalysisOutcome:
+    _reject_public_internal_endpoint(settings)
     try:
         return runner.get_status(request_id, access_context)
     except PermissionError as exc:
@@ -170,7 +229,9 @@ def read_analysis_trace(
     request_id: str,
     runner: Annotated[AnalysisRunner, Depends(get_analysis_runner)],
     access_context: Annotated[AccessContext, Depends(get_access_context)],
+    settings: Annotated[Settings, Depends(get_settings)],
 ) -> ExecutionTraceResponse:
+    _reject_public_internal_endpoint(settings)
     try:
         return runner.get_trace(request_id, access_context)
     except PermissionError as exc:
@@ -224,17 +285,20 @@ async def _encode_analysis_events(
 
 @app.post("/analysis/stream")
 def stream_analysis(
-    request: AnalysisRequest,
+    analysis_request: AnalysisRequest,
+    http_request: Request,
     runner: Annotated[AnalysisRunner, Depends(get_analysis_runner)],
     access_context: Annotated[AccessContext, Depends(get_access_context)],
+    settings: Annotated[Settings, Depends(get_settings)],
 ) -> StreamingResponse:
-    if request.user_id != access_context.user_id:
+    if analysis_request.user_id != access_context.user_id:
         raise HTTPException(
             status_code=403,
             detail="当前登录身份与请求用户不一致。",
         )
+    _enforce_public_demo_request(http_request, analysis_request, settings)
     return StreamingResponse(
-        _encode_analysis_events(runner, request, access_context),
+        _encode_analysis_events(runner, analysis_request, access_context),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",

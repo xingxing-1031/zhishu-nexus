@@ -141,6 +141,16 @@ function makeRequestId() {
   return `请求-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
+function canViewTrace() {
+  return state.session?.trace_visible === true;
+}
+
+function setTraceAvailable(available) {
+  elements.traceButton.hidden = !canViewTrace();
+  elements.traceButton.disabled = !canViewTrace() || !available;
+  if (!canViewTrace()) elements.traceBand.hidden = true;
+}
+
 async function loadSession() {
   try {
     const [healthResponse, sessionResponse] = await Promise.all([
@@ -155,6 +165,14 @@ async function loadSession() {
     elements.serverStatus.textContent = "服务在线";
     elements.sessionRole.textContent = ROLE_LABELS[state.session.role] || "当前用户";
     elements.sessionUser.textContent = "已认证";
+    const maxRows = String(state.session.max_rows);
+    elements.maxRows.max = maxRows;
+    elements.maxRows.value = String(Math.min(
+      Number(elements.maxRows.value),
+      state.session.max_rows,
+    ));
+    elements.maxRows.setAttribute("value", elements.maxRows.value);
+    setTraceAvailable(false);
   } catch (error) {
     elements.serverDot.className = "status-dot offline";
     elements.serverStatus.textContent = "服务离线";
@@ -186,7 +204,7 @@ function resetOutput() {
   elements.planOutput.textContent = "等待计划";
   elements.evidenceList.innerHTML = "<li>等待证据</li>";
   elements.retryCount.textContent = "重试 0 次";
-  elements.traceButton.disabled = true;
+  setTraceAvailable(false);
   elements.traceBand.hidden = true;
   elements.approvalPane.hidden = true;
   state.approval = null;
@@ -393,7 +411,7 @@ function renderResult(result) {
   renderEvidence(result.evidence_source_ids);
   renderTable(result.rows, result.plan);
   renderChart(result.chart_spec, result.rows);
-  elements.traceButton.disabled = false;
+  setTraceAvailable(true);
   setRunning(false);
 }
 
@@ -568,6 +586,10 @@ function truncate(value, length) {
 }
 
 function renderApproval(approval) {
+  if (state.session?.public_demo_mode) {
+    renderError("公开演示环境不处理需要人工审批的请求。");
+    return;
+  }
   clearPendingClarification();
   state.approval = approval;
   state.requestId = approval.request_id;
@@ -588,7 +610,7 @@ function renderApproval(approval) {
   const isAdmin = state.session?.role === "admin";
   elements.approveButton.disabled = !isAdmin;
   elements.rejectButton.disabled = !isAdmin;
-  elements.traceButton.disabled = false;
+  setTraceAvailable(true);
   setRunning(false);
 }
 
@@ -607,7 +629,7 @@ function renderRejection(rejection) {
   elements.evidenceList.innerHTML = "<li>未检索业务证据</li>";
   elements.retryCount.textContent = "重试 0 次";
   elements.workflowMessage.textContent = "工作流在安全边界终止";
-  elements.traceButton.disabled = false;
+  setTraceAvailable(true);
   setRunning(false);
 }
 
@@ -628,7 +650,7 @@ function renderAssistant(assistant) {
   elements.planOutput.textContent = "未生成分析计划";
   elements.evidenceList.innerHTML = "<li>未检索业务证据</li>";
   elements.retryCount.textContent = "重试 0 次";
-  elements.traceButton.disabled = false;
+  setTraceAvailable(true);
   if (assistant.status === "needs_clarification") {
     state.pendingClarification = { question: state.lastQuestion };
     elements.question.value = "";
@@ -653,7 +675,7 @@ function renderError(message) {
   elements.evidenceList.innerHTML = "<li>未检索业务证据</li>";
   elements.retryCount.textContent = "重试 0 次";
   elements.approvalPane.hidden = true;
-  elements.traceButton.disabled = !state.requestId;
+  setTraceAvailable(Boolean(state.requestId));
   setRunning(false);
 }
 
@@ -685,8 +707,8 @@ async function resolveApproval(decision) {
 }
 
 async function loadTrace() {
-  if (!state.requestId) return;
-  elements.traceButton.disabled = true;
+  if (!state.requestId || !canViewTrace()) return;
+  setTraceAvailable(false);
   try {
     const response = await fetch(`/analysis/${encodeURIComponent(state.requestId)}/trace`);
     const body = await response.json();
@@ -698,7 +720,7 @@ async function loadTrace() {
     elements.traceList.textContent = localizeErrorMessage(error.message);
     elements.traceBand.hidden = false;
   } finally {
-    elements.traceButton.disabled = false;
+    setTraceAvailable(true);
   }
 }
 

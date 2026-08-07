@@ -7,7 +7,7 @@
 - 当前计划任务：项目一 v0.1 已完成 W6-4 交付验收，正在进行 W7-4 受限公开演示准备
 - 总体进度：`24 / 32` 个基础里程碑已完成；W7 为交付后的演示优化阶段
 - 已实现：本地 `qwen3:4b` 与远程 Qwen 端到端分析、权限与人工审批、有限重试、请求幂等、可信结果降级、确定性故障注入和结构化执行 Trace
-- 自动化验证：Python 回归测试 `399 passed`；W6-2 完成 120 次受控评测；W6-3 本地空卷 pgvector smoke 和 GitHub Actions Python 3.11/3.12、PostgreSQL smoke 均通过
+- 自动化验证：Python 回归测试 `408 passed`；W6-2 完成 120 次受控评测；W6-3 本地空卷 pgvector smoke 和 GitHub Actions Python 3.11/3.12、PostgreSQL smoke 均通过
 - 当前边界：远程模型已在本地应用中真实验收，但仍是本地可信身份和 10 条演示订单；尚未完成公网托管、正式登录和 frozen holdout 最终验收
 
 ## 手机学习
@@ -173,9 +173,14 @@ MODEL_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
 MODEL_NAME=qwen-plus
 MODEL_API_KEY=<server-secret>
 MODEL_TIMEOUT_SECONDS=120
+PUBLIC_DEMO_MODE=true
+PUBLIC_DEMO_RATE_LIMIT_PER_MINUTE=6
+PUBLIC_DEMO_MAX_ROWS=20
 ```
 
 未配置 `MODEL_BASE_URL`、`MODEL_NAME` 或 `MODEL_API_KEY` 时，远程模式会在应用启动阶段拒绝加载；默认 `MODEL_PROVIDER=ollama`，本地开发方式保持不变。
+
+`PUBLIC_DEMO_MODE=true` 会强制要求分析员身份，关闭请求状态、人工审批和原始执行记录接口，并对分析请求执行单进程限流与返回行数限制。它适合受限作品演示，不能替代网关级分布式限流、正式认证和多租户隔离。
 
 ## 目录结构
 

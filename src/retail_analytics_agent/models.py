@@ -61,6 +61,12 @@ class AccessContext(BaseModel):
     role: AccessRole
 
 
+class SessionInfo(AccessContext):
+    public_demo_mode: bool
+    trace_visible: bool
+    max_rows: int = Field(ge=1, le=100)
+
+
 class ApprovalStatus(StrEnum):
     NOT_REQUIRED = "not_required"
     PENDING = "pending"

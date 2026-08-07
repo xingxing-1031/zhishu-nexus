@@ -30,6 +30,9 @@ class Settings(BaseSettings):
     workflow_timeout_seconds: float = Field(default=120, gt=0, le=900)
     local_access_user_id: str = "USER-001"
     local_access_role: AccessRole = AccessRole.ANALYST
+    public_demo_mode: bool = False
+    public_demo_rate_limit_per_minute: int = Field(default=6, ge=1, le=60)
+    public_demo_max_rows: int = Field(default=20, ge=1, le=100)
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -39,6 +42,13 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_remote_model_configuration(self) -> "Settings":
+        if (
+            self.public_demo_mode
+            and self.local_access_role is not AccessRole.ANALYST
+        ):
+            raise ValueError(
+                "PUBLIC_DEMO_MODE requires LOCAL_ACCESS_ROLE=analyst"
+            )
         if self.model_provider is StructuredChatProtocol.OLLAMA:
             return self
         if not self.model_base_url or not self.model_base_url.startswith(

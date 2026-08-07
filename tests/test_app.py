@@ -2,11 +2,12 @@ from decimal import Decimal
 from unittest.mock import Mock
 
 from fastapi.testclient import TestClient
+from pydantic import SecretStr
 
 from retail_analytics_agent.access_control import get_access_context
 from retail_analytics_agent.analysis_service import get_analysis_runner
 from retail_analytics_agent.analysis_service import AnalysisRequestConflictError
-from retail_analytics_agent.app import app
+from retail_analytics_agent.app import analysis_rate_limiter, app
 from retail_analytics_agent.database import get_database_connection
 from retail_analytics_agent.model_adapters import ModelInvocationError
 from retail_analytics_agent.models import (
@@ -20,6 +21,7 @@ from retail_analytics_agent.models import (
     ApprovalRequiredResponse,
     ApprovalRejectedResponse,
 )
+from retail_analytics_agent.settings import Settings, get_settings
 from retail_analytics_agent.tracing import (
     ExecutionTraceEvent,
     ExecutionTraceResponse,
@@ -41,6 +43,17 @@ def _admin_access_context() -> AccessContext:
     return AccessContext(user_id="ADMIN-001", role=AccessRole.ADMIN)
 
 
+def _public_demo_settings(**overrides) -> Settings:
+    return Settings(
+        postgres_db="test_db",
+        postgres_user="test_user",
+        postgres_password=SecretStr("test_password"),
+        public_demo_mode=True,
+        _env_file=None,
+        **overrides,
+    )
+
+
 def test_demo_homepage_and_static_assets_are_available() -> None:
     page = client.get("/")
     stylesheet = client.get("/static/demo.css")
@@ -58,6 +71,8 @@ def test_demo_homepage_and_static_assets_are_available() -> None:
     assert "--accent" in stylesheet.text
     assert script.status_code == 200
     assert 'fetch("/analysis/stream"' in script.text
+    assert "state.session?.trace_visible" in script.text
+    assert "state.session?.public_demo_mode" in script.text
 
 
 def test_session_returns_server_configured_access_context() -> None:
@@ -72,6 +87,29 @@ def test_session_returns_server_configured_access_context() -> None:
     assert response.json() == {
         "user_id": "USER-001",
         "role": "analyst",
+        "public_demo_mode": False,
+        "trace_visible": True,
+        "max_rows": 100,
+    }
+
+
+def test_public_demo_session_hides_trace_capability() -> None:
+    settings = _public_demo_settings()
+    app.dependency_overrides[get_access_context] = _access_context
+    app.dependency_overrides[get_settings] = lambda: settings
+
+    try:
+        response = client.get("/session")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "user_id": "USER-001",
+        "role": "analyst",
+        "public_demo_mode": True,
+        "trace_visible": False,
+        "max_rows": 20,
     }
 
 
@@ -600,6 +638,110 @@ def test_read_analysis_trace_returns_structured_events() -> None:
         "REQ-TRACE-001",
         _access_context(),
     )
+
+
+def test_public_demo_blocks_internal_request_and_trace_endpoints() -> None:
+    runner = Mock()
+    settings = _public_demo_settings()
+    app.dependency_overrides[get_analysis_runner] = lambda: runner
+    app.dependency_overrides[get_access_context] = _access_context
+    app.dependency_overrides[get_settings] = lambda: settings
+
+    try:
+        status_response = client.get("/analysis/REQ-PUBLIC-001")
+        trace_response = client.get("/analysis/REQ-PUBLIC-001/trace")
+        approval_response = client.post(
+            "/analysis/REQ-PUBLIC-001/approval",
+            json={"decision": "approve"},
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    for response in (
+        status_response,
+        trace_response,
+        approval_response,
+    ):
+        assert response.status_code == 403
+        assert response.json() == {
+            "detail": "公开演示环境不提供内部执行接口。"
+        }
+    runner.get_status.assert_not_called()
+    runner.get_trace.assert_not_called()
+    runner.resume_approval.assert_not_called()
+
+
+def test_public_demo_rejects_excessive_rows_before_workflow() -> None:
+    runner = Mock()
+    settings = _public_demo_settings(public_demo_max_rows=10)
+    app.dependency_overrides[get_analysis_runner] = lambda: runner
+    app.dependency_overrides[get_access_context] = _access_context
+    app.dependency_overrides[get_settings] = lambda: settings
+
+    try:
+        response = client.post(
+            "/analysis/run",
+            json={
+                "request_id": "REQ-PUBLIC-ROWS",
+                "user_id": "USER-001",
+                "question": "最近30天各渠道销售额是多少？",
+                "max_rows": 11,
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 422
+    assert response.json() == {
+        "detail": "公开演示环境单次最多返回 10 行数据。"
+    }
+    runner.run.assert_not_called()
+
+
+def test_public_demo_rate_limits_analysis_requests() -> None:
+    runner = Mock()
+    runner.run.return_value = AssistantResponse(
+        request_id="REQ-PUBLIC-RATE-1",
+        status=AssistantResponseStatus.ANSWERED,
+        access_role=AccessRole.ANALYST,
+        reason_code="assistant_identity",
+        answer="我是零售运营分析助手。",
+        trace=("scope", "respond"),
+    )
+    settings = _public_demo_settings(public_demo_rate_limit_per_minute=1)
+    app.dependency_overrides[get_analysis_runner] = lambda: runner
+    app.dependency_overrides[get_access_context] = _access_context
+    app.dependency_overrides[get_settings] = lambda: settings
+    analysis_rate_limiter.clear()
+
+    try:
+        first = client.post(
+            "/analysis/run",
+            json={
+                "request_id": "REQ-PUBLIC-RATE-1",
+                "user_id": "USER-001",
+                "question": "你是谁？",
+                "max_rows": 10,
+            },
+        )
+        second = client.post(
+            "/analysis/run",
+            json={
+                "request_id": "REQ-PUBLIC-RATE-2",
+                "user_id": "USER-001",
+                "question": "你是谁？",
+                "max_rows": 10,
+            },
+        )
+    finally:
+        analysis_rate_limiter.clear()
+        app.dependency_overrides.clear()
+
+    assert first.status_code == 200
+    assert second.status_code == 429
+    assert second.json() == {"detail": "请求过于频繁，请稍后再试。"}
+    assert int(second.headers["retry-after"]) >= 1
+    assert runner.run.call_count == 1
 
 
 def test_channel_sales_summary_returns_query_results() -> None:

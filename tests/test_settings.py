@@ -30,6 +30,9 @@ def test_settings_builds_postgres_connection_kwargs() -> None:
     assert settings.active_model_name == "qwen3:4b"
     assert settings.active_model_timeout_seconds == 120
     assert settings.model_client_headers == {}
+    assert settings.public_demo_mode is False
+    assert settings.public_demo_rate_limit_per_minute == 6
+    assert settings.public_demo_max_rows == 20
 
 
 def test_settings_builds_remote_model_configuration() -> None:
@@ -84,4 +87,19 @@ def test_settings_rejects_incomplete_remote_model_configuration(overrides) -> No
             model_provider="openai_compatible",
             _env_file=None,
             **overrides,
+        )
+
+
+def test_settings_rejects_admin_role_in_public_demo() -> None:
+    with pytest.raises(
+        ValueError,
+        match="PUBLIC_DEMO_MODE requires LOCAL_ACCESS_ROLE=analyst",
+    ):
+        Settings(
+            postgres_db="test_db",
+            postgres_user="test_user",
+            postgres_password=SecretStr("test_password"),
+            local_access_role="admin",
+            public_demo_mode=True,
+            _env_file=None,
         )
