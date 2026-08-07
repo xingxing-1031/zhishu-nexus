@@ -165,6 +165,18 @@ docker compose --profile demo up -d --build --wait
 
 浏览器打开 `http://127.0.0.1:8005/`；就绪检查使用 `http://127.0.0.1:8005/ready`。
 
+公网演示推荐使用 OpenAI 兼容协议的远程 Qwen。下面的密钥只能配置在托管平台的服务器环境变量中，不能写入前端、Compose 文件或 Git：
+
+```text
+MODEL_PROVIDER=openai_compatible
+MODEL_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
+MODEL_NAME=qwen-plus
+MODEL_API_KEY=<server-secret>
+MODEL_TIMEOUT_SECONDS=120
+```
+
+未配置 `MODEL_BASE_URL`、`MODEL_NAME` 或 `MODEL_API_KEY` 时，远程模式会在应用启动阶段拒绝加载；默认 `MODEL_PROVIDER=ollama`，本地开发方式保持不变。
+
 ## 目录结构
 
 ```text

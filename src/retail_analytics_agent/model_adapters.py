@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from decimal import Decimal, InvalidOperation
 from dataclasses import dataclass
 import re
@@ -32,6 +31,10 @@ from retail_analytics_agent.resilience import (
     WorkflowDeadlineExceeded,
     bounded_timeout_seconds,
     wait_before_retry,
+)
+from retail_analytics_agent.structured_chat import (
+    StructuredChatClient,
+    StructuredChatProtocol,
 )
 from retail_analytics_agent.tracing import (
     TraceStatus,
@@ -231,18 +234,6 @@ def _dimension_sql_expression(
     return _DIMENSION_SQL_COLUMNS[dimension]
 
 
-class _OllamaMessage(BaseModel):
-    model_config = ConfigDict(extra="ignore")
-
-    content: str
-
-
-class _OllamaChatResponse(BaseModel):
-    model_config = ConfigDict(extra="ignore")
-
-    message: _OllamaMessage
-
-
 class _GeneratedSQL(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -304,7 +295,7 @@ def _validate_summary_numbers(
     if unsupported:
         rendered = ", ".join(str(item) for item in sorted(unsupported))
         raise ModelInvocationError(
-            "Ollama summary contains numbers absent from verified inputs: "
+            "Model summary contains numbers absent from verified inputs: "
             f"{rendered}"
         )
 
@@ -786,6 +777,7 @@ def _planner_response_schema(max_rows: int) -> dict[str, object]:
 def _chat_json(
     client: httpx.Client,
     *,
+    protocol: StructuredChatProtocol,
     model: str,
     system_prompt: str,
     user_payload: dict[str, object],
@@ -794,24 +786,7 @@ def _chat_json(
     retry_policy: RetryPolicy,
     component: str,
 ) -> str:
-    payload = {
-        "model": model,
-        "stream": False,
-        "think": False,
-        "format": response_schema,
-        "options": {"temperature": 0},
-        "messages": [
-            {"role": "system", "content": system_prompt},
-            {
-                "role": "user",
-                "content": json.dumps(
-                    user_payload,
-                    ensure_ascii=False,
-                    default=str,
-                ),
-            },
-        ],
-    }
+    chat_client = StructuredChatClient(client, protocol)
     last_error: ModelInvocationError | None = None
 
     for attempt in range(1, retry_policy.max_attempts + 1):
@@ -823,15 +798,13 @@ def _chat_json(
         started_at = monotonic()
         try:
             inject_fault(component)
-            response = client.post(
-                "/api/chat",
-                json=payload,
-                timeout=bounded_timeout_seconds(timeout_seconds),
+            content = chat_client.complete_json(
+                model=model,
+                system_prompt=system_prompt,
+                user_payload=user_payload,
+                response_schema=response_schema,
+                timeout_seconds=bounded_timeout_seconds(timeout_seconds),
             )
-            response.raise_for_status()
-            content = _OllamaChatResponse.model_validate(
-                response.json()
-            ).message.content
             record_execution_trace(
                 component,
                 TraceStatus.SUCCEEDED,
@@ -842,7 +815,7 @@ def _chat_json(
         except httpx.HTTPStatusError as exc:
             detail = exc.response.text.strip()
             last_error = ModelInvocationError(
-                "Ollama model invocation failed: "
+                f"Model invocation failed ({protocol.value}): "
                 f"HTTP {exc.response.status_code}: {detail}"
             )
             retryable = exc.response.status_code in {
@@ -856,7 +829,7 @@ def _chat_json(
             error_type = f"HTTP_{exc.response.status_code}"
         except (httpx.TimeoutException, httpx.NetworkError) as exc:
             last_error = ModelInvocationError(
-                f"Ollama model invocation failed: {exc}"
+                f"Model invocation failed ({protocol.value}): {exc}"
             )
             retryable = True
             error_type = type(exc).__name__
@@ -880,7 +853,7 @@ def _chat_json(
                 error_message=str(exc),
             )
             raise ModelInvocationError(
-                f"Ollama model invocation failed: {exc}"
+                f"Model invocation failed ({protocol.value}): {exc}"
             ) from exc
 
         assert last_error is not None
@@ -912,9 +885,10 @@ def _chat_json(
 
 
 @dataclass(frozen=True, slots=True)
-class OllamaAnalysisPlanner:
+class StructuredAnalysisPlanner:
     client: httpx.Client
     model: str = "qwen3:4b"
+    protocol: StructuredChatProtocol = StructuredChatProtocol.OLLAMA
     timeout_seconds: float = 120
     retry_policy: RetryPolicy = RetryPolicy()
 
@@ -927,6 +901,7 @@ class OllamaAnalysisPlanner:
         default_limit = min(100, max_rows)
         content = _chat_json(
             self.client,
+            protocol=self.protocol,
             model=self.model,
             system_prompt=(
                 "你是零售分析规划器。把用户问题转换为给定 JSON Schema，"
@@ -958,11 +933,11 @@ class OllamaAnalysisPlanner:
             ).to_analysis_plan(default_limit=default_limit)
         except (ValidationError, ValueError) as exc:
             raise ModelInvocationError(
-                f"Ollama planner returned an invalid analysis plan: {exc}"
+                f"Model planner returned an invalid analysis plan: {exc}"
             ) from exc
         if plan.limit > max_rows:
             raise ModelInvocationError(
-                "Ollama planner returned a limit greater than max_rows"
+                "Model planner returned a limit greater than max_rows"
             )
         plan = _apply_default_limit_when_unrequested(
             plan,
@@ -979,9 +954,10 @@ class OllamaAnalysisPlanner:
 
 
 @dataclass(frozen=True, slots=True)
-class OllamaSQLGenerator:
+class StructuredSQLGenerator:
     client: httpx.Client
     model: str = "qwen3:4b"
+    protocol: StructuredChatProtocol = StructuredChatProtocol.OLLAMA
     timeout_seconds: float = 120
     retry_policy: RetryPolicy = RetryPolicy()
 
@@ -999,6 +975,7 @@ class OllamaSQLGenerator:
 
         content = _chat_json(
             self.client,
+            protocol=self.protocol,
             model=self.model,
             system_prompt=(
                 "你是 PostgreSQL 只读 SQL 生成器。只输出一条 SELECT 或 WITH 查询。"
@@ -1043,17 +1020,18 @@ class OllamaSQLGenerator:
             sql = _GeneratedSQL.model_validate_json(content).sql.strip()
         except (ValidationError, ValueError) as exc:
             raise ModelInvocationError(
-                f"Ollama SQL generator returned invalid output: {exc}"
+                f"Model SQL generator returned invalid output: {exc}"
             ) from exc
         if not sql:
-            raise ModelInvocationError("Ollama SQL generator returned empty SQL")
+            raise ModelInvocationError("Model SQL generator returned empty SQL")
         return sql
 
 
 @dataclass(frozen=True, slots=True)
-class OllamaResultSummarizer:
+class StructuredResultSummarizer:
     client: httpx.Client
     model: str = "qwen3:4b"
+    protocol: StructuredChatProtocol = StructuredChatProtocol.OLLAMA
     timeout_seconds: float = 120
     retry_policy: RetryPolicy = RetryPolicy()
 
@@ -1066,6 +1044,7 @@ class OllamaResultSummarizer:
     ) -> str:
         content = _chat_json(
             self.client,
+            protocol=self.protocol,
             model=self.model,
             system_prompt=(
                 "你是零售分析结果解释器。只能根据给定查询结果回答，"
@@ -1086,10 +1065,10 @@ class OllamaResultSummarizer:
             answer = _GeneratedSummary.model_validate_json(content).answer.strip()
         except (ValidationError, ValueError) as exc:
             raise ModelInvocationError(
-                f"Ollama summarizer returned invalid output: {exc}"
+                f"Model summarizer returned invalid output: {exc}"
             ) from exc
         if not answer:
-            raise ModelInvocationError("Ollama summarizer returned an empty answer")
+            raise ModelInvocationError("Model summarizer returned an empty answer")
         _validate_summary_numbers(
             answer,
             question=question,
@@ -1097,3 +1076,9 @@ class OllamaResultSummarizer:
             rows=rows,
         )
         return answer
+
+
+# Backward-compatible imports for existing callers and evaluation scripts.
+OllamaAnalysisPlanner = StructuredAnalysisPlanner
+OllamaSQLGenerator = StructuredSQLGenerator
+OllamaResultSummarizer = StructuredResultSummarizer

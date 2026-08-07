@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import Protocol
@@ -13,6 +12,10 @@ from retail_analytics_agent.metric_retrieval import (
     MetricRetriever,
 )
 from retail_analytics_agent.models import AnalysisMetric
+from retail_analytics_agent.structured_chat import (
+    StructuredChatClient,
+    StructuredChatProtocol,
+)
 
 
 class DomainGateError(RuntimeError):
@@ -90,24 +93,14 @@ def explicit_domain_rejection(query: str) -> DomainDecision | None:
     return None
 
 
-class _OllamaMessage(BaseModel):
-    model_config = ConfigDict(extra="ignore")
-
-    content: str
-
-
-class _OllamaChatResponse(BaseModel):
-    model_config = ConfigDict(extra="ignore")
-
-    message: _OllamaMessage
-
-
 @dataclass(frozen=True, slots=True)
-class OllamaMetricDomainGate:
+class StructuredMetricDomainGate:
     """Classifies whether a query belongs to the supported metric domain."""
 
     client: httpx.Client
     model: str = "qwen3:4b"
+    protocol: StructuredChatProtocol = StructuredChatProtocol.OLLAMA
+    timeout_seconds: float = 120
 
     def classify(self, query: str) -> DomainDecision:
         if not query.strip():
@@ -119,47 +112,33 @@ class OllamaMetricDomainGate:
         if explicit_rejection is not None:
             return explicit_rejection
         try:
-            response = self.client.post(
-                "/api/chat",
-                json={
-                    "model": self.model,
-                    "stream": False,
-                    "think": False,
-                    "format": DomainDecision.model_json_schema(),
-                    "options": {"temperature": 0},
-                    "messages": [
-                        {
-                            "role": "system",
-                            "content": (
-                                "你是零售指标能力边界分类器。系统只支持六类结果："
-                                "销售额、订单数、销售件数、退款金额、退款笔数、平均"
-                                "订单金额；只支持渠道、商品、商品类别、订单状态、退款"
-                                "状态和日期维度。用户使用同义表达也算支持。若请求的"
-                                "结果指标不受支持，reason_code 返回 unsupported_metric；"
-                                "若指标受支持但分组维度不受支持，返回 unsupported_dimension。"
-                                "支持时 reason_code 必须为 null。你只判断能力边界，不回答问题。"
-                            ),
-                        },
-                        {
-                            "role": "user",
-                            "content": json.dumps(
-                                {"question": query},
-                                ensure_ascii=False,
-                            ),
-                        },
-                    ],
-                },
+            content = StructuredChatClient(
+                self.client,
+                self.protocol,
+            ).complete_json(
+                model=self.model,
+                system_prompt=(
+                    "你是零售指标能力边界分类器。系统只支持六类结果："
+                    "销售额、订单数、销售件数、退款金额、退款笔数、平均"
+                    "订单金额；只支持渠道、商品、商品类别、订单状态、退款"
+                    "状态和日期维度。用户使用同义表达也算支持。若请求的"
+                    "结果指标不受支持，reason_code 返回 unsupported_metric；"
+                    "若指标受支持但分组维度不受支持，返回 unsupported_dimension。"
+                    "支持时 reason_code 必须为 null。你只判断能力边界，不回答问题。"
+                ),
+                user_payload={"question": query},
+                response_schema=DomainDecision.model_json_schema(),
+                timeout_seconds=self.timeout_seconds,
             )
-            response.raise_for_status()
-            content = _OllamaChatResponse.model_validate(
-                response.json()
-            ).message.content
             return DomainDecision.model_validate_json(content)
         except (httpx.HTTPError, ValidationError, ValueError) as exc:
-            raise DomainGateError(f"Ollama domain gate failed: {exc}") from exc
+            raise DomainGateError(f"Model domain gate failed: {exc}") from exc
 
     def is_supported(self, query: str) -> bool:
         return self.classify(query).supported
+
+
+OllamaMetricDomainGate = StructuredMetricDomainGate
 
 
 @dataclass(frozen=True, slots=True)

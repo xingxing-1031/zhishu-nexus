@@ -24,12 +24,19 @@
 
 ## 当前模型前置条件
 
-本地演示默认使用 Ollama `qwen3:4b`。公开部署前必须二选一：
+本地演示默认使用 Ollama `qwen3:4b`。公开部署选择 OpenAI 兼容协议的远程 Qwen，Planner、领域门禁、SQL 生成和总结继续复用原有 Pydantic 校验、重试、Trace 和安全工作流。
 
-1. 在同一私有网络提供兼容 Ollama API 的模型服务，并把 `OLLAMA_BASE_URL` 指向内网地址。
-2. 增加经过审查的远程模型适配器和密钥管理，再进行独立的延迟、费用和数据出境评估。
+```text
+MODEL_PROVIDER=openai_compatible
+MODEL_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
+MODEL_NAME=qwen-plus
+MODEL_API_KEY=<server-secret>
+MODEL_TIMEOUT_SECONDS=120
+```
 
-不能把开发机的 `127.0.0.1:11434` 直接写进公网服务，也不能把 `.env`、数据库密码或模型密钥提交到仓库。
+`MODEL_API_KEY` 只允许进入托管平台的服务器 Secret；不能进入前端响应、日志、镜像层、Compose 文件或 Git。`qwen-plus` 是部署示例，正式选择前仍需单独比较结构化输出稳定性、延迟、费用和数据出境边界。
+
+不能把开发机的 `127.0.0.1:11434` 直接写进公网服务。当前测试证明 OpenAI 兼容请求能进入结构化 Planner 和领域门禁，但在没有真实 API Key 时不能记录为远程模型端到端通过。
 
 ## 本地发布前验收
 
@@ -63,3 +70,5 @@ Invoke-WebRequest http://127.0.0.1:8004/ready
 - 全量回归：`390 passed in 2.13s`
 - `docker compose --profile demo config --quiet`：通过。
 - 本地 API 镜像构建：Dockerfile 已进入 CI；本机拉取 `python:3.12-slim` 时 Docker Hub IPv6 连接超时，不能记录为本地构建通过。
+- 模型协议改造后，本地 Ollama 向后兼容验收通过：最新服务 `http://127.0.0.1:8007` 使用 UTF-8 请求完成“最近30天各渠道销售额是多少？”，状态 `succeeded`、重试 `0`，请求编号 `REQ-W7-UTF8-a5418099-3f6e-4207-96b2-4fec870f847c`。
+- 远程 Qwen 目前只有 MockTransport 协议与结构化节点测试，没有真实 API Key，因此尚未完成远程端到端验收。

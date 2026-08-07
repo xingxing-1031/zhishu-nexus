@@ -20,6 +20,7 @@ from retail_analytics_agent.models import (
     RetrievalEvidence,
 )
 from retail_analytics_agent.resilience import RetryPolicy
+from retail_analytics_agent.structured_chat import StructuredChatProtocol
 from retail_analytics_agent.tracing import (
     InMemoryExecutionTraceStore,
     TraceStatus,
@@ -187,6 +188,30 @@ def test_ollama_planner_returns_validated_analysis_plan() -> None:
         "最近30天各渠道销售额是多少？",
         max_rows=10,
     )
+
+    assert plan == _plan()
+
+
+def test_openai_compatible_planner_returns_validated_analysis_plan() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/chat/completions"
+        payload = json.loads(request.content)
+        assert payload["model"] == "qwen-plus"
+        assert payload["response_format"] == {"type": "json_object"}
+        return httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {"message": {"content": _model_plan_json()}}
+                ]
+            },
+        )
+
+    plan = OllamaAnalysisPlanner(
+        client=_client(handler),
+        model="qwen-plus",
+        protocol=StructuredChatProtocol.OPENAI_COMPATIBLE,
+    ).plan("最近30天各渠道销售额是多少？", max_rows=10)
 
     assert plan == _plan()
 
@@ -601,6 +626,51 @@ def test_ollama_sql_generator_receives_plan_evidence_and_retry_feedback() -> Non
     assert "o.status = 'paid'" in sql
 
 
+def test_openai_compatible_sql_generator_returns_structured_sql() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/chat/completions"
+        payload = json.loads(request.content)
+        user_payload = json.loads(payload["messages"][2]["content"])
+        assert user_payload["analysis_plan"]["metrics"] == ["sales_amount"]
+        return httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {
+                        "message": {
+                            "content": json.dumps(
+                                {
+                                    "sql": (
+                                        "SELECT orders.channel AS channel, "
+                                        "SUM(order_items.quantity * "
+                                        "order_items.unit_price) AS sales_amount "
+                                        "FROM orders JOIN order_items ON "
+                                        "orders.order_id = order_items.order_id "
+                                        "WHERE orders.status = 'paid' "
+                                        "GROUP BY orders.channel"
+                                    )
+                                }
+                            )
+                        }
+                    }
+                ]
+            },
+        )
+
+    sql = OllamaSQLGenerator(
+        client=_client(handler),
+        model="qwen-plus",
+        protocol=StructuredChatProtocol.OPENAI_COMPATIBLE,
+    ).generate(
+        question="最近30天各渠道销售额是多少？",
+        plan=_plan(),
+        evidence=_evidence(),
+        access_role=AccessRole.ANALYST,
+    )
+
+    assert "SUM(order_items.quantity * order_items.unit_price)" in sql
+
+
 def test_sql_generation_contract_requires_product_table_and_join() -> None:
     plan = AnalysisPlan(
         analysis_goal="每种商品分别卖出了多少件",
@@ -724,6 +794,42 @@ def test_ollama_summarizer_uses_real_rows() -> None:
         )
 
     answer = OllamaResultSummarizer(client=_client(handler)).summarize(
+        question="最近30天各渠道销售额是多少？",
+        plan=_plan(),
+        rows=[{"channel": "jd", "sales_amount": "9000.00"}],
+    )
+
+    assert answer == "最近30天，京东渠道销售额为 9000.00 元。"
+
+
+def test_openai_compatible_summarizer_uses_verified_rows() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/chat/completions"
+        return httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {
+                        "message": {
+                            "content": json.dumps(
+                                {
+                                    "answer": (
+                                        "最近30天，京东渠道销售额为 9000.00 元。"
+                                    )
+                                },
+                                ensure_ascii=False,
+                            )
+                        }
+                    }
+                ]
+            },
+        )
+
+    answer = OllamaResultSummarizer(
+        client=_client(handler),
+        model="qwen-plus",
+        protocol=StructuredChatProtocol.OPENAI_COMPATIBLE,
+    ).summarize(
         question="最近30天各渠道销售额是多少？",
         plan=_plan(),
         rows=[{"channel": "jd", "sales_amount": "9000.00"}],

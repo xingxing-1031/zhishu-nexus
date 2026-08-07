@@ -14,11 +14,11 @@ from retail_analytics_agent.fault_injection import (
     FaultInjector,
     fault_injection_context,
 )
-from retail_analytics_agent.metric_domain import OllamaMetricDomainGate
+from retail_analytics_agent.metric_domain import StructuredMetricDomainGate
 from retail_analytics_agent.model_adapters import (
-    OllamaAnalysisPlanner,
-    OllamaResultSummarizer,
-    OllamaSQLGenerator,
+    StructuredAnalysisPlanner,
+    StructuredResultSummarizer,
+    StructuredSQLGenerator,
 )
 from retail_analytics_agent.models import (
     AccessContext,
@@ -585,28 +585,33 @@ def get_analysis_runner() -> Iterator[AnalysisRunner]:
     )
     with (
         httpx.Client(
-            base_url=settings.ollama_base_url,
-            timeout=settings.ollama_timeout_seconds,
+            base_url=settings.active_model_base_url,
+            headers=settings.model_client_headers,
+            timeout=settings.active_model_timeout_seconds,
         ) as model_client,
         connect_to_database(settings) as query_connection,
         open_postgres_checkpointer(settings) as checkpointer,
     ):
         nodes = create_workflow_nodes(
-            domain_gate=OllamaMetricDomainGate(
+            domain_gate=StructuredMetricDomainGate(
                 model_client,
-                model=settings.ollama_model,
+                model=settings.active_model_name,
+                protocol=settings.model_provider,
+                timeout_seconds=settings.active_model_timeout_seconds,
             ),
-            planner=OllamaAnalysisPlanner(
+            planner=StructuredAnalysisPlanner(
                 model_client,
-                model=settings.ollama_model,
-                timeout_seconds=settings.ollama_timeout_seconds,
+                model=settings.active_model_name,
+                protocol=settings.model_provider,
+                timeout_seconds=settings.active_model_timeout_seconds,
                 retry_policy=retry_policy,
             ),
             retrieval_tool=CatalogRetrievalTool(),
-            sql_generator=OllamaSQLGenerator(
+            sql_generator=StructuredSQLGenerator(
                 model_client,
-                model=settings.ollama_model,
-                timeout_seconds=settings.ollama_timeout_seconds,
+                model=settings.active_model_name,
+                protocol=settings.model_provider,
+                timeout_seconds=settings.active_model_timeout_seconds,
                 retry_policy=retry_policy,
             ),
             validation_tool=SQLGlotValidationTool(audit_sink),
@@ -616,10 +621,11 @@ def get_analysis_runner() -> Iterator[AnalysisRunner]:
                 query_connection,
                 audit_sink,
             ),
-            summarizer=OllamaResultSummarizer(
+            summarizer=StructuredResultSummarizer(
                 model_client,
-                model=settings.ollama_model,
-                timeout_seconds=settings.ollama_timeout_seconds,
+                model=settings.active_model_name,
+                protocol=settings.model_provider,
+                timeout_seconds=settings.active_model_timeout_seconds,
                 retry_policy=retry_policy,
             ),
         )

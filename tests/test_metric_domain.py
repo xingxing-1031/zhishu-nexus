@@ -13,6 +13,7 @@ from retail_analytics_agent.metric_domain import (
     explicit_domain_rejection,
 )
 from retail_analytics_agent.models import AnalysisMetric
+from retail_analytics_agent.structured_chat import StructuredChatProtocol
 
 
 def _client(handler) -> httpx.Client:
@@ -71,6 +72,31 @@ def test_ollama_domain_gate_rejects_invalid_response() -> None:
 
     with pytest.raises(DomainGateError, match="domain gate failed"):
         gate.is_supported("销售额")
+
+
+def test_openai_compatible_domain_gate_returns_structured_decision() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/chat/completions"
+        return httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {
+                        "message": {
+                            "content": '{"supported":true,"reason_code":null}'
+                        }
+                    }
+                ]
+            },
+        )
+
+    gate = OllamaMetricDomainGate(
+        client=_client(handler),
+        model="qwen-plus",
+        protocol=StructuredChatProtocol.OPENAI_COMPATIBLE,
+    )
+
+    assert gate.classify("查询销售额") == DomainDecision(supported=True)
 
 
 @pytest.mark.parametrize(
