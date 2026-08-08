@@ -14,5 +14,6 @@ build/
 *.egg-info/
 backups/
 logs/
+.deployed-release
 frontend/node_modules/
 frontend/*.tsbuildinfo
