@@ -6,8 +6,8 @@ import pytest
 
 from retail_analytics_agent.metric_domain import (
     DomainDecision,
-    DomainGateError,
     DomainGatedMetricRetriever,
+    DomainGateError,
     DomainRejectionReason,
     OllamaMetricDomainGate,
     explicit_domain_rejection,

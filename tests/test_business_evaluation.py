@@ -1,6 +1,6 @@
+import re
 from collections import Counter
 from pathlib import Path
-import re
 
 import pytest
 from pydantic import ValidationError
@@ -12,7 +12,6 @@ from retail_analytics_agent.business_evaluation import (
     ExpectedOutcome,
     load_business_evaluation_suite,
 )
-
 
 EVALUATION_ROOT = Path(__file__).resolve().parents[1] / "evaluation"
 DEVELOPMENT_PATH = EVALUATION_ROOT / "business_development.json"

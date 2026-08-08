@@ -24,7 +24,6 @@ from retail_analytics_agent.models import (
     ApprovalStatus,
 )
 
-
 EVALUATION_ROOT = Path(__file__).resolve().parents[1] / "evaluation"
 
 

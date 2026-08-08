@@ -16,7 +16,6 @@ from retail_analytics_agent.database import get_database_connection
 from retail_analytics_agent.models import AccessContext, AccessRole
 from retail_analytics_agent.settings import Settings, get_settings
 
-
 client = TestClient(app)
 
 

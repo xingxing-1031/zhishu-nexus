@@ -9,11 +9,11 @@ from retail_analytics_agent.checkpointing import (
 )
 from retail_analytics_agent.models import (
     AccessRole,
-    ApprovalStatus,
     AnalysisPlan,
+    ApprovalStatus,
     ChartSpec,
-    RetrievalEvidence,
     QueryRisk,
+    RetrievalEvidence,
 )
 from retail_analytics_agent.settings import Settings
 from retail_analytics_agent.sql_safety import PreparedSQL

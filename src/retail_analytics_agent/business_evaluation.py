@@ -13,7 +13,6 @@ from retail_analytics_agent.models import (
     ChartType,
 )
 
-
 JsonScalar = str | int | float | bool | None
 
 

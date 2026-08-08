@@ -15,7 +15,6 @@ from retail_analytics_agent.request_registry import (
     request_fingerprint,
 )
 
-
 MIGRATION_PATH = (
     Path(__file__).resolve().parents[1]
     / "db"

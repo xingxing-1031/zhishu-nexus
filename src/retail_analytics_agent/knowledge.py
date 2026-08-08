@@ -13,7 +13,6 @@ from retail_analytics_agent.models import (
     RetrievalEvidence,
 )
 
-
 _FILTER_SOURCE_COLUMNS = {
     AnalysisFilterField.CHANNEL: "orders.channel",
     AnalysisFilterField.ORDER_STATUS: "orders.status",

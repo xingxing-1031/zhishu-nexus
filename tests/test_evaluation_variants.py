@@ -24,7 +24,6 @@ from retail_analytics_agent.retrieval_adapters import (
     MetricCandidateEvidenceAdapter,
 )
 
-
 EVALUATION_ROOT = Path(__file__).resolve().parents[1] / "evaluation"
 
 

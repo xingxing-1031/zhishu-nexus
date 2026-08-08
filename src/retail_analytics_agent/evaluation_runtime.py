@@ -23,12 +23,14 @@ from retail_analytics_agent.evaluation_snapshot import (
 )
 from retail_analytics_agent.evaluation_variants import create_variant_executors
 from retail_analytics_agent.hybrid_metric_retrieval import HybridMetricRetriever
+from retail_analytics_agent.metric_domain import (
+    OllamaMetricDomainGate,
+    StructuredMetricDomainGate,
+)
 from retail_analytics_agent.metric_reranking import (
     OllamaLLMMetricReranker,
     RerankedMetricRetriever,
 )
-from retail_analytics_agent.metric_domain import OllamaMetricDomainGate
-from retail_analytics_agent.metric_domain import StructuredMetricDomainGate
 from retail_analytics_agent.metric_retrieval import KeywordMetricRetriever
 from retail_analytics_agent.model_adapters import (
     OllamaAnalysisPlanner,
@@ -39,9 +41,9 @@ from retail_analytics_agent.model_adapters import (
     StructuredSQLGenerator,
 )
 from retail_analytics_agent.resilience import RetryPolicy
+from retail_analytics_agent.retrieval_adapters import CatalogEvidenceAdapter
 from retail_analytics_agent.settings import Settings, get_settings
 from retail_analytics_agent.vector_metric_retrieval import VectorMetricRetriever
-from retail_analytics_agent.retrieval_adapters import CatalogEvidenceAdapter
 from retail_analytics_agent.workflow import (
     build_analysis_graph,
     create_workflow_nodes,

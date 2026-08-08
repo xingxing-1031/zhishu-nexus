@@ -1,11 +1,11 @@
 from __future__ import annotations
 
+import logging
 from collections.abc import Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from datetime import datetime, timezone
 from enum import StrEnum
-import logging
 from threading import Lock
 from typing import Protocol
 
@@ -13,7 +13,6 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from retail_analytics_agent.database import connect_to_database
 from retail_analytics_agent.fault_injection import inject_fault
-
 
 logger = logging.getLogger(__name__)
 

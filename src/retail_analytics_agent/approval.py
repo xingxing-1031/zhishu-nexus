@@ -12,7 +12,6 @@ from retail_analytics_agent.models import (
 )
 from retail_analytics_agent.sql_safety import PreparedSQL
 
-
 SENSITIVE_APPROVAL_COLUMNS = frozenset({"refunds.reason"})
 HIGH_RESULT_LIMIT = 100
 

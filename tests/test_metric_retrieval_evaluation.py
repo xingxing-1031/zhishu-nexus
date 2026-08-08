@@ -15,7 +15,6 @@ from retail_analytics_agent.metric_retrieval_evaluation import (
 )
 from retail_analytics_agent.models import AnalysisMetric
 
-
 GOLD_SUITE_PATH = (
     Path(__file__).resolve().parents[1]
     / "evaluation"

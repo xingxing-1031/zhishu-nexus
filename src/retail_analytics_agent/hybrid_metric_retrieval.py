@@ -10,7 +10,6 @@ from retail_analytics_agent.metric_retrieval import (
 from retail_analytics_agent.models import AnalysisMetric
 from retail_analytics_agent.vector_metric_retrieval import VectorMetricRetriever
 
-
 DEFAULT_RRF_CONSTANT = 60
 
 

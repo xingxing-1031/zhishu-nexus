@@ -7,7 +7,6 @@ from datetime import datetime
 from retail_analytics_agent.database import connect_to_database
 from retail_analytics_agent.settings import Settings
 
-
 EVALUATION_SNAPSHOT_LOCK_ID = 2_026_081_612
 
 ORDER_TIMESTAMPS = {

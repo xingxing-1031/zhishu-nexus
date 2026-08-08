@@ -6,8 +6,8 @@ from typing import Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from retail_analytics_agent.models import AnalysisMetric
 from retail_analytics_agent.metric_retrieval import MetricRetriever
+from retail_analytics_agent.models import AnalysisMetric
 
 
 class MetricQueryEvaluationCase(BaseModel):

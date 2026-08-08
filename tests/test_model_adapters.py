@@ -3,16 +3,16 @@ import json
 import httpx
 import pytest
 
+from retail_analytics_agent.fault_injection import (
+    FaultRule,
+    ScriptedFaultInjector,
+    fault_injection_context,
+)
 from retail_analytics_agent.model_adapters import (
     ModelInvocationError,
     OllamaAnalysisPlanner,
     OllamaResultSummarizer,
     OllamaSQLGenerator,
-)
-from retail_analytics_agent.fault_injection import (
-    FaultRule,
-    ScriptedFaultInjector,
-    fault_injection_context,
 )
 from retail_analytics_agent.models import (
     AccessRole,

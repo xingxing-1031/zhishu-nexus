@@ -4,9 +4,7 @@ from fastapi import Depends, HTTPException, Request
 
 from retail_analytics_agent.auth import require_session
 from retail_analytics_agent.models import AccessContext, AccessRole
-from retail_analytics_agent.settings import get_settings
-from retail_analytics_agent.settings import Settings
-
+from retail_analytics_agent.settings import Settings, get_settings
 
 _DENIED_COLUMNS = {
     AccessRole.ANALYST: frozenset({("refunds", "reason")}),

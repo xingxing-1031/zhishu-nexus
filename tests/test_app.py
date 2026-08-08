@@ -1,13 +1,15 @@
-from decimal import Decimal
 import re
+from decimal import Decimal
 from unittest.mock import Mock
 
 from fastapi.testclient import TestClient
 from pydantic import SecretStr
 
 from retail_analytics_agent.access_control import get_access_context
-from retail_analytics_agent.analysis_service import get_analysis_runner
-from retail_analytics_agent.analysis_service import AnalysisRequestConflictError
+from retail_analytics_agent.analysis_service import (
+    AnalysisRequestConflictError,
+    get_analysis_runner,
+)
 from retail_analytics_agent.app import analysis_rate_limiter, app
 from retail_analytics_agent.database import get_database_connection
 from retail_analytics_agent.model_adapters import ModelInvocationError
@@ -17,10 +19,10 @@ from retail_analytics_agent.models import (
     AnalysisResponse,
     AnalysisRunningResponse,
     AnalysisStreamEvent,
+    ApprovalRejectedResponse,
+    ApprovalRequiredResponse,
     AssistantResponse,
     AssistantResponseStatus,
-    ApprovalRequiredResponse,
-    ApprovalRejectedResponse,
 )
 from retail_analytics_agent.settings import Settings, get_settings
 from retail_analytics_agent.tracing import (
@@ -31,7 +33,6 @@ from retail_analytics_agent.tracing import (
     execution_trace_context,
     record_execution_trace,
 )
-
 
 client = TestClient(app)
 

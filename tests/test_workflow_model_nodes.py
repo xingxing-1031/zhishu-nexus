@@ -2,6 +2,7 @@ from unittest.mock import Mock
 
 import pytest
 
+from retail_analytics_agent.model_adapters import ModelInvocationError
 from retail_analytics_agent.models import (
     AccessRole,
     AnalysisPlan,
@@ -9,7 +10,7 @@ from retail_analytics_agent.models import (
     AnalysisResultStatus,
     RetrievalEvidence,
 )
-from retail_analytics_agent.model_adapters import ModelInvocationError
+from retail_analytics_agent.sql_safety import prepare_safe_sql
 from retail_analytics_agent.workflow import (
     build_analysis_graph,
     create_fail_node,
@@ -19,7 +20,6 @@ from retail_analytics_agent.workflow import (
     create_summarize_node,
     create_workflow_nodes,
 )
-from retail_analytics_agent.sql_safety import prepare_safe_sql
 
 
 def _state():

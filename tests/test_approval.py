@@ -18,7 +18,6 @@ from retail_analytics_agent.models import (
 )
 from retail_analytics_agent.sql_safety import prepare_safe_sql
 
-
 MIGRATION_PATH = (
     Path(__file__).resolve().parents[1]
     / "db"

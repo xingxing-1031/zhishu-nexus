@@ -28,12 +28,12 @@ from retail_analytics_agent.resilience import (
     WorkflowDeadlineExceeded,
     remaining_workflow_seconds,
 )
-from retail_analytics_agent.sql_safety import PreparedSQL, SQLSafetyError
 from retail_analytics_agent.sql_consistency import (
     SQLBusinessConsistencyError,
     SQLConsistencyResult,
     validate_sql_against_evidence,
 )
+from retail_analytics_agent.sql_safety import PreparedSQL, SQLSafetyError
 
 
 class SQLValidationToolError(ValueError):

@@ -10,7 +10,6 @@ from retail_analytics_agent.knowledge import (
 )
 from retail_analytics_agent.models import AnalysisMetric
 
-
 MAX_METRIC_RESULTS = 10
 
 

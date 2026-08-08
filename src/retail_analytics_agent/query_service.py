@@ -7,14 +7,13 @@ from retail_analytics_agent.audit import (
     QueryAuditRecord,
     QueryAuditStatus,
 )
-from retail_analytics_agent.models import AccessRole
 from retail_analytics_agent.database import DatabaseConnection, DatabaseRow
+from retail_analytics_agent.models import AccessRole
 from retail_analytics_agent.sql_safety import (
     PreparedSQL,
     SQLSafetyError,
     prepare_safe_sql,
 )
-
 
 SET_TRANSACTION_READ_ONLY_SQL = "SET TRANSACTION READ ONLY"
 SET_STATEMENT_TIMEOUT_SQL = """

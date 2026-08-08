@@ -14,7 +14,6 @@ from fastapi import HTTPException, Request
 
 from retail_analytics_agent.models import AccessContext, AccessRole
 
-
 SESSION_COOKIE = "retail_session"
 _PBKDF2_ITERATIONS = 210_000
 

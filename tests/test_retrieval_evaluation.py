@@ -7,8 +7,8 @@ from pydantic import ValidationError
 from retail_analytics_agent.models import RetrievalEvidence
 from retail_analytics_agent.retrieval_evaluation import (
     RetrievalEvaluationCase,
-    RetrievalEvaluationSuite,
     RetrievalEvaluationReport,
+    RetrievalEvaluationSuite,
     evaluate_retrieval,
     load_retrieval_evaluation_suite,
     write_retrieval_evaluation_report,
@@ -17,7 +17,6 @@ from retail_analytics_agent.workflow_tools import (
     CatalogRetrievalTool,
     CatalogRetrievalToolError,
 )
-
 
 GOLD_SUITE_PATH = (
     Path(__file__).resolve().parents[1]

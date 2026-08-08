@@ -10,7 +10,6 @@ from retail_analytics_agent.database import DatabaseConnection
 from retail_analytics_agent.embeddings import EmbeddedKnowledgeCorpus
 from retail_analytics_agent.knowledge_chunks import KnowledgeType
 
-
 KNOWLEDGE_VECTOR_DIMENSION = 1024
 MAX_KNOWLEDGE_RESULTS = 100
 

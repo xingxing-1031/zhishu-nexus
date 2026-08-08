@@ -1,9 +1,9 @@
 from decimal import Decimal
 from enum import StrEnum
+from hashlib import sha256
 from typing import Any, Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
-from hashlib import sha256
 
 
 class OrderStatus(StrEnum):

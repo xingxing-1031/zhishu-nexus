@@ -1,6 +1,6 @@
+import json
 from enum import StrEnum
 from hashlib import sha256
-import json
 from typing import Protocol
 
 from pydantic import BaseModel, Field

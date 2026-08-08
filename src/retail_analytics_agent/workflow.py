@@ -10,6 +10,13 @@ from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import Command, interrupt
 
+from retail_analytics_agent.access_control import (
+    build_sensitive_read_sql,
+    requested_sensitive_columns,
+    requests_all_columns,
+    requests_role_elevation,
+    requests_write_operation,
+)
 from retail_analytics_agent.approval import (
     ApprovalAuditRecord,
     ApprovalAuditSink,
@@ -18,37 +25,30 @@ from retail_analytics_agent.approval import (
     approval_status_for_risk,
     assess_query_risk,
 )
-from retail_analytics_agent.access_control import (
-    build_sensitive_read_sql,
-    requested_sensitive_columns,
-    requests_all_columns,
-    requests_role_elevation,
-    requests_write_operation,
-)
 from retail_analytics_agent.charting import build_chart_spec
 from retail_analytics_agent.fault_injection import inject_fault
 from retail_analytics_agent.metric_domain import MetricDomainGate
-from retail_analytics_agent.models import (
-    AccessContext,
-    AccessRole,
-    ApprovalDecision,
-    ApprovalStatus,
-    AnalysisPlan,
-    AnalysisRequest,
-    AnalysisResultStatus,
-    ChartSpec,
-    RetrievalEvidence,
-    QueryRisk,
-)
-from retail_analytics_agent.request_routing import (
-    RequestRoute,
-    classify_preflight_request,
-)
 from retail_analytics_agent.model_adapters import (
     AnalysisPlanner,
     ModelInvocationError,
     ResultSummarizer,
     SQLGenerator,
+)
+from retail_analytics_agent.models import (
+    AccessContext,
+    AccessRole,
+    AnalysisPlan,
+    AnalysisRequest,
+    AnalysisResultStatus,
+    ApprovalDecision,
+    ApprovalStatus,
+    ChartSpec,
+    QueryRisk,
+    RetrievalEvidence,
+)
+from retail_analytics_agent.request_routing import (
+    RequestRoute,
+    classify_preflight_request,
 )
 from retail_analytics_agent.sql_safety import PreparedSQL, prepare_safe_sql
 from retail_analytics_agent.tracing import (
@@ -56,8 +56,8 @@ from retail_analytics_agent.tracing import (
     record_execution_trace,
 )
 from retail_analytics_agent.workflow_tools import (
-    RetrievalTool,
     QueryAwareRetrievalTool,
+    RetrievalTool,
     SQLBusinessConsistencyTool,
     SQLBusinessConsistencyToolError,
     SQLExecutionTool,

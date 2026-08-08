@@ -4,6 +4,7 @@ from unittest.mock import Mock
 import pytest
 
 from retail_analytics_agent.business_evaluation import (
+    ExpectedOutcome,
     load_business_evaluation_suite,
 )
 from retail_analytics_agent.evaluation_runs import (
@@ -11,8 +12,6 @@ from retail_analytics_agent.evaluation_runs import (
     EvaluationVariant,
 )
 from retail_analytics_agent.final_acceptance import run_final_acceptance
-from retail_analytics_agent.business_evaluation import ExpectedOutcome
-
 
 EVALUATION_ROOT = Path(__file__).resolve().parents[1] / "evaluation"
 

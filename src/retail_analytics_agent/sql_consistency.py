@@ -2,9 +2,8 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Sequence
 
-from pydantic import BaseModel, ConfigDict, Field
-from sqlglot import parse_one
-from sqlglot import exp
+from pydantic import BaseModel, ConfigDict
+from sqlglot import exp, parse_one
 
 from retail_analytics_agent.knowledge import (
     DEFAULT_METRIC_CATALOG,

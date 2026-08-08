@@ -1,5 +1,6 @@
-import pytest
 from pathlib import Path
+
+import pytest
 
 from retail_analytics_agent.business_evaluation import (
     ExpectedOutcome,
@@ -11,7 +12,6 @@ from retail_analytics_agent.sql_consistency import (
     validate_sql_against_evidence,
 )
 from retail_analytics_agent.workflow_tools import CatalogRetrievalTool
-
 
 DEVELOPMENT_SUITE_PATH = (
     Path(__file__).resolve().parents[1]

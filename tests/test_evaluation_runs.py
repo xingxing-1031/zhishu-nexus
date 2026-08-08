@@ -1,5 +1,5 @@
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
@@ -9,17 +9,16 @@ from retail_analytics_agent.business_evaluation import (
     load_business_evaluation_suite,
 )
 from retail_analytics_agent.evaluation_runs import (
+    ControlledExperiment,
     EvaluationRunRecord,
     EvaluationStage,
     EvaluationVariant,
-    ControlledExperiment,
     ExperimentConditions,
     ensure_comparable_conditions,
     run_development_experiment,
     score_case,
     summarize_variant,
 )
-
 
 EVALUATION_ROOT = Path(__file__).resolve().parents[1] / "evaluation"
 

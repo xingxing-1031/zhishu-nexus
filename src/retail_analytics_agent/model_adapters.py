@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from decimal import Decimal, InvalidOperation
-from dataclasses import dataclass
 import re
+from dataclasses import dataclass
+from decimal import Decimal, InvalidOperation
 from time import monotonic
 from typing import Protocol, Sequence
 
@@ -14,6 +14,7 @@ from retail_analytics_agent.fault_injection import inject_fault
 from retail_analytics_agent.knowledge import (
     DEFAULT_METRIC_CATALOG,
     DEFAULT_SCHEMA_CATALOG,
+    MetricDefinition,
 )
 from retail_analytics_agent.models import (
     AccessRole,

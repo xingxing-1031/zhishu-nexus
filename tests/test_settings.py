@@ -1,5 +1,5 @@
-from pydantic import SecretStr
 import pytest
+from pydantic import SecretStr
 
 from retail_analytics_agent.settings import Settings
 from retail_analytics_agent.structured_chat import StructuredChatProtocol

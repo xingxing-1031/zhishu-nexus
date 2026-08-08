@@ -16,7 +16,6 @@ from retail_analytics_agent.retrieval_adapters import (
     MetricCandidateEvidenceAdapter,
 )
 
-
 EvaluationWorkflowFactory = Callable[
     [EvidenceRetrievalAdapter],
     EvaluationCaseWorkflow,

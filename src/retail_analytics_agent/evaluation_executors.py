@@ -7,16 +7,12 @@ from typing import Callable, Protocol, cast
 import httpx
 from pydantic_core import to_jsonable_python
 
+from retail_analytics_agent.analysis_service import LangGraphAnalysisRunner
 from retail_analytics_agent.business_evaluation import (
     BusinessEvaluationCase,
     ExpectedOutcome,
     JsonScalar,
 )
-from retail_analytics_agent.fault_injection import (
-    FaultRule,
-    ScriptedFaultInjector,
-)
-from retail_analytics_agent.analysis_service import LangGraphAnalysisRunner
 from retail_analytics_agent.evaluation_observation import (
     AnalysisEvaluationObservation,
     read_evaluation_observation,
@@ -24,6 +20,10 @@ from retail_analytics_agent.evaluation_observation import (
 from retail_analytics_agent.evaluation_runs import (
     EvaluationRunRecord,
     EvaluationVariant,
+)
+from retail_analytics_agent.fault_injection import (
+    FaultRule,
+    ScriptedFaultInjector,
 )
 from retail_analytics_agent.models import (
     AccessContext,

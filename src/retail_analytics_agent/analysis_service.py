@@ -6,8 +6,8 @@ from typing import Protocol
 import httpx
 from langgraph.types import Command
 
-from retail_analytics_agent.audit import DatabaseAuditSink
 from retail_analytics_agent.approval import DatabaseApprovalAuditSink
+from retail_analytics_agent.audit import DatabaseAuditSink
 from retail_analytics_agent.checkpointing import open_postgres_checkpointer
 from retail_analytics_agent.database import connect_to_database
 from retail_analytics_agent.fault_injection import (
@@ -23,21 +23,20 @@ from retail_analytics_agent.model_adapters import (
 from retail_analytics_agent.models import (
     AccessContext,
     AccessRole,
-    AnalysisRejectedResponse,
-    ApprovalRejectedResponse,
-    ApprovalRequiredResponse,
-    ApprovalResolutionRequest,
-    ApprovalStatus,
     AnalysisOutcome,
+    AnalysisRejectedResponse,
     AnalysisRequest,
     AnalysisResponse,
     AnalysisResultStatus,
     AnalysisRunningResponse,
     AnalysisStreamEvent,
+    ApprovalRejectedResponse,
+    ApprovalRequiredResponse,
+    ApprovalResolutionRequest,
+    ApprovalStatus,
     AssistantResponse,
     AssistantResponseStatus,
 )
-from retail_analytics_agent.request_routing import RequestRoute
 from retail_analytics_agent.request_registry import (
     AnalysisRequestStore,
     DatabaseAnalysisRequestStore,
@@ -45,6 +44,7 @@ from retail_analytics_agent.request_registry import (
     RequestClaimStatus,
     RequestRunStatus,
 )
+from retail_analytics_agent.request_routing import RequestRoute
 from retail_analytics_agent.resilience import RetryPolicy, workflow_time_budget
 from retail_analytics_agent.settings import get_settings
 from retail_analytics_agent.tracing import (

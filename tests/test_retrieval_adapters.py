@@ -2,7 +2,6 @@ from unittest.mock import Mock
 
 import pytest
 
-from retail_analytics_agent.metric_retrieval import KeywordMetricRetriever
 from retail_analytics_agent.models import AnalysisMetric, AnalysisPlan
 from retail_analytics_agent.retrieval_adapters import (
     CatalogEvidenceAdapter,

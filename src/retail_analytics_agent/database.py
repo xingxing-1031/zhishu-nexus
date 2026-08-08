@@ -9,7 +9,6 @@ from psycopg_pool import ConnectionPool
 
 from retail_analytics_agent.settings import Settings, get_settings
 
-
 DatabaseRow = dict[str, Any]
 DatabaseConnection = Connection[DatabaseRow]
 

@@ -7,7 +7,6 @@ from pathlib import Path
 from retail_analytics_agent.database import connect_to_database
 from retail_analytics_agent.settings import Settings, get_settings
 
-
 MIGRATION_TABLE = "schema_migrations"
 
 

@@ -19,7 +19,6 @@ from retail_analytics_agent.knowledge_store import (
     upsert_embedded_corpus,
 )
 
-
 MIGRATION_PATH = (
     Path(__file__).resolve().parents[1]
     / "db"

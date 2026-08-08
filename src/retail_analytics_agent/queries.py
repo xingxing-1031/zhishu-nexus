@@ -6,7 +6,6 @@ from retail_analytics_agent.models import (
     RefundStatusSummary,
 )
 
-
 CHANNEL_SALES_SQL = """
 SELECT
     o.channel,

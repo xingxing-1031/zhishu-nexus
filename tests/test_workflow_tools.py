@@ -25,10 +25,10 @@ from retail_analytics_agent.workflow import (
 from retail_analytics_agent.workflow_tools import (
     CatalogRetrievalTool,
     CatalogRetrievalToolError,
+    SafeSQLExecutionTool,
     SQLExecutionToolError,
     SQLGlotValidationTool,
     SQLValidationToolError,
-    SafeSQLExecutionTool,
 )
 
 

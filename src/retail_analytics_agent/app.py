@@ -1,30 +1,19 @@
 import asyncio
 import logging
+from contextlib import asynccontextmanager
 from pathlib import Path
 from queue import Queue
 from threading import Thread
-from contextlib import asynccontextmanager
 from time import perf_counter
 from typing import Annotated
 from uuid import uuid4
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
-from pydantic import BaseModel, Field
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel, Field
 
 from retail_analytics_agent.access_control import get_access_context
-from retail_analytics_agent.auth import (
-    SESSION_COOKIE,
-    issue_session,
-    verify_password,
-)
-from retail_analytics_agent.analysis_service import (
-    AnalysisRequestConflictError,
-    AnalysisRunError,
-    AnalysisRunner,
-    get_analysis_runner,
-)
 from retail_analytics_agent.admin_views import (
     AdminAuditEntry,
     AdminAuditStatus,
@@ -32,18 +21,29 @@ from retail_analytics_agent.admin_views import (
     list_admin_audit_entries,
     list_metric_definitions,
 )
+from retail_analytics_agent.analysis_service import (
+    AnalysisRequestConflictError,
+    AnalysisRunError,
+    AnalysisRunner,
+    get_analysis_runner,
+)
+from retail_analytics_agent.auth import (
+    SESSION_COOKIE,
+    issue_session,
+    verify_password,
+)
 from retail_analytics_agent.database import (
     DatabaseConnection,
     check_database_readiness,
     close_database_pool,
     get_database_connection,
 )
+from retail_analytics_agent.model_adapters import ModelInvocationError
 from retail_analytics_agent.models import (
     AccessContext,
     AccessRole,
-    AnalysisRequest,
     AnalysisOutcome,
-    AnalysisResponse,
+    AnalysisRequest,
     AnalysisRunningResponse,
     AnalysisStreamEvent,
     ApprovalRequiredResponse,
@@ -54,9 +54,8 @@ from retail_analytics_agent.models import (
     RefundStatusSummary,
     SessionInfo,
 )
-from retail_analytics_agent.model_adapters import ModelInvocationError
-from retail_analytics_agent.public_errors import public_error_message
 from retail_analytics_agent.observability import configure_logging
+from retail_analytics_agent.public_errors import public_error_message
 from retail_analytics_agent.queries import (
     get_channel_sales_summary,
     get_order_status_summary,
@@ -66,7 +65,6 @@ from retail_analytics_agent.queries import (
 from retail_analytics_agent.rate_limit import SlidingWindowRateLimiter
 from retail_analytics_agent.settings import Settings, get_settings
 from retail_analytics_agent.tracing import ExecutionTraceResponse
-
 
 logger = logging.getLogger(__name__)
 
