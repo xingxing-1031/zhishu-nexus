@@ -28,15 +28,20 @@ from retail_analytics_agent.metric_reranking import (
     RerankedMetricRetriever,
 )
 from retail_analytics_agent.metric_domain import OllamaMetricDomainGate
+from retail_analytics_agent.metric_domain import StructuredMetricDomainGate
 from retail_analytics_agent.metric_retrieval import KeywordMetricRetriever
 from retail_analytics_agent.model_adapters import (
     OllamaAnalysisPlanner,
     OllamaResultSummarizer,
     OllamaSQLGenerator,
+    StructuredAnalysisPlanner,
+    StructuredResultSummarizer,
+    StructuredSQLGenerator,
 )
 from retail_analytics_agent.resilience import RetryPolicy
 from retail_analytics_agent.settings import Settings, get_settings
 from retail_analytics_agent.vector_metric_retrieval import VectorMetricRetriever
+from retail_analytics_agent.retrieval_adapters import CatalogEvidenceAdapter
 from retail_analytics_agent.workflow import (
     build_analysis_graph,
     create_workflow_nodes,
@@ -184,4 +189,82 @@ def open_real_evaluation_executors(
             retrieval_retriever=retrievers.retrieval,
             reranker_retriever=retrievers.reranker,
             candidate_k=candidate_k,
+        )
+
+
+@contextmanager
+def open_deployed_evaluation_executor(
+    *,
+    execution_id: str,
+    settings: Settings | None = None,
+    reference_time: datetime | None = None,
+) -> Iterator[ObservedWorkflowExecutor]:
+    """Evaluate the same model protocol and retrieval path used by the API."""
+
+    active_settings = settings or get_settings()
+    retry_policy = RetryPolicy(
+        max_attempts=active_settings.model_retry_max_attempts,
+        initial_backoff_seconds=(
+            active_settings.model_retry_initial_backoff_seconds
+        ),
+    )
+    audit_sink = DatabaseAuditSink()
+    approval_audit_sink = DatabaseApprovalAuditSink()
+
+    with (
+        temporary_evaluation_snapshot(active_settings),
+        httpx.Client(
+            base_url=active_settings.active_model_base_url,
+            headers=active_settings.model_client_headers,
+            timeout=active_settings.active_model_timeout_seconds,
+        ) as model_client,
+        connect_to_database(active_settings) as query_connection,
+        open_postgres_checkpointer(active_settings) as checkpointer,
+    ):
+        nodes = create_workflow_nodes(
+            domain_gate=StructuredMetricDomainGate(
+                model_client,
+                model=active_settings.active_model_name,
+                protocol=active_settings.model_provider,
+                timeout_seconds=active_settings.active_model_timeout_seconds,
+            ),
+            planner=StructuredAnalysisPlanner(
+                model_client,
+                model=active_settings.active_model_name,
+                protocol=active_settings.model_provider,
+                timeout_seconds=active_settings.active_model_timeout_seconds,
+                retry_policy=retry_policy,
+            ),
+            retrieval_tool=CatalogEvidenceAdapter(),
+            sql_generator=StructuredSQLGenerator(
+                model_client,
+                model=active_settings.active_model_name,
+                protocol=active_settings.model_provider,
+                timeout_seconds=active_settings.active_model_timeout_seconds,
+                retry_policy=retry_policy,
+            ),
+            validation_tool=SQLGlotValidationTool(audit_sink),
+            business_validation_tool=SQLConsistencyValidationTool(),
+            approval_audit_sink=approval_audit_sink,
+            execution_tool=SafeSQLExecutionTool(
+                query_connection,
+                audit_sink,
+            ),
+            summarizer=StructuredResultSummarizer(
+                model_client,
+                model=active_settings.active_model_name,
+                protocol=active_settings.model_provider,
+                timeout_seconds=active_settings.active_model_timeout_seconds,
+                retry_policy=retry_policy,
+            ),
+        )
+        runner = LangGraphAnalysisRunner(
+            build_analysis_graph(nodes, checkpointer=checkpointer),
+            workflow_timeout_seconds=active_settings.workflow_timeout_seconds,
+            reference_time=reference_time,
+        )
+        yield ObservedWorkflowExecutor(
+            variant=EvaluationVariant.BASELINE,
+            workflow=LangGraphEvaluationCaseWorkflow(runner),
+            execution_id=execution_id,
         )

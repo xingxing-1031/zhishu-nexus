@@ -1,0 +1,31 @@
+services:
+  postgres-evaluation:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_DB: ${EVALUATION_POSTGRES_DB:-retail_analytics_evaluation}
+      POSTGRES_USER: ${EVALUATION_POSTGRES_USER:-retail_evaluator}
+      POSTGRES_PASSWORD: ${EVALUATION_POSTGRES_PASSWORD:-evaluation-only-password}
+    ports:
+      - "127.0.0.1:${EVALUATION_POSTGRES_PORT:-55432}:5432"
+    volumes:
+      - evaluation_postgres_data:/var/lib/postgresql/data
+      - ./db/migrations/001_initial_schema.sql:/docker-entrypoint-initdb.d/001_initial_schema.sql:ro
+      - ./db/migrations/002_query_audit_logs.sql:/docker-entrypoint-initdb.d/002_query_audit_logs.sql:ro
+      - ./db/migrations/003_knowledge_chunks.sql:/docker-entrypoint-initdb.d/003_knowledge_chunks.sql:ro
+      - ./db/migrations/004_query_approval_logs.sql:/docker-entrypoint-initdb.d/004_query_approval_logs.sql:ro
+      - ./db/migrations/005_resilience_and_idempotency.sql:/docker-entrypoint-initdb.d/005_resilience_and_idempotency.sql:ro
+      - ./db/migrations/006_execution_trace.sql:/docker-entrypoint-initdb.d/006_execution_trace.sql:ro
+      - ./db/seeds/001_demo_data.sql:/docker-entrypoint-initdb.d/007_demo_data.sql:ro
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+volumes:
+  evaluation_postgres_data:
