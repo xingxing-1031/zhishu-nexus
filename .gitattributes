@@ -1,0 +1,4 @@
+frontend/index.html text eol=lf
+src/retail_analytics_agent/static/index.html text eol=lf
+src/retail_analytics_agent/static/assets/*.js text eol=lf
+src/retail_analytics_agent/static/assets/*.css text eol=lf

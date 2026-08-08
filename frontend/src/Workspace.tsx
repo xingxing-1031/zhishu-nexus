@@ -145,11 +145,11 @@ export default function Workspace({
     event.preventDefault();
     if (!ready || running || !question.trim()) return;
     resetRun();
-    const nextRequestId = makeRequestId();
-    setRequestId(nextRequestId);
     setRunning(true);
     setMessage("分析请求已发送");
     try {
+      const nextRequestId = makeRequestId();
+      setRequestId(nextRequestId);
       await streamAnalysis(
         {
           request_id: nextRequestId,
@@ -450,7 +450,22 @@ function traceStatusLabel(status: string) {
 
 function makeRequestId() {
   const date = new Date().toISOString().slice(0, 10).replaceAll("-", "");
-  const suffix = crypto.randomUUID().slice(0, 8).toUpperCase();
+  let suffix: string;
+  if (typeof globalThis.crypto?.randomUUID === "function") {
+    suffix = globalThis.crypto.randomUUID().slice(0, 8).toUpperCase();
+  } else {
+    const bytes = new Uint8Array(4);
+    if (typeof globalThis.crypto?.getRandomValues === "function") {
+      globalThis.crypto.getRandomValues(bytes);
+    } else {
+      for (let index = 0; index < bytes.length; index += 1) {
+        bytes[index] = Math.floor(Math.random() * 256);
+      }
+    }
+    suffix = Array.from(bytes, (value) => value.toString(16).padStart(2, "0"))
+      .join("")
+      .toUpperCase();
+  }
   return `REQ-${date}-${suffix}`;
 }
 
