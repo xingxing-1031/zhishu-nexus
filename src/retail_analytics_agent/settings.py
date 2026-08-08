@@ -14,6 +14,9 @@ class Settings(BaseSettings):
     postgres_password: SecretStr | None = None
     postgres_host: str = "127.0.0.1"
     postgres_port: int = 5432
+    database_pool_min_size: int = Field(default=1, ge=1, le=10)
+    database_pool_max_size: int = Field(default=4, ge=1, le=20)
+    database_pool_timeout_seconds: float = Field(default=10, gt=0, le=60)
     ollama_base_url: str = "http://127.0.0.1:11434"
     ollama_model: str = "qwen3:4b"
     ollama_timeout_seconds: float = Field(default=120, gt=0, le=600)
@@ -68,6 +71,8 @@ class Settings(BaseSettings):
                 "configure DATABASE_URL or complete POSTGRES_DB, "
                 "POSTGRES_USER and POSTGRES_PASSWORD"
             )
+        if self.database_pool_min_size > self.database_pool_max_size:
+            raise ValueError("DATABASE_POOL_MIN_SIZE cannot exceed DATABASE_POOL_MAX_SIZE")
         if (
             self.public_demo_mode
             and self.local_access_role is not AccessRole.ANALYST

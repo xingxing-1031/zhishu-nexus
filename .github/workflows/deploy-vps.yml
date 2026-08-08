@@ -1,0 +1,39 @@
+name: Deploy VPS release
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Git commit, tag, or branch to deploy
+        required: true
+        default: main
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Prepare SSH credentials
+        shell: bash
+        env:
+          VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$VPS_SSH_PRIVATE_KEY" > ~/.ssh/vps_key
+          chmod 600 ~/.ssh/vps_key
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+
+      - name: Deploy selected release
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          RELEASE_REF: ${{ inputs.ref }}
+        run: >-
+          ssh -i ~/.ssh/vps_key
+          "$VPS_USER@$VPS_HOST"
+          "cd /home/ubuntu/retail-analytics-agent && ./ops/vps_release.sh '$RELEASE_REF'"

@@ -1,8 +1,12 @@
 import asyncio
+import logging
 from pathlib import Path
 from queue import Queue
 from threading import Thread
+from contextlib import asynccontextmanager
+from time import perf_counter
 from typing import Annotated
+from uuid import uuid4
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
 from pydantic import BaseModel, Field
@@ -24,6 +28,7 @@ from retail_analytics_agent.analysis_service import (
 from retail_analytics_agent.database import (
     DatabaseConnection,
     check_database_readiness,
+    close_database_pool,
     get_database_connection,
 )
 from retail_analytics_agent.models import (
@@ -44,6 +49,7 @@ from retail_analytics_agent.models import (
 )
 from retail_analytics_agent.model_adapters import ModelInvocationError
 from retail_analytics_agent.public_errors import public_error_message
+from retail_analytics_agent.observability import configure_logging
 from retail_analytics_agent.queries import (
     get_channel_sales_summary,
     get_order_status_summary,
@@ -55,14 +61,64 @@ from retail_analytics_agent.settings import Settings, get_settings
 from retail_analytics_agent.tracing import ExecutionTraceResponse
 
 
+logger = logging.getLogger(__name__)
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    configure_logging()
+    try:
+        yield
+    finally:
+        close_database_pool()
+
+
 app = FastAPI(
-    title="零售运营可审计分析助手",
+    title="???????????",
     version="0.1.0",
+    lifespan=lifespan,
 )
 _STATIC_DIR = Path(__file__).with_name("static")
 app.mount("/static", StaticFiles(directory=_STATIC_DIR), name="static")
 analysis_rate_limiter = SlidingWindowRateLimiter()
 login_rate_limiter = SlidingWindowRateLimiter()
+
+
+@app.middleware("http")
+async def record_request(request: Request, call_next):
+    request_id = request.headers.get("X-Request-ID") or str(uuid4())
+    started = perf_counter()
+    try:
+        response = await call_next(request)
+    except Exception as exc:
+        logger.exception(
+            "request failed",
+            extra={
+                "event": "http_request_error",
+                "request_id": request_id,
+                "method": request.method,
+                "path": request.url.path,
+                "status_code": 500,
+                "duration_ms": round((perf_counter() - started) * 1000),
+                "client_host": request.client.host if request.client else "unknown",
+                "error_type": type(exc).__name__,
+            },
+        )
+        raise
+    response.headers["X-Request-ID"] = request_id
+    logger.info(
+        "request completed",
+        extra={
+            "event": "http_request",
+            "request_id": request_id,
+            "method": request.method,
+            "path": request.url.path,
+            "status_code": response.status_code,
+            "duration_ms": round((perf_counter() - started) * 1000),
+            "client_host": request.client.host if request.client else "unknown",
+        },
+    )
+    return response
 
 
 class LoginRequest(BaseModel):
@@ -81,8 +137,8 @@ def _enforce_public_demo_request(
         raise HTTPException(
             status_code=422,
             detail=(
-                "公开演示环境单次最多返回 "
-                f"{settings.public_demo_max_rows} 行数据。"
+                "???????????? "
+                f"{settings.public_demo_max_rows} ????"
             ),
         )
     client_host = (
@@ -98,7 +154,7 @@ def _enforce_public_demo_request(
     if retry_after is not None:
         raise HTTPException(
             status_code=429,
-            detail="请求过于频繁，请稍后再试。",
+            detail="?????????????",
             headers={"Retry-After": str(retry_after)},
         )
 
@@ -107,7 +163,7 @@ def _reject_public_internal_endpoint(settings: Settings) -> None:
     if settings.public_demo_mode:
         raise HTTPException(
             status_code=403,
-            detail="公开演示环境不提供内部执行接口。",
+            detail="????????????????",
         )
 
 
@@ -129,7 +185,7 @@ def login(
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> SessionInfo:
     if settings.auth_mode != "password":
-        raise HTTPException(status_code=404, detail="当前部署使用公开演示身份。")
+        raise HTTPException(status_code=404, detail="?????????????")
     client_host = request.client.host if request.client is not None else "unknown"
     retry_after = login_rate_limiter.consume(
         client_host,
@@ -139,13 +195,13 @@ def login(
     if retry_after is not None:
         raise HTTPException(
             status_code=429,
-            detail="登录尝试过于频繁，请稍后再试。",
+            detail="???????????????",
             headers={"Retry-After": str(retry_after)},
         )
     if payload.username != settings.auth_username or not settings.auth_password_hash:
-        raise HTTPException(status_code=401, detail="用户名或密码错误。")
+        raise HTTPException(status_code=401, detail="?????????")
     if not verify_password(payload.password, settings.auth_password_hash):
-        raise HTTPException(status_code=401, detail="用户名或密码错误。")
+        raise HTTPException(status_code=401, detail="?????????")
     assert settings.auth_session_secret is not None
     token = issue_session(
         user_id=settings.auth_user_id,
@@ -180,7 +236,7 @@ def readiness_check() -> dict[str, str]:
     if not check_database_readiness():
         raise HTTPException(
             status_code=503,
-            detail="数据库和业务数据尚未就绪，请稍后重试。",
+            detail="???????????????????",
         )
     return {"status": "ready"}
 
@@ -251,7 +307,7 @@ def run_analysis(
     if analysis_request.user_id != access_context.user_id:
         raise HTTPException(
             status_code=403,
-            detail="当前登录身份与请求用户不一致。",
+            detail="???????????????",
         )
     _enforce_public_demo_request(http_request, analysis_request, settings)
     try:
@@ -287,7 +343,7 @@ def resolve_analysis_approval(
     if access_context.role is not AccessRole.ADMIN:
         raise HTTPException(
             status_code=403,
-            detail="只有管理员可以处理人工审批。",
+            detail="??????????????",
         )
     try:
         return runner.resume_approval(
@@ -296,7 +352,7 @@ def resolve_analysis_approval(
             access_context,
         )
     except PermissionError as exc:
-        raise HTTPException(status_code=403, detail="当前身份无权处理这个请求。") from exc
+        raise HTTPException(status_code=403, detail="?????????????") from exc
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=public_error_message(exc)) from exc
 
@@ -315,9 +371,9 @@ def read_analysis_status(
     try:
         return runner.get_status(request_id, access_context)
     except PermissionError as exc:
-        raise HTTPException(status_code=403, detail="当前身份无权查看这个请求。") from exc
+        raise HTTPException(status_code=403, detail="?????????????") from exc
     except ValueError as exc:
-        raise HTTPException(status_code=404, detail="没有找到对应的分析请求。") from exc
+        raise HTTPException(status_code=404, detail="????????????") from exc
 
 
 @app.get(
@@ -334,9 +390,9 @@ def read_analysis_trace(
     try:
         return runner.get_trace(request_id, access_context)
     except PermissionError as exc:
-        raise HTTPException(status_code=403, detail="当前身份无权查看这个执行记录。") from exc
+        raise HTTPException(status_code=403, detail="???????????????") from exc
     except ValueError as exc:
-        raise HTTPException(status_code=404, detail="没有找到对应的执行记录。") from exc
+        raise HTTPException(status_code=404, detail="????????????") from exc
 
 
 _STREAM_DONE = object()
@@ -393,7 +449,7 @@ def stream_analysis(
     if analysis_request.user_id != access_context.user_id:
         raise HTTPException(
             status_code=403,
-            detail="当前登录身份与请求用户不一致。",
+            detail="???????????????",
         )
     _enforce_public_demo_request(http_request, analysis_request, settings)
     return StreamingResponse(

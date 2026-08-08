@@ -50,9 +50,10 @@ def test_vps_compose_keeps_database_private_and_uses_caddy() -> None:
     assert "reverse_proxy api:8000" in caddyfile
 
 
-def test_vps_compose_requires_server_secrets_and_public_demo_mode() -> None:
+def test_vps_compose_requires_server_secrets_and_configurable_access_mode() -> None:
     compose = (PROJECT_ROOT / "compose.vps.yaml").read_text(encoding="utf-8")
 
     assert "MODEL_API_KEY:?set MODEL_API_KEY" in compose
-    assert 'PUBLIC_DEMO_MODE: "true"' in compose
+    assert "PUBLIC_DEMO_MODE: ${PUBLIC_DEMO_MODE:-true}" in compose
+    assert "AUTH_MODE: ${AUTH_MODE:-demo}" in compose
     assert "SITE_ADDRESS:?set SITE_ADDRESS" in compose
