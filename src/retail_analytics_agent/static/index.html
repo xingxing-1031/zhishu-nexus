@@ -12,9 +12,12 @@
   </head>
   <body>
     <header class="app-header">
-      <div>
-        <p class="product-mark">零售运营分析 / 演示版 0.2</p>
+      <div class="brand-block">
+        <div class="brand-symbol" aria-hidden="true">R</div>
+        <div>
+        <p class="product-mark">RETAIL INTELLIGENCE / V0.3</p>
         <h1>零售运营分析台</h1>
+        </div>
       </div>
       <div class="session-status" aria-live="polite">
         <span class="status-dot" id="server-dot"></span>
@@ -22,17 +25,37 @@
         <span class="session-divider"></span>
         <strong id="session-role">--</strong>
         <span id="session-user">--</span>
+        <button type="button" class="icon-action" id="logout-button" title="退出登录" hidden aria-label="退出登录">退出</button>
       </div>
     </header>
 
+    <section class="login-gate" id="login-gate" hidden aria-labelledby="login-title">
+      <form class="login-panel" id="login-form">
+        <p class="product-mark">受控访问</p>
+        <h2 id="login-title">登录零售运营分析台</h2>
+        <p class="login-copy">账号身份由服务器校验，角色不能由浏览器自行指定。</p>
+        <label for="login-username">用户名</label>
+        <input id="login-username" name="username" autocomplete="username" required />
+        <label for="login-password">密码</label>
+        <input id="login-password" name="password" type="password" autocomplete="current-password" required />
+        <p class="form-error" id="login-error" hidden></p>
+        <button class="primary-action" type="submit">登录</button>
+      </form>
+    </section>
+
     <div class="workspace">
       <aside class="query-pane">
+        <div class="scope-strip">
+          <span>公网演示</span>
+          <strong>只读数据</strong>
+          <strong>全程审计</strong>
+        </div>
         <form id="analysis-form">
           <div class="section-heading">
             <span class="section-index">01</span>
             <div>
               <h2>分析请求</h2>
-              <p>自然语言业务问题</p>
+              <p>描述指标、维度、筛选与排序</p>
             </div>
           </div>
 
@@ -46,14 +69,17 @@
           >最近30天各渠道销售额是多少？</textarea>
 
           <div class="examples" aria-label="示例问题">
-            <button type="button" data-question="最近30天各渠道销售额是多少？">
-              渠道销售额
+            <button type="button" data-question="最近30天各渠道销售额是多少？按销售额从高到低排序。">
+              <strong>渠道经营</strong><span>近30天销售额排行</span>
             </button>
-            <button type="button" data-question="各商品销量从高到低排列">
-              商品销量
+            <button type="button" data-question="最近30天各商品销量从高到低排列，返回10条。">
+              <strong>商品表现</strong><span>销量前10商品</span>
             </button>
-            <button type="button" data-question="各退款状态的退款金额是多少？">
-              退款状态
+            <button type="button" data-question="最近30天各退款状态的退款金额是多少？">
+              <strong>售后风险</strong><span>退款状态与金额</span>
+            </button>
+            <button type="button" data-question="最近30天按日期统计销售额变化趋势。">
+              <strong>趋势分析</strong><span>每日销售额走势</span>
             </button>
           </div>
 
@@ -91,6 +117,22 @@
       </aside>
 
       <main class="result-pane">
+        <section class="overview-band" aria-labelledby="overview-title">
+          <div class="overview-heading">
+            <div>
+              <p class="eyebrow">当前演示数据</p>
+              <h2 id="overview-title">业务数据概况</h2>
+            </div>
+            <span id="dataset-coverage">正在读取数据库</span>
+          </div>
+          <dl class="overview-metrics">
+            <div><dt>订单</dt><dd id="overview-orders">--</dd></div>
+            <div><dt>商品</dt><dd id="overview-products">--</dd></div>
+            <div><dt>销售渠道</dt><dd id="overview-channels">--</dd></div>
+            <div><dt>退款记录</dt><dd id="overview-refunds">--</dd></div>
+          </dl>
+          <p class="trust-note"><strong>可信链路：</strong>结构化计划 → 指标证据检索 → SQL 双重校验 → PostgreSQL 执行 → 可审计结果</p>
+        </section>
         <section class="workflow-band" aria-labelledby="workflow-title">
           <div class="section-heading inline-heading">
             <span class="section-index">02</span>

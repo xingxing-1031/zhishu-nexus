@@ -5,10 +5,16 @@ from threading import Thread
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
+from pydantic import BaseModel, Field
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from retail_analytics_agent.access_control import get_access_context
+from retail_analytics_agent.auth import (
+    SESSION_COOKIE,
+    issue_session,
+    verify_password,
+)
 from retail_analytics_agent.analysis_service import (
     AnalysisRequestConflictError,
     AnalysisRunError,
@@ -56,6 +62,12 @@ app = FastAPI(
 _STATIC_DIR = Path(__file__).with_name("static")
 app.mount("/static", StaticFiles(directory=_STATIC_DIR), name="static")
 analysis_rate_limiter = SlidingWindowRateLimiter()
+login_rate_limiter = SlidingWindowRateLimiter()
+
+
+class LoginRequest(BaseModel):
+    username: str = Field(min_length=1, max_length=100)
+    password: str = Field(min_length=1, max_length=200)
 
 
 def _enforce_public_demo_request(
@@ -109,6 +121,60 @@ def health_check() -> dict[str, str]:
     return {"status": "ok"}
 
 
+@app.post("/auth/login")
+def login(
+    payload: LoginRequest,
+    request: Request,
+    response: Response,
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> SessionInfo:
+    if settings.auth_mode != "password":
+        raise HTTPException(status_code=404, detail="当前部署使用公开演示身份。")
+    client_host = request.client.host if request.client is not None else "unknown"
+    retry_after = login_rate_limiter.consume(
+        client_host,
+        limit=5,
+        window_seconds=60,
+    )
+    if retry_after is not None:
+        raise HTTPException(
+            status_code=429,
+            detail="登录尝试过于频繁，请稍后再试。",
+            headers={"Retry-After": str(retry_after)},
+        )
+    if payload.username != settings.auth_username or not settings.auth_password_hash:
+        raise HTTPException(status_code=401, detail="用户名或密码错误。")
+    if not verify_password(payload.password, settings.auth_password_hash):
+        raise HTTPException(status_code=401, detail="用户名或密码错误。")
+    assert settings.auth_session_secret is not None
+    token = issue_session(
+        user_id=settings.auth_user_id,
+        role=settings.auth_role,
+        secret=settings.auth_session_secret.get_secret_value(),
+        ttl_seconds=settings.auth_session_ttl_seconds,
+    )
+    response.set_cookie(
+        SESSION_COOKIE,
+        token,
+        max_age=settings.auth_session_ttl_seconds,
+        httponly=True,
+        secure=settings.auth_cookie_secure,
+        samesite="lax",
+    )
+    return SessionInfo(
+        user_id=settings.auth_user_id,
+        role=settings.auth_role,
+        public_demo_mode=False,
+        trace_visible=True,
+        max_rows=100,
+    )
+
+
+@app.post("/auth/logout", status_code=204)
+def logout(response: Response) -> None:
+    response.delete_cookie(SESSION_COOKIE)
+
+
 @app.get("/ready")
 def readiness_check() -> dict[str, str]:
     if not check_database_readiness():
@@ -117,6 +183,35 @@ def readiness_check() -> dict[str, str]:
             detail="数据库和业务数据尚未就绪，请稍后重试。",
         )
     return {"status": "ready"}
+
+
+@app.get("/demo/overview")
+def read_demo_overview(
+    _access_context: Annotated[
+        AccessContext,
+        Depends(get_access_context),
+    ],
+    connection: Annotated[
+        DatabaseConnection,
+        Depends(get_database_connection),
+    ],
+) -> dict[str, int]:
+    row = connection.execute(
+        """
+        SELECT
+            (SELECT COUNT(*) FROM orders) AS order_count,
+            (SELECT COUNT(*) FROM products) AS product_count,
+            (SELECT COUNT(*) FROM refunds) AS refund_count,
+            (SELECT COUNT(DISTINCT channel) FROM orders) AS channel_count,
+            COALESCE(
+                EXTRACT(DAY FROM MAX(created_at) - MIN(created_at)),
+                0
+            )::INTEGER AS coverage_days
+        FROM orders
+        """
+    ).fetchone()
+    assert row is not None
+    return {key: int(value) for key, value in row.items()}
 
 
 @app.get("/session", response_model=SessionInfo)
@@ -136,6 +231,10 @@ def read_session(
 @app.post("/analysis/validate")
 def validate_analysis_request(
     request: AnalysisRequest,
+    _access_context: Annotated[
+        AccessContext,
+        Depends(get_access_context),
+    ],
 ) -> AnalysisRequest:
     return request
 
@@ -312,6 +411,10 @@ def stream_analysis(
     response_model=list[ChannelSalesSummary],
 )
 def read_channel_sales_summary(
+    _access_context: Annotated[
+        AccessContext,
+        Depends(get_access_context),
+    ],
     connection: Annotated[
         DatabaseConnection,
         Depends(get_database_connection),
@@ -326,6 +429,10 @@ def read_channel_sales_summary(
     response_model=list[ProductSalesSummary],
 )
 def read_product_sales_summary(
+    _access_context: Annotated[
+        AccessContext,
+        Depends(get_access_context),
+    ],
     connection: Annotated[
         DatabaseConnection,
         Depends(get_database_connection),
@@ -345,6 +452,10 @@ def read_product_sales_summary(
     response_model=list[RefundStatusSummary],
 )
 def read_refund_status_summary(
+    _access_context: Annotated[
+        AccessContext,
+        Depends(get_access_context),
+    ],
     connection: Annotated[
         DatabaseConnection,
         Depends(get_database_connection),
@@ -359,6 +470,10 @@ def read_refund_status_summary(
     response_model=list[OrderStatusSummary],
 )
 def read_order_status_summary(
+    _access_context: Annotated[
+        AccessContext,
+        Depends(get_access_context),
+    ],
     connection: Annotated[
         DatabaseConnection,
         Depends(get_database_connection),

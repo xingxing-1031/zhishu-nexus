@@ -31,11 +31,21 @@ docker compose --env-file .env.vps -f compose.vps.yaml up -d postgres
 docker compose --env-file .env.vps -f compose.vps.yaml --profile tools run --rm migrate
 ```
 
-再次执行同一命令，应该看到 `applied=0 skipped=7`。然后启动 API 和 HTTPS 代理：
+再次执行同一命令，应该看到 `applied=0 skipped=8`。第二个种子脚本会将演示数据扩展到 130 条订单、16 个商品、4 个渠道和 30 条退款记录；原有 `ORD-*` 基准数据不会被改写。然后启动 API 和 HTTPS 代理：
 
 ```bash
 docker compose --env-file .env.vps -f compose.vps.yaml up -d api caddy
 ```
+
+## 受控访问模式
+
+公网简历演示默认使用 `AUTH_MODE=demo`，只提供服务器固定的分析员身份。需要限制访问时，在服务器 `.env.vps` 中切换为 `AUTH_MODE=password`，并生成密码哈希：
+
+```bash
+python -m retail_analytics_agent.auth
+```
+
+将命令输出写入 `AUTH_PASSWORD_HASH`，再设置随机的 `AUTH_SESSION_SECRET`、`AUTH_USERNAME` 和 `AUTH_USER_ID`。启用 HTTPS 后将 `AUTH_COOKIE_SECURE=true`。角色仍由服务器配置决定，客户端不能提交角色字段提升权限。
 
 `postgres`、`api` 和 `caddy` 使用 `restart: unless-stopped`。服务器或 Docker 重启后，它们会自动恢复；如果运维人员明确停止了容器，则不会擅自重新启动。一次性的 `migrate` 服务不设置自动重启。
 

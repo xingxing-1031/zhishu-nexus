@@ -62,7 +62,8 @@ def test_demo_homepage_and_static_assets_are_available() -> None:
     assert page.status_code == 200
     assert page.headers["content-type"].startswith("text/html")
     assert "零售运营分析台" in page.text
-    assert "零售运营分析 / 演示版 0.2" in page.text
+    assert "RETAIL INTELLIGENCE / V0.3" in page.text
+    assert "业务数据概况" in page.text
     assert "查看执行记录" in page.text
     assert "执行记录" in page.text
     assert "RETAIL ANALYTICS" not in page.text
@@ -469,6 +470,32 @@ def test_stream_analysis_keeps_contextvars_in_one_worker_context() -> None:
     assert [event.status for event in trace_store.list_for_request(
         "REQ-STREAM-CONTEXT"
     )] == [TraceStatus.STARTED, TraceStatus.SUCCEEDED]
+
+
+def test_demo_overview_returns_database_counts() -> None:
+    connection = Mock()
+    connection.execute.return_value.fetchone.return_value = {
+        "order_count": 130,
+        "product_count": 16,
+        "refund_count": 30,
+        "channel_count": 4,
+        "coverage_days": 74,
+    }
+    app.dependency_overrides[get_database_connection] = lambda: connection
+
+    try:
+        response = client.get("/demo/overview")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "order_count": 130,
+        "product_count": 16,
+        "refund_count": 30,
+        "channel_count": 4,
+        "coverage_days": 74,
+    }
 
 
 def test_run_analysis_rejects_mismatched_trusted_identity() -> None:

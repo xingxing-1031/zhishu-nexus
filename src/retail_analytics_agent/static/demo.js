@@ -121,6 +121,17 @@ const elements = {
   approvalReason: document.querySelector("#approval-reason"),
   approveButton: document.querySelector("#approve-button"),
   rejectButton: document.querySelector("#reject-button"),
+  loginGate: document.querySelector("#login-gate"),
+  loginForm: document.querySelector("#login-form"),
+  loginUsername: document.querySelector("#login-username"),
+  loginPassword: document.querySelector("#login-password"),
+  loginError: document.querySelector("#login-error"),
+  logoutButton: document.querySelector("#logout-button"),
+  overviewOrders: document.querySelector("#overview-orders"),
+  overviewProducts: document.querySelector("#overview-products"),
+  overviewChannels: document.querySelector("#overview-channels"),
+  overviewRefunds: document.querySelector("#overview-refunds"),
+  datasetCoverage: document.querySelector("#dataset-coverage"),
 };
 
 function initializeStages() {
@@ -153,18 +164,32 @@ function setTraceAvailable(available) {
 
 async function loadSession() {
   try {
-    const [healthResponse, sessionResponse] = await Promise.all([
+    const [healthResponse, sessionResponse, overviewResponse] = await Promise.all([
       fetch("/health"),
       fetch("/session"),
+      fetch("/demo/overview"),
     ]);
-    if (!healthResponse.ok || !sessionResponse.ok) {
+    if (sessionResponse.status === 401) {
+      state.session = null;
+      elements.loginGate.hidden = false;
+      elements.serverDot.className = "status-dot online";
+      elements.serverStatus.textContent = "等待登录";
+      elements.runButton.disabled = true;
+      return;
+    }
+    if (!healthResponse.ok || !sessionResponse.ok || !overviewResponse.ok) {
       throw new Error("服务状态不可用");
     }
     state.session = await sessionResponse.json();
+    renderOverview(await overviewResponse.json());
+    elements.loginGate.hidden = true;
     elements.serverDot.className = "status-dot online";
     elements.serverStatus.textContent = "服务在线";
     elements.sessionRole.textContent = ROLE_LABELS[state.session.role] || "当前用户";
-    elements.sessionUser.textContent = "已认证";
+    elements.sessionUser.textContent = state.session.public_demo_mode
+      ? "演示身份"
+      : state.session.user_id;
+    elements.logoutButton.hidden = state.session.public_demo_mode;
     const maxRows = String(state.session.max_rows);
     elements.maxRows.max = maxRows;
     elements.maxRows.value = String(Math.min(
@@ -180,6 +205,43 @@ async function loadSession() {
     elements.sessionUser.textContent = "无法读取登录状态";
     elements.runButton.disabled = true;
   }
+}
+
+function renderOverview(overview) {
+  elements.overviewOrders.textContent = new Intl.NumberFormat("zh-CN").format(overview.order_count);
+  elements.overviewProducts.textContent = new Intl.NumberFormat("zh-CN").format(overview.product_count);
+  elements.overviewChannels.textContent = new Intl.NumberFormat("zh-CN").format(overview.channel_count);
+  elements.overviewRefunds.textContent = new Intl.NumberFormat("zh-CN").format(overview.refund_count);
+  elements.datasetCoverage.textContent = `覆盖近 ${overview.coverage_days} 天业务数据`;
+}
+
+async function login(event) {
+  event.preventDefault();
+  elements.loginError.hidden = true;
+  const response = await fetch("/auth/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      username: elements.loginUsername.value.trim(),
+      password: elements.loginPassword.value,
+    }),
+  });
+  if (!response.ok) {
+    const payload = await response.json().catch(() => ({}));
+    elements.loginError.textContent = payload.detail || "登录失败，请检查账号信息。";
+    elements.loginError.hidden = false;
+    return;
+  }
+  elements.loginPassword.value = "";
+  await loadSession();
+}
+
+async function logout() {
+  await fetch("/auth/logout", { method: "POST" });
+  state.session = null;
+  elements.logoutButton.hidden = true;
+  elements.loginGate.hidden = false;
+  elements.runButton.disabled = true;
 }
 
 function setRunning(running) {
@@ -790,6 +852,8 @@ elements.traceButton.addEventListener("click", loadTrace);
 elements.closeTrace.addEventListener("click", () => {
   elements.traceBand.hidden = true;
 });
+elements.loginForm.addEventListener("submit", login);
+elements.logoutButton.addEventListener("click", logout);
 
 initializeStages();
 loadSession();

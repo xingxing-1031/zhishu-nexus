@@ -41,6 +41,14 @@ BEGIN
             demo_order_count;
     END IF;
 
+    IF (SELECT COUNT(*) FROM orders) < 130 THEN
+        RAISE EXCEPTION 'expected at least 130 total demo orders';
+    END IF;
+
+    IF (SELECT COUNT(DISTINCT channel) FROM orders) < 4 THEN
+        RAISE EXCEPTION 'expected at least four demo sales channels';
+    END IF;
+
     IF NOT EXISTS (
         SELECT 1
         FROM information_schema.columns

@@ -8,7 +8,7 @@
 - 总体进度：`24 / 32` 个基础里程碑已完成；W7 为交付后的演示优化阶段
 - 已实现：本地 `qwen3:4b` 与远程 Qwen 端到端分析、权限与人工审批、有限重试、请求幂等、可信结果降级、确定性故障注入和结构化执行 Trace
 - 自动化验证：Python 回归测试 `408 passed`；W6-2 完成 120 次受控评测；W6-3 本地空卷 pgvector smoke 和 GitHub Actions Python 3.11/3.12、PostgreSQL smoke 均通过
-- 当前边界：远程模型已在本地应用中真实验收，但仍是本地可信身份和 10 条演示订单；尚未完成公网托管、正式登录和 frozen holdout 最终验收
+- 当前边界：已完成公网演示和 130 条可复现演示订单；正式登录可通过 `AUTH_MODE=password` 开启，HTTPS、备份恢复和 frozen holdout 仍需单独验收
 
 ## 手机学习
 

@@ -1,5 +1,11 @@
+from typing import Annotated
+
+from fastapi import Depends, HTTPException, Request
+
+from retail_analytics_agent.auth import require_session
 from retail_analytics_agent.models import AccessContext, AccessRole
 from retail_analytics_agent.settings import get_settings
+from retail_analytics_agent.settings import Settings
 
 
 _DENIED_COLUMNS = {
@@ -91,9 +97,24 @@ def build_sensitive_read_sql(
     )
 
 
-def get_access_context() -> AccessContext:
-    """Return the server-configured identity until real auth is added."""
-    settings = get_settings()
+def get_access_context(
+    request: Request,
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> AccessContext:
+    """Resolve trusted identity from a session or demo configuration."""
+    if settings.auth_mode == "password":
+        if settings.auth_session_secret is None:
+            raise RuntimeError("authentication session secret is not configured")
+        context = require_session(
+            request,
+            settings.auth_session_secret.get_secret_value(),
+        )
+        if (
+            context.user_id != settings.auth_user_id
+            or context.role is not settings.auth_role
+        ):
+            raise HTTPException(status_code=401, detail="登录状态已经失效。")
+        return context
     return AccessContext(
         user_id=settings.local_access_user_id,
         role=settings.local_access_role,
