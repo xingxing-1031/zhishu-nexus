@@ -37,6 +37,16 @@ docker compose --env-file .env.vps -f compose.vps.yaml --profile tools run --rm 
 docker compose --env-file .env.vps -f compose.vps.yaml up -d api caddy
 ```
 
+`postgres`、`api` 和 `caddy` 使用 `restart: unless-stopped`。服务器或 Docker 重启后，它们会自动恢复；如果运维人员明确停止了容器，则不会擅自重新启动。一次性的 `migrate` 服务不设置自动重启。
+
+重启后使用以下命令验收服务状态：
+
+```bash
+docker compose --env-file .env.vps -f compose.vps.yaml ps
+curl http://127.0.0.1/health
+curl http://127.0.0.1/ready
+```
+
 验证：
 
 ```bash
