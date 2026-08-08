@@ -197,7 +197,7 @@ class LangGraphAnalysisRunner:
         snapshot = self.graph.get_state(config)
         if not snapshot.values:
             raise ValueError("approval request was not found")
-        if snapshot.values["approval_status"] is not ApprovalStatus.PENDING:
+        if snapshot.values["approval_status"] != ApprovalStatus.PENDING:
             raise ValueError("approval request is not pending")
         if snapshot.next != ("request_approval",):
             raise ValueError("workflow is not waiting at the approval node")
@@ -548,7 +548,7 @@ class LangGraphAnalysisRunner:
             )
         plan = result["plan"]
         answer = result["final_answer"]
-        if plan is None or answer is None:
+        if answer is None:
             raise AnalysisRunError("analysis workflow returned an incomplete result")
 
         return AnalysisResponse(

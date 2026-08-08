@@ -75,6 +75,9 @@ def test_database_request_store_claims_new_request_atomically() -> None:
     assert claim.status is RequestClaimStatus.NEW
     assert claim.run_status is RequestRunStatus.RUNNING
     assert "ON CONFLICT (request_id) DO NOTHING" in CLAIM_REQUEST_SQL
+    params = connection.execute.call_args.args[1]
+    assert params["original_question"] == "查询销售额"
+    assert params["max_rows"] == 10
 
 
 def test_database_request_store_detects_reused_id_with_new_input() -> None:

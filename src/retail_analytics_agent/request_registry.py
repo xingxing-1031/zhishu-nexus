@@ -63,6 +63,8 @@ WITH inserted AS (
         request_fingerprint,
         user_id,
         access_role,
+        original_question,
+        max_rows,
         status
     )
     VALUES (
@@ -70,6 +72,8 @@ WITH inserted AS (
         %(request_fingerprint)s,
         %(user_id)s,
         %(access_role)s,
+        %(original_question)s,
+        %(max_rows)s,
         'running'
     )
     ON CONFLICT (request_id) DO NOTHING
@@ -141,6 +145,8 @@ class DatabaseAnalysisRequestStore:
             "request_fingerprint": fingerprint,
             "user_id": access_context.user_id,
             "access_role": access_context.role.value,
+            "original_question": request.question,
+            "max_rows": request.max_rows,
         }
         with connect_to_database() as connection:
             row = connection.execute(CLAIM_REQUEST_SQL, params).fetchone()

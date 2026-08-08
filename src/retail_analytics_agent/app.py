@@ -25,6 +25,13 @@ from retail_analytics_agent.analysis_service import (
     AnalysisRunner,
     get_analysis_runner,
 )
+from retail_analytics_agent.admin_views import (
+    AdminAuditEntry,
+    AdminAuditStatus,
+    MetricDefinitionView,
+    list_admin_audit_entries,
+    list_metric_definitions,
+)
 from retail_analytics_agent.database import (
     DatabaseConnection,
     check_database_readiness,
@@ -164,6 +171,18 @@ def _reject_public_internal_endpoint(settings: Settings) -> None:
         raise HTTPException(
             status_code=403,
             detail="公开演示环境不提供内部执行接口。",
+        )
+
+
+def _require_admin_access(
+    access_context: AccessContext,
+    settings: Settings,
+) -> None:
+    _reject_public_internal_endpoint(settings)
+    if access_context.role is not AccessRole.ADMIN:
+        raise HTTPException(
+            status_code=403,
+            detail="只有管理员可以查看这个页面。",
         )
 
 
@@ -537,3 +556,45 @@ def read_order_status_summary(
     days: Annotated[int, Query(ge=1, le=365)] = 30,
 ) -> list[OrderStatusSummary]:
     return get_order_status_summary(connection, days=days)
+
+
+@app.get("/admin/audit", response_model=list[AdminAuditEntry])
+def read_admin_audit_entries(
+    access_context: Annotated[AccessContext, Depends(get_access_context)],
+    settings: Annotated[Settings, Depends(get_settings)],
+    connection: Annotated[
+        DatabaseConnection,
+        Depends(get_database_connection),
+    ],
+    request_id: Annotated[
+        str | None,
+        Query(min_length=1, max_length=200),
+    ] = None,
+    user_id: Annotated[
+        str | None,
+        Query(min_length=1, max_length=200),
+    ] = None,
+    status: AdminAuditStatus | None = None,
+    approval_required: bool | None = None,
+    days: Annotated[int, Query(ge=1, le=365)] = 30,
+    limit: Annotated[int, Query(ge=1, le=500)] = 100,
+) -> tuple[AdminAuditEntry, ...]:
+    _require_admin_access(access_context, settings)
+    return list_admin_audit_entries(
+        connection,
+        request_id=request_id,
+        user_id=user_id,
+        status=status,
+        approval_required=approval_required,
+        days=days,
+        limit=limit,
+    )
+
+
+@app.get("/admin/metrics", response_model=list[MetricDefinitionView])
+def read_admin_metric_definitions(
+    access_context: Annotated[AccessContext, Depends(get_access_context)],
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> tuple[MetricDefinitionView, ...]:
+    _require_admin_access(access_context, settings)
+    return list_metric_definitions()

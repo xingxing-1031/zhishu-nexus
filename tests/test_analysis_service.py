@@ -265,8 +265,10 @@ def test_runner_returns_pending_approval_outcome() -> None:
 
 def test_runner_resumes_pending_approval_with_trusted_admin() -> None:
     graph = Mock()
+    pending_state = _pending_state()
+    pending_state["approval_status"] = "pending"
     graph.get_state.return_value = Mock(
-        values=_pending_state(),
+        values=pending_state,
         next=("request_approval",),
     )
     completed = _successful_state()

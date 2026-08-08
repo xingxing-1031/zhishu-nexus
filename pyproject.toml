@@ -32,7 +32,7 @@ dev = [
 where = ["src"]
 
 [tool.setuptools.package-data]
-retail_analytics_agent = ["static/*"]
+retail_analytics_agent = ["static/*", "static/assets/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

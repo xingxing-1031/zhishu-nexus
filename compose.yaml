@@ -15,8 +15,9 @@ services:
       - ./db/migrations/004_query_approval_logs.sql:/docker-entrypoint-initdb.d/004_query_approval_logs.sql:ro
       - ./db/migrations/005_resilience_and_idempotency.sql:/docker-entrypoint-initdb.d/005_resilience_and_idempotency.sql:ro
       - ./db/migrations/006_execution_trace.sql:/docker-entrypoint-initdb.d/006_execution_trace.sql:ro
-      - ./db/seeds/001_demo_data.sql:/docker-entrypoint-initdb.d/007_demo_data.sql:ro
-      - ./db/seeds/002_richer_demo_dataset.sql:/docker-entrypoint-initdb.d/008_richer_demo_dataset.sql:ro
+      - ./db/migrations/007_admin_read_models.sql:/docker-entrypoint-initdb.d/007_admin_read_models.sql:ro
+      - ./db/seeds/001_demo_data.sql:/docker-entrypoint-initdb.d/008_demo_data.sql:ro
+      - ./db/seeds/002_richer_demo_dataset.sql:/docker-entrypoint-initdb.d/009_richer_demo_dataset.sql:ro
       - ./db/verification:/opt/retail-db/verification:ro
     healthcheck:
       test:

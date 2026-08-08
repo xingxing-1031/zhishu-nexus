@@ -2,7 +2,8 @@ from decimal import Decimal
 from enum import StrEnum
 from typing import Any, Literal, Self
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
+from hashlib import sha256
 
 
 class OrderStatus(StrEnum):
@@ -127,6 +128,11 @@ class ApprovalRequiredResponse(BaseModel):
     sensitive_columns: tuple[str, ...] = ()
     result_limit: int = Field(ge=1, le=1000)
     trace: tuple[str, ...]
+
+    @computed_field
+    @property
+    def sql_fingerprint(self) -> str:
+        return sha256(self.sql.encode("utf-8")).hexdigest()
 
 
 class ApprovalRejectedResponse(BaseModel):
@@ -295,7 +301,7 @@ class AnalysisResponse(BaseModel):
     status: AnalysisResultStatus = AnalysisResultStatus.SUCCEEDED
     access_role: AccessRole
     answer: str = Field(min_length=1)
-    plan: AnalysisPlan
+    plan: AnalysisPlan | None
     rows: list[dict[str, Any]]
     chart_spec: ChartSpec | None
     evidence_source_ids: tuple[str, ...]

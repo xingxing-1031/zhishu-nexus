@@ -13,6 +13,7 @@ from retail_analytics_agent.metric_domain import (
 from retail_analytics_agent.models import (
     AccessContext,
     AccessRole,
+    AnalysisResultStatus,
     ApprovalStatus,
     AnalysisPlan,
     AnalysisRequest,
@@ -32,6 +33,7 @@ from retail_analytics_agent.workflow import (
     create_domain_scope_node,
     create_approval_node,
     create_query_risk_node,
+    create_summarize_node,
     create_thread_config,
     route_after_sql_execution,
     route_after_sql_validation,
@@ -271,6 +273,40 @@ def test_domain_scope_node_prepares_admin_sensitive_query_for_approval() -> None
         "refunds.refund_id",
     )
     gate.classify.assert_not_called()
+
+
+def test_sensitive_query_summary_does_not_invent_an_analysis_plan() -> None:
+    model = Mock()
+    state = create_initial_state(
+        AnalysisRequest(
+            request_id="REQ-ADMIN-SENSITIVE-RESULT-001",
+            user_id="ADMIN-001",
+            question="查看退款原因",
+            max_rows=10,
+        ),
+        access_context=AccessContext(
+            user_id="ADMIN-001",
+            role=AccessRole.ADMIN,
+        ),
+    )
+    state.update(
+        {
+            "query_risk": QueryRisk(
+                requires_approval=True,
+                reasons=("query reads sensitive columns: refunds.reason",),
+                sensitive_columns=("refunds.reason",),
+                result_limit=10,
+            ),
+            "query_rows": [{"refund_id": "REF-001", "reason": "商品破损"}],
+        }
+    )
+
+    update = create_summarize_node(model)(state)
+
+    assert update["result_status"] is AnalysisResultStatus.SUCCEEDED
+    assert update["chart_spec"] is None
+    assert update["final_answer"] == "经管理员审批，受控查询已完成并返回 1 行数据。"
+    model.summarize.assert_not_called()
 
 
 @pytest.mark.parametrize(

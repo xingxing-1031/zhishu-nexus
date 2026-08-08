@@ -601,7 +601,19 @@ def create_summarize_node(model: ResultSummarizer) -> AnalysisNode:
     def summarize(state: AnalysisState) -> AnalysisStateUpdate:
         plan = state["plan"]
         if plan is None:
-            raise ValueError("analysis plan is required before summarization")
+            risk = state["query_risk"]
+            if risk is None or not risk.sensitive_columns:
+                raise ValueError("analysis plan is required before summarization")
+            row_count = len(state["query_rows"])
+            return {
+                "final_answer": (
+                    f"经管理员审批，受控查询已完成并返回 {row_count} 行数据。"
+                ),
+                "chart_spec": None,
+                "result_status": AnalysisResultStatus.SUCCEEDED,
+                "degradation_reason": None,
+                "trace": [SUMMARIZE_NODE],
+            }
         if state["execution_error"] is not None:
             raise ValueError("successful query execution is required before summarization")
 

@@ -1,4 +1,5 @@
 from decimal import Decimal
+import re
 from unittest.mock import Mock
 
 from fastapi.testclient import TestClient
@@ -56,24 +57,22 @@ def _public_demo_settings(**overrides) -> Settings:
 
 def test_demo_homepage_and_static_assets_are_available() -> None:
     page = client.get("/")
-    stylesheet = client.get("/static/demo.css")
-    script = client.get("/static/demo.js")
 
     assert page.status_code == 200
     assert page.headers["content-type"].startswith("text/html")
     assert "零售运营分析台" in page.text
-    assert "RETAIL INTELLIGENCE / V0.3" in page.text
-    assert "业务数据概况" in page.text
-    assert "查看执行记录" in page.text
-    assert "执行记录" in page.text
-    assert "RETAIL ANALYTICS" not in page.text
-    assert ">执行 Trace<" not in page.text
+    assert '<div id="root"></div>' in page.text
+    stylesheet_path = re.search(r'href="([^"]+\.css)"', page.text)
+    script_path = re.search(r'src="([^"]+\.js)"', page.text)
+    assert stylesheet_path is not None
+    assert script_path is not None
+    stylesheet = client.get(stylesheet_path.group(1))
+    script = client.get(script_path.group(1))
     assert stylesheet.status_code == 200
-    assert "--accent" in stylesheet.text
+    assert "--brand" in stylesheet.text
     assert script.status_code == 200
-    assert 'fetch("/analysis/stream"' in script.text
-    assert "state.session?.trace_visible" in script.text
-    assert "state.session?.public_demo_mode" in script.text
+    assert "/analysis/stream" in script.text
+    assert "/admin/metrics" in script.text
 
 
 def test_session_returns_server_configured_access_context() -> None:
@@ -549,6 +548,7 @@ def test_run_analysis_returns_202_when_approval_is_required() -> None:
     assert response.status_code == 202
     assert response.json()["status"] == "pending"
     assert response.json()["sensitive_columns"] == ["refunds.reason"]
+    assert len(response.json()["sql_fingerprint"]) == 64
 
 
 def test_analyst_cannot_resolve_approval() -> None:
