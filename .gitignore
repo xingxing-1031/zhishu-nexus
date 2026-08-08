@@ -6,6 +6,7 @@ __pycache__/
 htmlcov/
 artifacts/
 .env
+.env.vps
 .idea/
 .vscode/
 dist/

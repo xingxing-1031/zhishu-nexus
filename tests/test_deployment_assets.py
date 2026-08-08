@@ -37,3 +37,22 @@ def test_image_contains_database_migrations_for_release_command() -> None:
     dockerfile = (PROJECT_ROOT / "Dockerfile").read_text(encoding="utf-8")
 
     assert "COPY db ./db" in dockerfile
+
+
+def test_vps_compose_keeps_database_private_and_uses_caddy() -> None:
+    compose = (PROJECT_ROOT / "compose.vps.yaml").read_text(encoding="utf-8")
+    caddyfile = (PROJECT_ROOT / "Caddyfile").read_text(encoding="utf-8")
+
+    assert 'expose:\n      - "5432"' in compose
+    assert '"5432:5432"' not in compose
+    assert '"${HTTP_PORT:-80}:80"' in compose
+    assert '"${HTTPS_PORT:-443}:443"' in compose
+    assert "reverse_proxy api:8000" in caddyfile
+
+
+def test_vps_compose_requires_server_secrets_and_public_demo_mode() -> None:
+    compose = (PROJECT_ROOT / "compose.vps.yaml").read_text(encoding="utf-8")
+
+    assert "MODEL_API_KEY:?set MODEL_API_KEY" in compose
+    assert 'PUBLIC_DEMO_MODE: "true"' in compose
+    assert "SITE_ADDRESS:?set SITE_ADDRESS" in compose
