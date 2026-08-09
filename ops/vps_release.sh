@@ -11,7 +11,7 @@ ENV_FILE="${ENV_FILE:-$PROJECT_DIR/.env.vps}"
 REFERENCE="$1"
 cd "$PROJECT_DIR"
 
-DIRTY_STATUS="$(git status --porcelain --untracked-files=all)"
+DIRTY_STATUS="$(git status --porcelain --untracked-files=all | grep -vE '^\?\? \.deployed-release$' || true)"
 if [[ -n "$DIRTY_STATUS" ]]; then
   echo "refusing deployment because the server worktree has local changes" >&2
   printf '%s\n' "$DIRTY_STATUS" >&2
