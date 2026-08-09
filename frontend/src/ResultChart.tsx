@@ -7,7 +7,7 @@ import { init, use } from "echarts/core";
 import { CanvasRenderer } from "echarts/renderers";
 import { useEffect, useRef } from "react";
 import { EmptyState } from "./components";
-import { formatValue, label } from "./localization";
+import { formatValue, label, localizeAnswer } from "./localization";
 import type { ChartSpec } from "./types";
 
 use([BarChart, LineChart, GridComponent, TooltipComponent, CanvasRenderer]);
@@ -88,5 +88,5 @@ export default function ResultChart({
       </div>
     );
   }
-  return <div className="chart-canvas" ref={container} aria-label={spec.title} />;
+  return <div className="chart-canvas" ref={container} aria-label={localizeAnswer(spec.title)} />;
 }

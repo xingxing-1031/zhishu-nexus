@@ -32,43 +32,44 @@ export function Header({
 }) {
   const isAdmin = session.role === "admin";
   return (
-    <header className="app-header">
-      <button className="brand" type="button" onClick={() => onPage("workspace")}>
-        <span className="logo-mark">析</span>
-        <span className="brand-name">零售运营分析台</span>
-        <StatusPill status={isAdmin ? "warning" : "neutral"}>
-          {isAdmin ? "管理员视角" : session.public_demo_mode ? "公网演示" : "受控访问"}
-        </StatusPill>
-      </button>
-
-      {isAdmin && (
-        <nav className="main-nav" aria-label="主要页面">
+    <>
+      <aside className="app-sidebar" aria-label="主导航">
+        <button className="sidebar-brand" type="button" onClick={() => onPage("workspace")}>
+          <span className="logo-mark">析</span>
+          <span><strong>零售运营</strong><small>分析工作台</small></span>
+        </button>
+        <div className="sidebar-context"><span className="sidebar-context-dot" />{session.public_demo_mode ? "公网演示环境" : "受控访问环境"}</div>
+        <nav className="sidebar-nav" aria-label="主要页面">
           <NavButton active={page === "workspace"} onClick={() => onPage("workspace")} icon={<Activity />}>
             分析工作台
           </NavButton>
-          <NavButton active={page === "audit"} onClick={() => onPage("audit")} icon={<ClipboardList />}>
+          {isAdmin && <NavButton active={page === "audit"} onClick={() => onPage("audit")} icon={<ClipboardList />}>
             审计记录
-          </NavButton>
-          <NavButton active={page === "metrics"} onClick={() => onPage("metrics")} icon={<BookOpenText />}>
+          </NavButton>}
+          {isAdmin && <NavButton active={page === "metrics"} onClick={() => onPage("metrics")} icon={<BookOpenText />}>
             指标口径
-          </NavButton>
+          </NavButton>}
         </nav>
-      )}
-
-      <div className="header-status">
-        <span className={`service-dot ${online ? "online" : "offline"}`} />
-        <span>{online ? "服务在线" : "服务未就绪"}</span>
-        <span className="header-divider" />
-        <strong>{roleLabel(session.role)}</strong>
-        <span className="header-user">{session.user_id}</span>
-        {!session.public_demo_mode && (
-          <button className="icon-text-button" type="button" onClick={onLogout} title="退出登录">
-            <LogOut size={15} />
-            <span>退出登录</span>
-          </button>
-        )}
-      </div>
-    </header>
+        <div className="sidebar-footer">
+          {!session.public_demo_mode && <button className="sidebar-utility" type="button" onClick={onLogout}><LogOut size={16} />退出登录</button>}
+        </div>
+      </aside>
+      <header className="app-header">
+        <div className="mobile-brand"><span className="logo-mark">析</span><strong>零售运营分析</strong></div>
+        <div className="header-title"><span>{page === "workspace" ? "分析工作台" : page === "audit" ? "审计记录" : "指标口径"}</span><small>零售运营数据分析</small></div>
+        <div className="header-status">
+          <span className={`service-dot ${online ? "online" : "offline"}`} />
+          <span>{online ? "服务在线" : "服务未就绪"}</span>
+          <span className="header-divider" />
+          <strong>{roleLabel(session.role)}</strong><span className="header-user">{session.user_id}</span>
+        </div>
+      </header>
+      {isAdmin && <nav className="mobile-nav" aria-label="移动端主要页面">
+        <NavButton active={page === "workspace"} onClick={() => onPage("workspace")} icon={<Activity />}>分析</NavButton>
+        <NavButton active={page === "audit"} onClick={() => onPage("audit")} icon={<ClipboardList />}>审计</NavButton>
+        <NavButton active={page === "metrics"} onClick={() => onPage("metrics")} icon={<BookOpenText />}>口径</NavButton>
+      </nav>}
+    </>
   );
 }
 

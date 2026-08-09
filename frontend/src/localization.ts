@@ -68,3 +68,31 @@ export function formatValue(value: unknown): string {
   if (Array.isArray(value)) return value.map(formatValue).join("、");
   return label(String(value));
 }
+
+/** Backend summaries may contain enum values; keep source identifiers unchanged but localize user-facing status words. */
+export function localizeAnswer(value: string): string {
+  return value
+    .replace(/\bcompleted\b/gi, "已完成")
+    .replace(/\brejected\b/gi, "已拒绝")
+    .replace(/\bapproved\b/gi, "已批准")
+    .replace(/\brequested\b/gi, "已申请")
+    .replace(/\bpaid\b/gi, "已支付")
+    .replace(/\bshipped\b/gi, "已发货")
+    .replace(/\bcancelled\b/gi, "已取消")
+    .replace(/\bpending\b/gi, "待处理");
+}
+
+/** 将后端错误转换为普通用户可理解的提示，技术标识仍保留在审计记录中。 */
+export function localizeUserMessage(value: string): string {
+  const message = value.trim();
+  if (!message) return "请求未能完成，请稍后重试。";
+  if (/[\u4e00-\u9fff]/.test(message)) return localizeAnswer(message);
+  if (/failed to fetch|network request failed|fetch failed/i.test(message)) return "暂时无法连接数据服务，请稍后重试。";
+  if (/unauthorized|401/i.test(message)) return "登录状态已失效，请重新登录。";
+  if (/forbidden|403/i.test(message)) return "当前账号无权执行此操作。";
+  if (/does not support dimensions/i.test(message)) return "当前指标不支持所选维度，请调整问题后重试。";
+  if (/out.?of.?domain|unsupported|not supported/i.test(message)) return "这个问题超出当前零售数据范围，暂时无法分析。";
+  if (/timeout|timed out/i.test(message)) return "数据服务响应超时，请稍后重试。";
+  if (/required|invalid|validation/i.test(message)) return "请求信息不完整或格式不正确，请调整后重试。";
+  return "本次请求未能完成，请稍后重试。";
+}

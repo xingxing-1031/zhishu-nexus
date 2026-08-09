@@ -20,7 +20,7 @@ import {
   TrustCard,
   outcomeVisualStatus,
 } from "./components";
-import { formatValue, label, localizeEvidence, traceComponentLabels } from "./localization";
+import { formatValue, label, localizeAnswer, localizeEvidence, localizeUserMessage, traceComponentLabels } from "./localization";
 import type {
   AnalysisOutcome,
   AnalysisResult,
@@ -109,7 +109,7 @@ export default function Workspace({
   }
 
   function receive(event: StreamEvent) {
-    setMessage(event.message);
+    setMessage(localizeUserMessage(event.message));
     if (event.node) markStage(event.node);
     if (event.event === "result" && event.response) {
       setOutcome(event.response);
@@ -160,7 +160,7 @@ export default function Workspace({
         receive,
       );
     } catch (reason) {
-      setFailure(reason instanceof Error ? reason.message : "分析请求失败，请稍后重试。");
+      setFailure(reason instanceof Error ? localizeUserMessage(reason.message) : "分析请求失败，请稍后重试。");
       setMessage("请求未能完成");
     } finally {
       setRunning(false);
@@ -195,7 +195,7 @@ export default function Workspace({
         markStage("request_approval", "danger");
       }
     } catch (error) {
-      setFailure(error instanceof Error ? error.message : "审批处理失败，请稍后重试。");
+      setFailure(error instanceof Error ? localizeUserMessage(error.message) : "审批处理失败，请稍后重试。");
     }
   }
 
@@ -206,7 +206,7 @@ export default function Workspace({
       setTrace((await api.trace(requestId)).events);
     } catch (error) {
       setTrace([]);
-      setTraceError(error instanceof Error ? error.message : "执行记录读取失败。");
+      setTraceError(error instanceof Error ? localizeUserMessage(error.message) : "执行记录读取失败。");
     }
   }
 
@@ -294,7 +294,7 @@ export default function Workspace({
           <section className="conclusion-card">
             <div className="section-title-row">
               <div>
-                <h2>{analysis?.plan?.analysis_goal || (analysis ? "受控数据查询结果" : "经营分析结论")}</h2>
+                <h2>{analysis?.plan?.analysis_goal ? localizeAnswer(analysis.plan.analysis_goal) : (analysis ? "受控数据查询结果" : "经营分析结论")}</h2>
                 <p>只展示数据库结果和经过约束的业务解释</p>
               </div>
               <div className="conclusion-actions">
@@ -325,7 +325,7 @@ export default function Workspace({
             <section className="data-card">
               <div className="card-heading">
                 <div><BarChart3 size={16} /><h2>数据图表</h2></div>
-                <span>{analysis ? (analysis.chart_spec?.title ?? "无需绘图") : "等待分析"}</span>
+                <span>{analysis ? (analysis.chart_spec?.title ? localizeAnswer(analysis.chart_spec.title) : "无需绘图") : "等待分析"}</span>
               </div>
               {analysis?.chart_spec ? (
                 <Suspense fallback={<EmptyState>正在准备数据图表</EmptyState>}>
@@ -405,11 +405,11 @@ function Conclusion({ outcome, failure }: { outcome: AnalysisOutcome | null; fai
   if (!outcome) return <EmptyState>选择一个经营场景，或输入你的业务问题</EmptyState>;
   if (isAnalysisResult(outcome)) {
     if (outcome.rows.length === 0) return <div className="result-message success"><strong>查询成功</strong><p>查询成功，但没有符合当前筛选条件的数据</p></div>;
-    return <div className={`result-message ${outcome.status === "degraded" ? "warning" : "success"}`}><p>{outcome.answer}</p>{outcome.degradation_reason && <span>本次查询的总结生成失败，已保留结果表格。详见审计依据。</span>}</div>;
+    return <div className={`result-message ${outcome.status === "degraded" ? "warning" : "success"}`}><p>{localizeAnswer(outcome.answer)}</p>{outcome.degradation_reason && <span>本次查询的总结生成失败，已保留结果表格。详见审计依据。</span>}</div>;
   }
   if (outcome.status === "pending") return <div className="result-message warning"><strong>高风险查询，需管理员审批</strong><p>访问数据库前已暂停，尚未读取敏感数据。</p></div>;
-  if (outcome.status === "rejected") return <div className="result-message danger"><strong>本次请求在数据库执行前被拒绝</strong><p>{outcome.reason || "请求不符合当前业务与安全边界。"}</p></div>;
-  return <div className="result-message neutral"><p>{outcome.answer}</p></div>;
+  if (outcome.status === "rejected") return <div className="result-message danger"><strong>本次请求在数据库执行前被拒绝</strong><p>{outcome.reason ? localizeUserMessage(outcome.reason) : "请求不符合当前业务与安全边界。"}</p></div>;
+  return <div className="result-message neutral"><p>{"answer" in outcome ? localizeAnswer(outcome.answer) : "请求已处理。"}</p></div>;
 }
 
 function ResultTable({ rows }: { rows: Array<Record<string, unknown>> }) {
