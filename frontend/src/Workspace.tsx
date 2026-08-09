@@ -6,7 +6,6 @@ import {
   Database,
   FileSearch,
   Play,
-  RotateCcw,
   ShieldAlert,
   TableProperties,
 } from "lucide-react";
@@ -14,6 +13,7 @@ import { FormEvent, lazy, Suspense, useMemo, useState } from "react";
 import { api, streamAnalysis } from "./api";
 import {
   Drawer,
+  DemoPathRail,
   EmptyState,
   KpiCard,
   StatusPill,
@@ -143,7 +143,16 @@ export default function Workspace({
 
   async function run(event: FormEvent) {
     event.preventDefault();
-    if (!ready || running || !question.trim()) return;
+    await executeQuestion(question);
+  }
+
+  async function runQuestion(nextQuestion: string) {
+    setQuestion(nextQuestion);
+    await executeQuestion(nextQuestion);
+  }
+
+  async function executeQuestion(nextQuestion: string) {
+    if (!ready || running || !nextQuestion.trim()) return;
     resetRun();
     setRunning(true);
     setMessage("分析请求已发送");
@@ -154,7 +163,7 @@ export default function Workspace({
         {
           request_id: nextRequestId,
           user_id: session.user_id,
-          question: question.trim(),
+          question: nextQuestion.trim(),
           max_rows: Math.min(maxRows, session.max_rows),
         },
         receive,
@@ -165,6 +174,14 @@ export default function Workspace({
     } finally {
       setRunning(false);
     }
+  }
+
+  function focusEvidence() {
+    if (!analysis) {
+      setMessage("先运行一个真实请求，再查看它留下的计划、证据和口径。");
+      return;
+    }
+    document.getElementById("audit-evidence")?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
   async function resolveApproval(decision: "approve" | "reject", reason?: string) {
@@ -218,12 +235,19 @@ export default function Workspace({
         <KpiCard label="销售渠道" value={overview ? `${overview.channel_count} 个` : "—"} />
         <KpiCard label="退款记录" value={overview ? `${overview.refund_count} 条` : "—"} />
         <KpiCard label="数据覆盖时间" value={overview ? `${overview.coverage_days} 天` : "—"} />
-        <TrustCard />
+        <TrustCard publicDemo={session.public_demo_mode} />
       </section>
 
       <div className="workspace-layout">
         <aside className="query-panel">
           <h2>提问分析</h2>
+          <DemoPathRail
+            ready={ready}
+            running={running}
+            publicDemo={session.public_demo_mode}
+            onRun={(nextQuestion) => { void runQuestion(nextQuestion); }}
+            onEvidence={focusEvidence}
+          />
           <form onSubmit={run}>
             <label htmlFor="question">业务问题</label>
             <textarea
@@ -270,10 +294,10 @@ export default function Workspace({
         </aside>
 
         <section className="analysis-content">
-          <section className="workflow-card">
+          <section className="workflow-card" aria-labelledby="workflow-heading">
             <div className="section-title-row">
               <div>
-                <h2>分析工作流</h2>
+                <h2 id="workflow-heading">分析工作流</h2>
                 <p>{message}</p>
               </div>
               <span className="mono">{elapsed === null ? "等待运行" : `总耗时 ${(elapsed / 1000).toFixed(2)}s`}</span>
@@ -342,9 +366,9 @@ export default function Workspace({
             </section>
           </div>
 
-          <section className="evidence-card">
+          <section className="evidence-card" id="audit-evidence" aria-labelledby="evidence-heading">
             <div className="card-heading">
-              <div><FileSearch size={16} /><h2>审计依据</h2></div>
+              <div><FileSearch size={16} /><h2 id="evidence-heading">审计依据</h2></div>
               <span>{analysis && !analysis.plan ? "本次查询的审批、SQL 与结果记录可追溯" : "本次分析的计划、证据与口径可追溯"}</span>
             </div>
             <div className="evidence-grid">
