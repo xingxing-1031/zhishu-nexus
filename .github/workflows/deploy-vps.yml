@@ -1,6 +1,8 @@
 name: Deploy VPS release
 
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
     inputs:
       ref:
@@ -10,6 +12,10 @@ on:
 
 permissions:
   contents: read
+
+concurrency:
+  group: production-vps
+  cancel-in-progress: false
 
 jobs:
   deploy:
