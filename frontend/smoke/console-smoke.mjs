@@ -17,7 +17,7 @@ for (const marker of ["零售运营分析台", "/static/assets/"]) {
 const scriptPath = home.body.match(/src="([^"]+\.js)"/)?.[1];
 if (!scriptPath) throw new Error("homepage does not reference a JavaScript bundle");
 const script = await get(scriptPath);
-if (!script.body.includes("demo-path-rail")) throw new Error("bundle is missing guided demo paths");
+if (script.body.includes("demo-path-rail")) throw new Error("bundle still contains the removed guided demo rail");
 
 const session = await get("/session");
 const sessionData = JSON.parse(session.body);

@@ -71,7 +71,7 @@ def test_demo_homepage_and_static_assets_are_available() -> None:
     script = client.get(script_path.group(1))
     assert stylesheet.status_code == 200
     assert "--teal" in stylesheet.text
-    assert ".demo-path-rail" in stylesheet.text
+    assert ".demo-path-rail" not in stylesheet.text
     assert script.status_code == 200
     assert "/analysis/stream" in script.text
     assert "/admin/metrics" in script.text

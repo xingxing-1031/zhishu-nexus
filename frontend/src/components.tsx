@@ -1,13 +1,8 @@
 import {
-  ArrowRight,
   Activity,
   BookOpenText,
   ClipboardList,
-  FileCheck2,
-  LockKeyhole,
   LogOut,
-  Play,
-  ScanSearch,
   ShieldCheck,
   X,
 } from "lucide-react";
@@ -125,46 +120,6 @@ export function TrustCard({ publicDemo }: { publicDemo: boolean }) {
       </div>
       <p>{publicDemo ? "公开演示只展示分析员视角；管理员审批在受控环境中执行。" : "只读 · 可审计 · 业务口径受约束 · 查询经过安全与一致性校验"}</p>
     </div>
-  );
-}
-
-export function DemoPathRail({
-  ready,
-  running,
-  publicDemo,
-  onRun,
-  onEvidence,
-}: {
-  ready: boolean;
-  running: boolean;
-  publicDemo: boolean;
-  onRun: (question: string) => void;
-  onEvidence: () => void;
-}) {
-  return (
-    <section className="demo-path-rail" aria-labelledby="demo-path-heading">
-      <div className="demo-path-heading">
-        <div><span className="demo-path-kicker">QUICK TOUR</span><h3 id="demo-path-heading">演示路径</h3></div>
-        <span>从真实结果到可信依据</span>
-      </div>
-      <div className="demo-path-list">
-        <button className="demo-path-button" type="button" disabled={!ready || running} onClick={() => onRun("统计最近30天各销售渠道的销售额，按销售额从高到低排序，返回10条。")}>
-          <span className="demo-path-icon"><Play size={14} /></span>
-          <span><strong>先看一个真实结果</strong><small>运行渠道销售额分析</small></span>
-          <ArrowRight size={14} />
-        </button>
-        <button className="demo-path-button" type="button" disabled={!ready || running} onClick={() => onRun("查询最近30天的退款原因，并按原因统计金额。")}>
-          <span className="demo-path-icon warning"><LockKeyhole size={14} /></span>
-          <span><strong>看一次安全拒绝</strong><small>{publicDemo ? "敏感字段会在执行前被拦截" : "查看敏感字段审批边界"}</small></span>
-          <ArrowRight size={14} />
-        </button>
-        <button className="demo-path-button" type="button" onClick={onEvidence}>
-          <span className="demo-path-icon blue"><FileCheck2 size={14} /></span>
-          <span><strong>查看可信依据</strong><small>计划、证据与业务口径</small></span>
-          <ScanSearch size={14} />
-        </button>
-      </div>
-    </section>
   );
 }
 

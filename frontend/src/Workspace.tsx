@@ -13,7 +13,6 @@ import { FormEvent, lazy, Suspense, useMemo, useState } from "react";
 import { api, streamAnalysis } from "./api";
 import {
   Drawer,
-  DemoPathRail,
   EmptyState,
   KpiCard,
   StatusPill,
@@ -146,11 +145,6 @@ export default function Workspace({
     await executeQuestion(question);
   }
 
-  async function runQuestion(nextQuestion: string) {
-    setQuestion(nextQuestion);
-    await executeQuestion(nextQuestion);
-  }
-
   async function executeQuestion(nextQuestion: string) {
     if (!ready || running || !nextQuestion.trim()) return;
     resetRun();
@@ -174,14 +168,6 @@ export default function Workspace({
     } finally {
       setRunning(false);
     }
-  }
-
-  function focusEvidence() {
-    if (!analysis) {
-      setMessage("先运行一个真实请求，再查看它留下的计划、证据和口径。");
-      return;
-    }
-    document.getElementById("audit-evidence")?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
   async function resolveApproval(decision: "approve" | "reject", reason?: string) {
@@ -241,13 +227,6 @@ export default function Workspace({
       <div className="workspace-layout">
         <aside className="query-panel">
           <h2>提问分析</h2>
-          <DemoPathRail
-            ready={ready}
-            running={running}
-            publicDemo={session.public_demo_mode}
-            onRun={(nextQuestion) => { void runQuestion(nextQuestion); }}
-            onEvidence={focusEvidence}
-          />
           <form onSubmit={run}>
             <label htmlFor="question">业务问题</label>
             <textarea
