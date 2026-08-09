@@ -31,7 +31,7 @@ set_env_value() {
   local temporary
   temporary="$(mktemp)"
   grep -v "^${key}=" "$ENV_FILE" > "$temporary" || true
-  printf '%s=%s\n' "$key" "$value" >> "$temporary"
+  printf "%s='%s'\n" "$key" "$value" >> "$temporary"
   mv "$temporary" "$ENV_FILE"
 }
 

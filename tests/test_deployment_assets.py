@@ -66,3 +66,4 @@ def test_vps_release_generates_demo_auth_secrets_on_the_server() -> None:
     assert "set_env_value AUTH_PASSWORD_HASH" in script
     assert "set_env_value AUTH_ADMIN_PASSWORD_HASH" in script
     assert "secrets.token_urlsafe(48)" in script
+    assert "printf \"%s='%s'\\n\" \"$key\" \"$value\"" in script
