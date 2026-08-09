@@ -22,6 +22,9 @@ jobs:
     runs-on: ubuntu-latest
     environment: production
     steps:
+      - name: Check out release tooling
+        uses: actions/checkout@v4
+
       - name: Prepare SSH credentials
         shell: bash
         env:
@@ -39,7 +42,10 @@ jobs:
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_USER: ${{ secrets.VPS_USER }}
           RELEASE_REF: ${{ inputs.ref || github.sha }}
-        run: >-
-          ssh -i ~/.ssh/vps_key
-          "$VPS_USER@$VPS_HOST"
-          "cd /home/ubuntu/retail-analytics-agent && ./ops/vps_release.sh '$RELEASE_REF'"
+        run: |
+          set -euo pipefail
+          scp -i ~/.ssh/vps_key ops/vps_release.sh \
+            "$VPS_USER@$VPS_HOST:/tmp/retail-vps-release.sh"
+          ssh -i ~/.ssh/vps_key \
+            "$VPS_USER@$VPS_HOST" \
+            "PROJECT_DIR=/home/ubuntu/retail-analytics-agent bash /tmp/retail-vps-release.sh '$RELEASE_REF'"
