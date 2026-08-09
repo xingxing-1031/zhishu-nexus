@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from datetime import datetime
 from enum import StrEnum
+from zoneinfo import ZoneInfo
 
 
 class RequestRoute(StrEnum):
@@ -24,6 +26,8 @@ _IDENTITY_QUERIES = frozenset(
         "你是什么",
         "介绍一下你自己",
         "你能做什么",
+        "你可以干嘛",
+        "你可以做什么",
         "你会做什么",
         "你的功能是什么",
         "你好",
@@ -31,6 +35,18 @@ _IDENTITY_QUERIES = frozenset(
         "嗨",
         "hello",
         "hi",
+    }
+)
+
+_TIME_QUERIES = frozenset(
+    {
+        "几点了",
+        "现在几点",
+        "现在几点了",
+        "上海现在几点",
+        "上海现在几点了",
+        "当前时间",
+        "现在时间",
     }
 )
 
@@ -78,7 +94,11 @@ def _normalized_query(query: str) -> str:
     return re.sub(r"[\s，。！？、,.!?：:；;~～]+", "", query).casefold()
 
 
-def classify_preflight_request(query: str) -> PreflightDecision | None:
+def classify_preflight_request(
+    query: str,
+    *,
+    now: datetime | None = None,
+) -> PreflightDecision | None:
     """Route deterministic conversational requests before model invocation."""
 
     normalized = _normalized_query(query)
@@ -93,6 +113,15 @@ def classify_preflight_request(query: str) -> PreflightDecision | None:
             route=RequestRoute.ASSISTANT,
             reason_code="assistant_acknowledgement",
             message="好的，你可以继续提出零售运营分析问题，我会先确认口径，再查询数据。",
+        )
+    if normalized in _TIME_QUERIES:
+        shanghai_now = (now or datetime.now(ZoneInfo("Asia/Shanghai"))).astimezone(
+            ZoneInfo("Asia/Shanghai")
+        )
+        return PreflightDecision(
+            route=RequestRoute.ASSISTANT,
+            reason_code="assistant_time",
+            message=f"当前上海时间是 {shanghai_now:%Y-%m-%d %H:%M}。",
         )
     if normalized in _AMBIGUOUS_QUERIES:
         return PreflightDecision(

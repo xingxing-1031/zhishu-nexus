@@ -55,4 +55,14 @@ def test_vps_compose_requires_server_secrets_and_configurable_access_mode() -> N
     assert "MODEL_API_KEY:?set MODEL_API_KEY" in compose
     assert "PUBLIC_DEMO_MODE: ${PUBLIC_DEMO_MODE:-true}" in compose
     assert "AUTH_MODE: ${AUTH_MODE:-demo}" in compose
+    assert "AUTH_ADMIN_PASSWORD_HASH: ${AUTH_ADMIN_PASSWORD_HASH:-}" in compose
     assert "SITE_ADDRESS:?set SITE_ADDRESS" in compose
+
+
+def test_vps_release_generates_demo_auth_secrets_on_the_server() -> None:
+    script = (PROJECT_ROOT / "ops" / "vps_release.sh").read_text(encoding="utf-8")
+
+    assert "set_env_value AUTH_MODE password" in script
+    assert "set_env_value AUTH_PASSWORD_HASH" in script
+    assert "set_env_value AUTH_ADMIN_PASSWORD_HASH" in script
+    assert "secrets.token_urlsafe(48)" in script

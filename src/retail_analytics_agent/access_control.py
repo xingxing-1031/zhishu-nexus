@@ -107,10 +107,11 @@ def get_access_context(
             request,
             settings.auth_session_secret.get_secret_value(),
         )
-        if (
-            context.user_id != settings.auth_user_id
-            or context.role is not settings.auth_role
-        ):
+        known_accounts = {
+            (settings.auth_user_id, settings.auth_role),
+            (settings.auth_admin_user_id, AccessRole.ADMIN),
+        }
+        if (context.user_id, context.role) not in known_accounts:
             raise HTTPException(status_code=401, detail="登录状态已经失效。")
         return context
     return AccessContext(

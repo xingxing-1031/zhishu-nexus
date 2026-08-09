@@ -165,7 +165,7 @@ def _enforce_public_demo_request(
 
 
 def _reject_public_internal_endpoint(settings: Settings) -> None:
-    if settings.public_demo_mode:
+    if settings.public_demo_mode and settings.auth_mode != "password":
         raise HTTPException(
             status_code=403,
             detail="公开演示环境不提供内部执行接口。",
@@ -215,14 +215,37 @@ def login(
             detail="登录尝试过于频繁，请稍后再试。",
             headers={"Retry-After": str(retry_after)},
         )
-    if payload.username != settings.auth_username or not settings.auth_password_hash:
+    accounts = [
+        (
+            settings.auth_username,
+            settings.auth_user_id,
+            settings.auth_role,
+            settings.auth_password_hash,
+        ),
+        (
+            settings.auth_admin_username,
+            settings.auth_admin_user_id,
+            AccessRole.ADMIN,
+            settings.auth_admin_password_hash,
+        ),
+    ]
+    account = next(
+        (
+            item
+            for item in accounts
+            if item[0] == payload.username
+            and item[3]
+            and verify_password(payload.password, item[3])
+        ),
+        None,
+    )
+    if account is None:
         raise HTTPException(status_code=401, detail="用户名或密码错误。")
-    if not verify_password(payload.password, settings.auth_password_hash):
-        raise HTTPException(status_code=401, detail="用户名或密码错误。")
+    _, user_id, role, _ = account
     assert settings.auth_session_secret is not None
     token = issue_session(
-        user_id=settings.auth_user_id,
-        role=settings.auth_role,
+        user_id=user_id,
+        role=role,
         secret=settings.auth_session_secret.get_secret_value(),
         ttl_seconds=settings.auth_session_ttl_seconds,
     )
@@ -235,11 +258,11 @@ def login(
         samesite="lax",
     )
     return SessionInfo(
-        user_id=settings.auth_user_id,
-        role=settings.auth_role,
-        public_demo_mode=False,
+        user_id=user_id,
+        role=role,
+        public_demo_mode=settings.public_demo_mode,
         trace_visible=True,
-        max_rows=100,
+        max_rows=(settings.public_demo_max_rows if settings.public_demo_mode else 100),
     )
 
 
@@ -296,7 +319,7 @@ def read_session(
         user_id=access_context.user_id,
         role=access_context.role,
         public_demo_mode=settings.public_demo_mode,
-        trace_visible=not settings.public_demo_mode,
+        trace_visible=(not settings.public_demo_mode or settings.auth_mode == "password"),
         max_rows=(settings.public_demo_max_rows if settings.public_demo_mode else 100),
     )
 

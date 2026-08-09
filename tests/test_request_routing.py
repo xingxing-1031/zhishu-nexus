@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 import pytest
 
 from retail_analytics_agent.request_routing import (
@@ -6,7 +8,7 @@ from retail_analytics_agent.request_routing import (
 )
 
 
-@pytest.mark.parametrize("query", ["你是谁？", "你好", "你能做什么"])
+@pytest.mark.parametrize("query", ["你是谁？", "你好", "你能做什么", "你可以干嘛"])
 def test_identity_and_greeting_requests_use_assistant_route(query: str) -> None:
     decision = classify_preflight_request(query)
 
@@ -14,6 +16,18 @@ def test_identity_and_greeting_requests_use_assistant_route(query: str) -> None:
     assert decision.route is RequestRoute.ASSISTANT
     assert decision.reason_code == "assistant_identity"
     assert "零售运营分析助手" in decision.message
+
+
+def test_time_request_uses_shanghai_time_without_analysis() -> None:
+    decision = classify_preflight_request(
+        "上海现在几点？",
+        now=datetime(2026, 8, 10, 1, 23, tzinfo=timezone.utc),
+    )
+
+    assert decision is not None
+    assert decision.route is RequestRoute.ASSISTANT
+    assert decision.reason_code == "assistant_time"
+    assert decision.message == "当前上海时间是 2026-08-10 09:23。"
 
 
 @pytest.mark.parametrize("query", ["好吧", "好的。", "懂了", "谢谢！"])

@@ -1,7 +1,11 @@
 const baseUrl = new URL(process.env.VITE_BASE_URL || "http://127.0.0.1:8000/");
 
+let sessionCookie = "";
+
 async function get(path) {
-  const response = await fetch(new URL(path, baseUrl));
+  const response = await fetch(new URL(path, baseUrl), {
+    headers: sessionCookie ? { Cookie: sessionCookie } : {},
+  });
   const body = await response.text();
   if (!response.ok) {
     throw new Error(`${path} returned ${response.status}: ${body.slice(0, 160)}`);
@@ -18,11 +22,28 @@ const scriptPath = home.body.match(/src="([^"]+\.js)"/)?.[1];
 if (!scriptPath) throw new Error("homepage does not reference a JavaScript bundle");
 const script = await get(scriptPath);
 if (script.body.includes("demo-path-rail")) throw new Error("bundle still contains the removed guided demo rail");
+for (const marker of ["历史对话", "analyst-demo", "admin-demo", "基于此结果继续"]) {
+  if (!script.body.includes(marker)) throw new Error(`bundle is missing workspace marker: ${marker}`);
+}
 
-const session = await get("/session");
+let session;
+try {
+  session = await get("/session");
+} catch (error) {
+  if (!String(error).includes("returned 401")) throw error;
+  const login = await fetch(new URL("/auth/login", baseUrl), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username: "analyst-demo", password: "DemoAnalyst2026!" }),
+  });
+  if (!login.ok) throw new Error(`demo login returned ${login.status}: ${(await login.text()).slice(0, 160)}`);
+  sessionCookie = login.headers.get("set-cookie")?.split(";", 1)[0] || "";
+  if (!sessionCookie) throw new Error("demo login did not return a session cookie");
+  session = await get("/session");
+}
 const sessionData = JSON.parse(session.body);
 if (sessionData.public_demo_mode !== true) throw new Error("public demo session is not in public mode");
-if (sessionData.trace_visible !== false) throw new Error("public demo exposes Trace visibility");
+if (sessionData.role !== "analyst") throw new Error("public demo analyst login has the wrong role");
 
 const overview = await get("/demo/overview");
 const overviewData = JSON.parse(overview.body);

@@ -3,6 +3,21 @@ import { FormEvent, useState } from "react";
 import { api } from "./api";
 import type { SessionInfo } from "./types";
 
+const demoAccounts = [
+  {
+    username: "analyst-demo",
+    password: "DemoAnalyst2026!",
+    title: "分析员",
+    description: "经营指标、趋势、渠道与商品分析；敏感退款原因会被权限拦截。",
+  },
+  {
+    username: "admin-demo",
+    password: "DemoAdmin2026!",
+    title: "管理员",
+    description: "包含分析员能力，可处理审批并查看审计记录与敏感退款原因。",
+  },
+] as const;
+
 export default function LoginPage({ onLogin }: { onLogin: (session: SessionInfo) => void }) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -30,6 +45,22 @@ export default function LoginPage({ onLogin }: { onLogin: (session: SessionInfo)
           <h1>零售运营分析台</h1>
         </div>
         <p className="login-subtitle">请登录后继续使用受控分析功能</p>
+        <div className="demo-account-list" aria-label="公开演示账号">
+          {demoAccounts.map((account) => (
+            <button
+              className="demo-account"
+              type="button"
+              key={account.username}
+              onClick={() => {
+                setUsername(account.username);
+                setPassword(account.password);
+              }}
+            >
+              <span><strong>{account.title}</strong><small>{account.description}</small></span>
+              <code>{account.username}<br />{account.password}</code>
+            </button>
+          ))}
+        </div>
         <label htmlFor="username">用户名</label>
         <div className="input-with-icon">
           <UserRound size={16} />
@@ -61,7 +92,7 @@ export default function LoginPage({ onLogin }: { onLogin: (session: SessionInfo)
         </button>
         <div className="login-notice">
           <span className="service-dot online" />
-          <p>服务连接正常 · 角色由服务器校验，不允许通过请求参数修改</p>
+          <p>公开演示数据 · 角色、审批与审计均由服务器校验</p>
         </div>
       </form>
     </main>

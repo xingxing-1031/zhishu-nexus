@@ -42,6 +42,9 @@ class Settings(BaseSettings):
     auth_username: str = "analyst"
     auth_role: AccessRole = AccessRole.ANALYST
     auth_password_hash: str | None = None
+    auth_admin_user_id: str = "ADMIN-001"
+    auth_admin_username: str = "admin"
+    auth_admin_password_hash: str | None = None
     auth_session_secret: SecretStr | None = None
     auth_session_ttl_seconds: int = Field(default=28800, ge=300, le=604800)
     auth_cookie_secure: bool = False
@@ -87,10 +90,12 @@ class Settings(BaseSettings):
                 raise ValueError(
                     "AUTH_PASSWORD_HASH and AUTH_SESSION_SECRET are required"
                 )
+            if self.public_demo_mode and not self.auth_admin_password_hash:
+                raise ValueError(
+                    "PUBLIC_DEMO_MODE with password auth requires AUTH_ADMIN_PASSWORD_HASH"
+                )
             if len(self.auth_session_secret.get_secret_value()) < 32:
                 raise ValueError("AUTH_SESSION_SECRET must contain at least 32 characters")
-            if self.public_demo_mode:
-                raise ValueError("password auth cannot run in public demo mode")
         if self.model_provider is StructuredChatProtocol.OLLAMA:
             return self
         if not self.model_base_url or not self.model_base_url.startswith(

@@ -51,7 +51,7 @@ export function Header({
           </NavButton>}
         </nav>
         <div className="sidebar-footer">
-          {!session.public_demo_mode && <button className="sidebar-utility" type="button" onClick={onLogout}><LogOut size={16} />退出登录</button>}
+          <button className="sidebar-utility" type="button" onClick={onLogout}><LogOut size={16} />退出登录</button>
         </div>
       </aside>
       <header className="app-header">
@@ -62,6 +62,7 @@ export function Header({
           <span>{online ? "服务在线" : "服务未就绪"}</span>
           <span className="header-divider" />
           <strong>{roleLabel(session.role)}</strong><span className="header-user">{session.user_id}</span>
+          <button className="header-logout" type="button" onClick={onLogout} title="退出登录" aria-label="退出登录"><LogOut size={16} /></button>
         </div>
       </header>
       {isAdmin && <nav className="mobile-nav" aria-label="移动端主要页面">
@@ -118,7 +119,7 @@ export function TrustCard({ publicDemo }: { publicDemo: boolean }) {
         <ShieldCheck size={16} />
         <strong>可信说明</strong>
       </div>
-      <p>{publicDemo ? "公开演示只展示分析员视角；管理员审批在受控环境中执行。" : "只读 · 可审计 · 业务口径受约束 · 查询经过安全与一致性校验"}</p>
+      <p>{publicDemo ? "公开演示提供分析员与管理员两种受控身份；查询、审批和审计均由服务端校验。" : "只读 · 可审计 · 业务口径受约束 · 查询经过安全与一致性校验"}</p>
     </div>
   );
 }

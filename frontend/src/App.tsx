@@ -20,17 +20,23 @@ export default function App() {
     try {
       const health = await api.health();
       setOnline(health.status === "ok");
-      try {
-        await api.ready();
-        setReady(true);
-      } catch {
-        setReady(false);
-      }
       const activeSession = await api.session();
       setSession(activeSession);
       setNeedsLogin(false);
       try {
-        setOverview(await api.overview());
+        await Promise.race([
+          api.ready(),
+          new Promise((_, reject) => window.setTimeout(() => reject(new Error("readiness timeout")), 3000)),
+        ]);
+        setReady(true);
+      } catch {
+        setReady(false);
+      }
+      try {
+        setOverview(await Promise.race([
+          api.overview(),
+          new Promise<Overview>((_, reject) => window.setTimeout(() => reject(new Error("overview timeout")), 3000)),
+        ]));
       } catch {
         setOverview(null);
       }

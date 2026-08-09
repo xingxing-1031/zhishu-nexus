@@ -371,9 +371,13 @@ class LangGraphAnalysisRunner:
             outcome,
             (AnalysisRejectedResponse, ApprovalRejectedResponse),
         ):
+            terminal_node = next(
+                (node for node in reversed(outcome.trace) if node != "fail"),
+                "scope",
+            )
             yield AnalysisStreamEvent(
                 event="rejected",
-                node="fail",
+                node=terminal_node,
                 message=outcome.reason,
                 rejection=outcome,
             )

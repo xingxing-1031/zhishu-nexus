@@ -15,6 +15,7 @@ from retail_analytics_agent.models import (
     AnalysisRequest,
     AnalysisResultStatus,
     AnalysisRunningResponse,
+    ApprovalRejectedResponse,
     ApprovalRequiredResponse,
     ApprovalResolutionRequest,
     ApprovalStatus,
@@ -157,6 +158,24 @@ def test_runner_returns_business_scope_rejection_without_planner_result() -> Non
     assert isinstance(outcome, AnalysisRejectedResponse)
     assert outcome.reason_code == "unsupported_metric"
     assert outcome.trace == ("scope", "fail")
+
+    event = next(LangGraphAnalysisRunner._outcome_events(outcome))
+    assert event.event.value == "rejected"
+    assert event.node == "scope"
+
+
+def test_rejected_approval_event_stops_at_approval_without_execution() -> None:
+    outcome = ApprovalRejectedResponse(
+        request_id="REQ-REJECTED-APPROVAL",
+        reviewed_by="ADMIN-001",
+        reason="范围过宽",
+        trace=("plan", "validate_sql", "request_approval", "fail"),
+    )
+
+    event = next(LangGraphAnalysisRunner._outcome_events(outcome))
+
+    assert event.event.value == "rejected"
+    assert event.node == "request_approval"
 
 
 def test_runner_returns_assistant_response_without_analysis_plan() -> None:

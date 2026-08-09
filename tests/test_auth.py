@@ -1,3 +1,4 @@
+import pytest
 from fastapi.testclient import TestClient
 from pydantic import SecretStr
 
@@ -22,6 +23,9 @@ def _password_settings() -> Settings:
         auth_username="operator",
         auth_role="analyst",
         auth_password_hash=hash_password("correct-password"),
+        auth_admin_user_id="ADMIN-LOGIN",
+        auth_admin_username="admin-operator",
+        auth_admin_password_hash=hash_password("admin-password"),
         auth_session_secret=SecretStr("session-secret-with-at-least-32-characters"),
         _env_file=None,
     )
@@ -76,6 +80,18 @@ def test_password_mode_requires_login_and_logout_revokes_browser_cookie() -> Non
             assert session.json()["role"] == "analyst"
 
             assert client.post("/auth/logout").status_code == 204
+            admin = client.post(
+                "/auth/login",
+                json={
+                    "username": "admin-operator",
+                    "password": "admin-password",
+                },
+            )
+            assert admin.status_code == 200
+            assert admin.json()["user_id"] == "ADMIN-LOGIN"
+            assert admin.json()["role"] == "admin"
+
+            assert client.post("/auth/logout").status_code == 204
             assert client.get("/session").status_code == 401
     finally:
         login_rate_limiter.clear()
@@ -101,3 +117,54 @@ def test_demo_mode_does_not_offer_password_login() -> None:
         app.dependency_overrides.clear()
 
     assert response.status_code == 404
+
+
+def test_public_password_demo_requires_an_admin_hash() -> None:
+    with pytest.raises(ValueError, match="AUTH_ADMIN_PASSWORD_HASH"):
+        Settings(
+            postgres_db="test_db",
+            postgres_user="test_user",
+            postgres_password=SecretStr("test_password"),
+            public_demo_mode=True,
+            auth_mode="password",
+            auth_password_hash=hash_password("correct-password"),
+            auth_session_secret=SecretStr("session-secret-with-at-least-32-characters"),
+            _env_file=None,
+        )
+
+
+def test_public_password_demo_keeps_row_cap_and_authenticated_role() -> None:
+    settings = Settings(
+        postgres_db="test_db",
+        postgres_user="test_user",
+        postgres_password=SecretStr("test_password"),
+        public_demo_mode=True,
+        auth_mode="password",
+        auth_user_id="PUBLIC-ANALYST",
+        auth_username="analyst-demo",
+        auth_password_hash=hash_password("analyst-password"),
+        auth_admin_user_id="PUBLIC-ADMIN",
+        auth_admin_username="admin-demo",
+        auth_admin_password_hash=hash_password("admin-password"),
+        auth_session_secret=SecretStr("session-secret-with-at-least-32-characters"),
+        _env_file=None,
+    )
+    app.dependency_overrides[get_settings] = lambda: settings
+
+    try:
+        with TestClient(app) as client:
+            response = client.post(
+                "/auth/login",
+                json={"username": "admin-demo", "password": "admin-password"},
+            )
+            assert response.status_code == 200
+            assert response.json() == {
+                "user_id": "PUBLIC-ADMIN",
+                "role": "admin",
+                "public_demo_mode": True,
+                "trace_visible": True,
+                "max_rows": 20,
+            }
+    finally:
+        login_rate_limiter.clear()
+        app.dependency_overrides.clear()

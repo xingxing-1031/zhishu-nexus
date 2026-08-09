@@ -39,13 +39,13 @@ docker compose --env-file .env.vps -f compose.vps.yaml up -d api caddy
 
 ## 受控访问模式
 
-公网简历演示默认使用 `AUTH_MODE=demo`，只提供服务器固定的分析员身份。需要限制访问时，在服务器 `.env.vps` 中切换为 `AUTH_MODE=password`，并生成密码哈希：
+公网简历演示使用 `AUTH_MODE=password`，提供固定分析员和管理员身份。自动发布脚本会在 VPS 本地生成两个演示密码的 PBKDF2 哈希，并在缺失时生成随机 `AUTH_SESSION_SECRET`；这些值只写入服务器 `.env.vps`，不进入 Git。
 
 ```bash
 python -m retail_analytics_agent.auth
 ```
 
-将命令输出写入 `AUTH_PASSWORD_HASH`，再设置随机的 `AUTH_SESSION_SECRET`、`AUTH_USERNAME` 和 `AUTH_USER_ID`。启用 HTTPS 后将 `AUTH_COOKIE_SECURE=true`。角色仍由服务器配置决定，客户端不能提交角色字段提升权限。
+手动部署时，将分析员哈希写入 `AUTH_PASSWORD_HASH`，管理员哈希写入 `AUTH_ADMIN_PASSWORD_HASH`，再设置随机的 `AUTH_SESSION_SECRET`。启用 HTTPS 后将 `AUTH_COOKIE_SECURE=true`。角色仍由服务器配置决定，客户端不能提交角色字段提升权限。
 
 `postgres`、`api` 和 `caddy` 使用 `restart: unless-stopped`。服务器或 Docker 重启后，它们会自动恢复；如果运维人员明确停止了容器，则不会擅自重新启动。一次性的 `migrate` 服务不设置自动重启。
 
@@ -76,4 +76,4 @@ docker compose --env-file .env.vps -f compose.vps.yaml up -d --build api caddy
 
 ## 演示边界
 
-这是单 VPS 的公网演示，不是高可用生产部署。它还缺少正式登录认证、网关级限流、备份恢复演练、监控告警、密钥轮换和多实例部署。演示完成后应保存 `/health`、`/ready`、标准问题和迁移幂等的截图或日志作为验收证据。
+这是单 VPS 的公网演示，不是高可用生产部署。固定演示账号不等于正式注册与多租户身份系统；浏览器历史也不提供跨设备同步。项目仍缺少网关级限流、备份恢复演练、监控告警、密钥轮换和多实例部署。演示完成后应保存 `/health`、`/ready`、标准问题和迁移幂等的截图或日志作为验收证据。

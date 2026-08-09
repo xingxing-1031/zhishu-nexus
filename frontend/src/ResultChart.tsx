@@ -26,6 +26,7 @@ export default function ResultChart({
     const chart = init(container.current, undefined, { renderer: "canvas" });
     const xField = spec.x_field ?? Object.keys(rows[0])[0];
     const xValues = rows.map((row) => formatValue(row[xField]));
+    const labelInterval = Math.max(0, Math.ceil(xValues.length / 7) - 1);
     const series = spec.y_fields.map((field) => ({
       name: label(field),
       type: spec.chart_type === "line" ? "line" : "bar",
@@ -49,11 +50,17 @@ export default function ResultChart({
     chart.setOption({
       animationDuration: 400,
       tooltip: { trigger: "axis" },
-      grid: { left: 54, right: 18, top: 28, bottom: 48 },
+      grid: { left: 54, right: 18, top: 28, bottom: 44, containLabel: true },
       xAxis: {
         type: "category",
         data: xValues,
-        axisLabel: { color: "#64748B", fontSize: 11, interval: 0 },
+        axisLabel: {
+          color: "#64748B",
+          fontSize: 11,
+          interval: labelInterval,
+          hideOverlap: true,
+          formatter: (value: string) => shortAxisLabel(value),
+        },
         axisLine: { lineStyle: { color: "#CBD5E1" } },
         axisTick: { show: false },
       },
@@ -89,4 +96,9 @@ export default function ResultChart({
     );
   }
   return <div className="chart-canvas" ref={container} aria-label={localizeAnswer(spec.title)} />;
+}
+
+function shortAxisLabel(value: string) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})(?:T|$)/.exec(value);
+  return match ? `${match[2]}-${match[3]}` : value;
 }

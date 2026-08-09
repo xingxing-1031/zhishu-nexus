@@ -9,8 +9,22 @@ import {
   ShieldAlert,
   TableProperties,
 } from "lucide-react";
-import { FormEvent, lazy, Suspense, useMemo, useState } from "react";
+import { FormEvent, lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { api, streamAnalysis } from "./api";
+import ConversationPanel from "./ConversationPanel";
+import {
+  appendTurn,
+  createStoredTurn,
+  loadConversations,
+  newConversation,
+  replaceTurn,
+  saveConversations,
+  serializeFollowUpContext,
+  type Conversation,
+  type ConversationTurn,
+  type FollowUpContext,
+  type StoredStageState,
+} from "./conversations";
 import {
   Drawer,
   EmptyState,
@@ -33,19 +47,19 @@ import type {
 const ResultChart = lazy(() => import("./ResultChart"));
 
 const stages = [
+  ["scope", "范围识别"],
   ["plan", "计划"],
   ["retrieve", "证据检索"],
   ["generate_sql", "查询生成"],
   ["validate_sql", "安全校验"],
   ["validate_business_sql", "业务校验"],
+  ["request_approval", "审批确认"],
   ["execute_sql", "数据执行"],
   ["summarize", "结论生成"],
 ] as const;
 
 const stageAliases: Record<string, string> = {
   assess_risk: "validate_business_sql",
-  request_approval: "execute_sql",
-  fail: "summarize",
 };
 
 const examples = [
@@ -77,6 +91,15 @@ export default function Workspace({
   const [trace, setTrace] = useState<TraceEvent[] | null>(null);
   const [traceError, setTraceError] = useState("");
   const [stageState, setStageState] = useState<Record<string, StageState>>({});
+  const initialConversations = useMemo(() => {
+    const stored = loadConversations(session.user_id);
+    return stored.length ? stored : [newConversation()];
+  }, [session.user_id]);
+  const [conversations, setConversations] = useState<Conversation[]>(initialConversations);
+  const [activeConversationId, setActiveConversationId] = useState(initialConversations[0].id);
+  const [followUpContext, setFollowUpContext] = useState<FollowUpContext | null>(null);
+  const outcomeRef = useRef<AnalysisOutcome | null>(null);
+  const stageStateRef = useRef<Record<string, StageState>>({});
 
   const analysis = isAnalysisResult(outcome) ? outcome : null;
   const elapsed = useMemo(
@@ -84,56 +107,64 @@ export default function Workspace({
     [trace],
   );
 
+  useEffect(() => {
+    saveConversations(session.user_id, conversations);
+  }, [conversations, session.user_id]);
+
   function resetRun() {
     setOutcome(null);
     setFailure("");
     setApproval(null);
     setTrace(null);
     setTraceError("");
-    setStageState({});
+    updateStages({});
+    outcomeRef.current = null;
   }
 
-  function markStage(node: string, state: StageState = "running") {
+  function updateStages(next: Record<string, StageState>) {
+    stageStateRef.current = next;
+    setStageState(next);
+  }
+
+  function markStage(node: string, state: StageState = "success") {
     const normalized = stageAliases[node] ?? node;
-    const index = stages.findIndex(([name]) => name === normalized);
-    if (index < 0) return;
-    setStageState((previous) => {
-      const next = { ...previous };
-      stages.forEach(([name], position) => {
-        if (position < index && next[name] !== "danger") next[name] = "success";
-      });
-      next[normalized] = state;
-      return next;
+    if (!stages.some(([name]) => name === normalized)) return;
+    updateStages({ ...stageStateRef.current, [normalized]: state });
+  }
+
+  function terminalStages(traceNodes: string[], terminalNode?: string, terminalState: StageState = "danger") {
+    const next = Object.fromEntries(stages.map(([name]) => [name, "skipped"])) as Record<string, StageState>;
+    traceNodes.forEach((node) => {
+      const normalized = stageAliases[node] ?? node;
+      if (normalized in next && node !== "fail" && node !== "respond") next[normalized] = "success";
     });
+    if (terminalNode) {
+      const normalized = stageAliases[terminalNode] ?? terminalNode;
+      if (normalized in next) next[normalized] = terminalState;
+    }
+    updateStages(next);
   }
 
   function receive(event: StreamEvent) {
     setMessage(localizeUserMessage(event.message));
-    if (event.node) markStage(event.node);
+    if (event.event === "status" && event.node) markStage(event.node, "success");
     if (event.event === "result" && event.response) {
+      outcomeRef.current = event.response;
       setOutcome(event.response);
-      stages.forEach(([name]) => markStage(name, "success"));
+      terminalStages(event.response.trace);
     } else if (event.event === "assistant_message" && event.assistant) {
+      outcomeRef.current = event.assistant;
       setOutcome(event.assistant);
-      setStageState({});
+      terminalStages(event.assistant.trace);
     } else if (event.event === "approval_required" && event.approval) {
+      outcomeRef.current = event.approval;
       setOutcome(event.approval);
       setApproval(event.approval);
-      if (event.approval.sensitive_columns.length > 0) {
-        setStageState({
-          plan: "skipped",
-          retrieve: "skipped",
-          generate_sql: "skipped",
-          validate_sql: "success",
-          validate_business_sql: "success",
-          execute_sql: "warning",
-        });
-      } else {
-        markStage("request_approval", "warning");
-      }
+      terminalStages(event.approval.trace, "request_approval", "warning");
     } else if (event.event === "rejected" && event.rejection) {
+      outcomeRef.current = event.rejection;
       setOutcome(event.rejection);
-      if (event.node) markStage(event.node, "danger");
+      terminalStages(event.rejection.trace, event.node ?? "scope");
     } else if (event.event === "error") {
       setFailure(event.message);
       if (event.node) markStage(event.node, "danger");
@@ -147,26 +178,45 @@ export default function Workspace({
 
   async function executeQuestion(nextQuestion: string) {
     if (!ready || running || !nextQuestion.trim()) return;
+    const displayQuestion = nextQuestion.trim();
+    const submittedQuestion = followUpContext
+      ? `基于上一轮已验证分析上下文（${serializeFollowUpContext(followUpContext)}），继续回答：${displayQuestion}`
+      : displayQuestion;
+    const nextRequestId = makeRequestId();
+    const startedAt = performance.now();
+    let runFailure = "";
     resetRun();
     setRunning(true);
     setMessage("分析请求已发送");
+    setRequestId(nextRequestId);
     try {
-      const nextRequestId = makeRequestId();
-      setRequestId(nextRequestId);
       await streamAnalysis(
         {
           request_id: nextRequestId,
           user_id: session.user_id,
-          question: nextQuestion.trim(),
-          max_rows: Math.min(maxRows, session.max_rows),
+          question: submittedQuestion,
+          max_rows: clampRows(maxRows, session.max_rows),
         },
         receive,
       );
     } catch (reason) {
-      setFailure(reason instanceof Error ? localizeUserMessage(reason.message) : "分析请求失败，请稍后重试。");
+      runFailure = reason instanceof Error ? localizeUserMessage(reason.message) : "分析请求失败，请稍后重试。";
+      setFailure(runFailure);
       setMessage("请求未能完成");
     } finally {
       setRunning(false);
+      setFollowUpContext(null);
+      const turn = createStoredTurn({
+        requestId: nextRequestId,
+        question: displayQuestion,
+        durationMs: Math.round(performance.now() - startedAt),
+        outcome: outcomeRef.current,
+        failure: runFailure,
+        stageState: stageStateRef.current as StoredStageState,
+      });
+      setConversations((current) => current.map((conversation) => (
+        conversation.id === activeConversationId ? appendTurn(conversation, turn) : conversation
+      )));
     }
   }
 
@@ -175,27 +225,31 @@ export default function Workspace({
     setMessage(decision === "approve" ? "正在恢复请求" : "正在记录拒绝结果");
     try {
       const result = await api.approval(approval.request_id, decision, reason);
+      outcomeRef.current = result;
       setOutcome(result);
       setApproval(null);
       setFailure("");
       if (isAnalysisResult(result)) {
         setMessage("分析完成");
-        if (result.plan) {
-          stages.forEach(([name]) => markStage(name, "success"));
-        } else {
-          setStageState({
-            plan: "skipped",
-            retrieve: "skipped",
-            generate_sql: "skipped",
-            validate_sql: "success",
-            validate_business_sql: "success",
-            execute_sql: "success",
-            summarize: "success",
-          });
-        }
+        terminalStages(result.trace);
       } else {
         setMessage(result.status === "rejected" ? "审批已拒绝" : "审批处理完成");
-        markStage("request_approval", "danger");
+        terminalStages(result.trace, "request_approval", "danger");
+      }
+      const currentConversation = conversations.find((conversation) => conversation.id === activeConversationId);
+      const existingTurn = currentConversation?.turns.find((turn) => turn.requestId === approval.request_id);
+      if (existingTurn) {
+        const updatedTurn = createStoredTurn({
+          requestId: approval.request_id,
+          question: existingTurn.question,
+          durationMs: existingTurn.durationMs,
+          outcome: result,
+          failure: "",
+          stageState: stageStateRef.current as StoredStageState,
+        });
+        setConversations((current) => current.map((conversation) => (
+          conversation.id === activeConversationId ? replaceTurn(conversation, updatedTurn) : conversation
+        )));
       }
     } catch (error) {
       setFailure(error instanceof Error ? localizeUserMessage(error.message) : "审批处理失败，请稍后重试。");
@@ -213,6 +267,41 @@ export default function Workspace({
     }
   }
 
+  function createConversation() {
+    const conversation = newConversation();
+    setConversations((current) => [conversation, ...current].slice(0, 8));
+    setActiveConversationId(conversation.id);
+    setQuestion("");
+    setFollowUpContext(null);
+    resetRun();
+  }
+
+  function deleteConversation(id: string) {
+    if (!window.confirm("删除这个浏览器中的对话记录？服务端审计记录不会被删除。")) return;
+    setConversations((current) => {
+      const remaining = current.filter((conversation) => conversation.id !== id);
+      if (remaining.length) {
+        if (id === activeConversationId) setActiveConversationId(remaining[0].id);
+        return remaining;
+      }
+      const replacement = newConversation();
+      setActiveConversationId(replacement.id);
+      return [replacement];
+    });
+    resetRun();
+  }
+
+  function restoreTurn(turn: ConversationTurn) {
+    setRequestId(turn.requestId);
+    setQuestion(turn.question);
+    setOutcome(turn.outcome);
+    outcomeRef.current = turn.outcome;
+    setFailure(turn.status === "failed" ? turn.summary : "");
+    updateStages(turn.stageState);
+    setMessage(`已恢复 ${new Date(turn.createdAt).toLocaleString("zh-CN", { hour12: false })} 的记录`);
+    setFollowUpContext(null);
+  }
+
   return (
     <main className="workspace-page">
       <section className="kpi-strip" aria-label="业务数据概况">
@@ -225,7 +314,16 @@ export default function Workspace({
       </section>
 
       <div className="workspace-layout">
-        <aside className="query-panel">
+        <div className="workspace-sidebar">
+          <ConversationPanel
+            conversations={conversations}
+            activeId={activeConversationId}
+            onCreate={createConversation}
+            onSelect={(id) => { setActiveConversationId(id); resetRun(); setFollowUpContext(null); }}
+            onDelete={deleteConversation}
+            onSelectTurn={restoreTurn}
+          />
+          <aside className="query-panel">
           <h2>提问分析</h2>
           <form onSubmit={run}>
             <label htmlFor="question">业务问题</label>
@@ -256,11 +354,18 @@ export default function Workspace({
                   min={1}
                   max={session.max_rows}
                   value={maxRows}
-                  onChange={(event) => setMaxRows(Number(event.target.value))}
+                  onChange={(event) => setMaxRows(clampRows(Number(event.target.value), session.max_rows))}
                 />
                 <span>条</span>
               </div>
             </div>
+            <p className="field-help">公开演示最多 {session.max_rows} 条；聚合分析通常返回 10 条即可。</p>
+            {followUpContext && (
+              <div className="context-chip">
+                <span>正在基于上一结果追问</span>
+                <button type="button" onClick={() => setFollowUpContext(null)}>取消</button>
+              </div>
+            )}
             <button className="primary-button run-button" type="submit" disabled={!ready || running}>
               {running ? <Clock3 size={16} /> : <Play size={16} />}
               {running ? "分析进行中" : ready ? "运行分析" : "数据服务正在准备"}
@@ -270,7 +375,8 @@ export default function Workspace({
             <span>请求编号</span>
             <code>{requestId || "尚未创建"}</code>
           </div>
-        </aside>
+          </aside>
+        </div>
 
         <section className="analysis-content">
           <section className="workflow-card" aria-labelledby="workflow-heading">
@@ -297,14 +403,19 @@ export default function Workspace({
           <section className="conclusion-card">
             <div className="section-title-row">
               <div>
-                <h2>{analysis?.plan?.analysis_goal ? localizeAnswer(analysis.plan.analysis_goal) : (analysis ? "受控数据查询结果" : "经营分析结论")}</h2>
-                <p>只展示数据库结果和经过约束的业务解释</p>
+                <h2>{analysis?.plan?.analysis_goal ? localizeAnswer(analysis.plan.analysis_goal) : (analysis ? "受控数据查询结果" : outcome ? "助手答复与边界说明" : "经营分析结论")}</h2>
+                <p>{analysis ? "只展示数据库结果和经过约束的业务解释" : "简单问题直接答复，业务查询才进入受控数据链路"}</p>
               </div>
               <div className="conclusion-actions">
                 <OutcomePill outcome={outcome} failure={failure} running={running} />
                 {session.trace_visible && requestId && (
                   <button className="text-button" type="button" onClick={openTrace}>
                     查看执行记录
+                  </button>
+                )}
+                {analysis?.plan && (
+                  <button className="secondary-button compact-button" type="button" onClick={() => { setFollowUpContext(buildContext(analysis)); setQuestion(""); }}>
+                    基于此结果继续
                   </button>
                 )}
               </div>
@@ -324,7 +435,7 @@ export default function Workspace({
             ) : null}
           </section>
 
-          <div className="result-grid">
+          {(!outcome || analysis) && <div className="result-grid">
             <section className="data-card">
               <div className="card-heading">
                 <div><BarChart3 size={16} /><h2>数据图表</h2></div>
@@ -343,9 +454,9 @@ export default function Workspace({
               </div>
               <ResultTable rows={analysis?.rows ?? []} />
             </section>
-          </div>
+          </div>}
 
-          <section className="evidence-card" id="audit-evidence" aria-labelledby="evidence-heading">
+          {(!outcome || analysis) && <section className="evidence-card" id="audit-evidence" aria-labelledby="evidence-heading">
             <div className="card-heading">
               <div><FileSearch size={16} /><h2 id="evidence-heading">审计依据</h2></div>
               <span>{analysis && !analysis.plan ? "本次查询的审批、SQL 与结果记录可追溯" : "本次分析的计划、证据与口径可追溯"}</span>
@@ -379,7 +490,7 @@ export default function Workspace({
                 )}
               </EvidenceColumn>
             </div>
-          </section>
+          </section>}
         </section>
       </div>
 
@@ -469,7 +580,25 @@ function makeRequestId() {
       .join("")
       .toUpperCase();
   }
+
   return `REQ-${date}-${suffix}`;
+}
+
+function clampRows(value: number, maximum: number) {
+  if (!Number.isFinite(value)) return 1;
+  return Math.min(maximum, Math.max(1, Math.trunc(value)));
+}
+
+function buildContext(result: AnalysisResult): FollowUpContext {
+  const plan = result.plan!;
+  return {
+    metrics: plan.metrics,
+    dimensions: plan.dimensions,
+    timeRangeDays: plan.time_range?.days ?? null,
+    filters: plan.filters ?? [],
+    resultColumns: result.rows[0] ? Object.keys(result.rows[0]) : [],
+    answer: result.answer,
+  };
 }
 
 function isAnalysisResult(outcome: AnalysisOutcome | null): outcome is AnalysisResult {
