@@ -38,7 +38,7 @@ jobs:
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_USER: ${{ secrets.VPS_USER }}
-          RELEASE_REF: ${{ inputs.ref }}
+          RELEASE_REF: ${{ inputs.ref || github.sha }}
         run: >-
           ssh -i ~/.ssh/vps_key
           "$VPS_USER@$VPS_HOST"
