@@ -1,10 +1,12 @@
 # W6-2 受控评测报告
 
+> 历史 development 报告：本文记录系统调优阶段的对照实验，不是最终泛化验收。后续 20 条 frozen holdout 已一次性执行，最终核心通过率为 `35.00%`，详见 [Frozen Holdout 最终验收](FINAL_ACCEPTANCE.md)。
+
 ## 结论
 
 本轮在固定 development 数据、模型、数据库快照、参考时间、安全策略和超时配置下，对 baseline、retrieval、reranker 三种检索方案各运行 40 条案例，共保留 120 条真实 LangGraph 原始记录。三个方案的六个核心阶段通过率均为 `100%`；正确性打平时，baseline 平均延迟最低，reranker 最高。
 
-这不是“通用 Agent 准确率 100%”。本轮只运行一次 development 集，未配置独立自然语言答案评审器，也没有运行 frozen holdout。
+这不是“通用 Agent 准确率 100%”。本轮只运行一次 development 集，且这些案例已用于定位和修复问题；未配置独立自然语言答案评审器。本报告完成时 frozen holdout 尚未运行，后续一次性结果见最终验收报告。
 
 ## 实验条件
 
@@ -75,7 +77,7 @@ ANSWER    独立自然语言回答评审，本轮未配置
 - 只运行了 development，且案例已经用于定位和修复系统问题。
 - 每题每方案只运行 1 次，不能评估随机模型的长期稳定性。
 - 没有独立 Answer Judge，不能报告自然语言回答通过率。
-- frozen holdout 未运行；正式验收前需保留其独立性审计记录。
+- 本报告阶段 frozen holdout 尚未运行；后续已完成一次性验收，核心通过率为 `35.00%`，不能用本文 development 的 `100%` 替代该泛化结果。
 - 当前数据只有 10 条演示订单，不能外推真实企业数据规模下的性能。
 - 本轮正确性打平，不能宣称 reranker 比 baseline 更准确；其平均延迟反而更高。
 
@@ -88,4 +90,4 @@ ANSWER    独立自然语言回答评审，本轮未配置
 - 完整回归：`358 passed`
 - 功能与原始报告 commit：`9d5a8c4`
 
-报告中的所有数字均来自原始 JSON，不使用预设简历指标，也没有读取 frozen holdout 结果进行调优。
+报告中的所有数字均来自原始 JSON，不使用预设简历指标；本轮 development 调优时没有读取 frozen holdout。冻结集后续已被正式消费，不得针对失败题调优后继续称其为独立验收。
