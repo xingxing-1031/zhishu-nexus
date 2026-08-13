@@ -60,6 +60,15 @@ class FakeMcpClient:
         return {"result": "# 企业经营分析复盘报告\n\n已导出"}
 
 
+class RecordingKnowledgeAdapter:
+    def __init__(self) -> None:
+        self.queries: list[str] = []
+
+    def retrieve(self, query):
+        self.queries.append(query.query)
+        return ()
+
+
 def _service() -> EnterpriseAgentService:
     return EnterpriseAgentService(
         analysis_runner=FakeAnalysisRunner(),
@@ -175,4 +184,33 @@ def test_weekly_report_supplies_explicit_metrics_to_sql_tool() -> None:
     assert runner.questions == [
         "生成最近7天经营周报，结合制度证据给出复盘；"
         "数据分析口径：按渠道统计销售额和订单数"
+    ]
+
+
+def test_refund_skill_separates_policy_query_from_structured_data_task() -> None:
+    knowledge = RecordingKnowledgeAdapter()
+    service = EnterpriseAgentService(
+        analysis_runner=FakeAnalysisRunner(),
+        context_builder=ContextBuilder(InMemoryConversationStore()),
+        task_planner=TaskPlanner(default_skill_registry()),
+        knowledge=knowledge,
+        knowledge_departments=("admin",),
+        mcp_client=FakeMcpClient(),
+    )
+
+    service.run(
+        AgentRequest(
+            request_id="r-refund-policy",
+            conversation_id="c-refund-policy",
+            user_id="u1",
+            question=(
+                "最近30天按退款状态统计退款金额，"
+                "并结合售后制度说明需要关注的风险"
+            ),
+        ),
+        AccessContext(user_id="u1", role=AccessRole.ANALYST),
+    )
+
+    assert knowledge.queries == [
+        "企业售后退款制度中有哪些退款风险、人工复核条件和经营复盘要求？"
     ]

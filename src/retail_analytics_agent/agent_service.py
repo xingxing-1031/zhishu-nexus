@@ -34,6 +34,17 @@ from retail_analytics_agent.reporting import ReportComposer
 from retail_analytics_agent.task_planner import TaskPlanner, TaskPlanningError
 from retail_analytics_agent.tool_registry import ToolCallOutcome, ToolRegistry
 
+_KNOWLEDGE_QUERIES: dict[SkillId, str] = {
+    SkillId.REFUND_DIAGNOSIS: (
+        "企业售后退款制度中有哪些退款风险、人工复核条件和经营复盘要求？"
+    ),
+    SkillId.CHANNEL_COMPARISON: "企业渠道经营制度中有哪些渠道对比和复盘要求？",
+    SkillId.PRODUCT_ANALYSIS: "企业商品经营制度中有哪些商品分析和复盘要求？",
+    SkillId.WEEKLY_REPORT: (
+        "企业经营周报制度中有哪些核心指标、证据引用和改进闭环要求？"
+    ),
+}
+
 
 @dataclass
 class EnterpriseAgentService:
@@ -183,7 +194,7 @@ class EnterpriseAgentService:
                 outcome = self.tool_registry.call(
                     "knowledge.search",
                     {
-                        "query": request.question,
+                        "query": _KNOWLEDGE_QUERIES[plan.skill_id],
                         "user_id": request.user_id,
                         "role": access_context.role.value,
                         "departments": self.knowledge_departments,
