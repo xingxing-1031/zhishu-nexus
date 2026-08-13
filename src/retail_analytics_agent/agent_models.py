@@ -1,0 +1,103 @@
+from __future__ import annotations
+
+from enum import StrEnum
+from typing import Any
+
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+
+class AgentStrictModel(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+
+class SkillId(StrEnum):
+    REFUND_DIAGNOSIS = "refund_diagnosis"
+    CHANNEL_COMPARISON = "channel_comparison"
+    PRODUCT_ANALYSIS = "product_analysis"
+    WEEKLY_REPORT = "weekly_report"
+
+
+class ToolRisk(StrEnum):
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+
+
+class AgentTaskStatus(StrEnum):
+    PENDING = "pending"
+    RUNNING = "running"
+    SUCCEEDED = "succeeded"
+    DEGRADED = "degraded"
+    REFUSED = "refused"
+    FAILED = "failed"
+
+
+class Subtask(AgentStrictModel):
+    id: str = Field(min_length=1, max_length=80)
+    description: str = Field(min_length=1, max_length=500)
+    required_tools: tuple[str, ...] = Field(default=(), max_length=8)
+    status: AgentTaskStatus = AgentTaskStatus.PENDING
+
+
+class TaskPlan(AgentStrictModel):
+    goal: str = Field(min_length=1, max_length=500)
+    skill_id: SkillId
+    subtasks: tuple[Subtask, ...] = Field(min_length=1, max_length=12)
+    completion_criteria: tuple[str, ...] = Field(min_length=1, max_length=12)
+    max_steps: int = Field(default=8, ge=1, le=30)
+
+    @model_validator(mode="after")
+    def validate_plan(self) -> TaskPlan:
+        ids = [item.id for item in self.subtasks]
+        if len(ids) != len(set(ids)):
+            raise ValueError("subtask ids must be unique")
+        if len(self.subtasks) > self.max_steps:
+            raise ValueError("subtasks cannot exceed max_steps")
+        return self
+
+
+class ContextSnapshot(AgentStrictModel):
+    conversation_id: str = Field(min_length=1, max_length=128)
+    task_goal: str = Field(min_length=1, max_length=500)
+    summary: str = ""
+    confirmed_constraints: tuple[str, ...] = Field(default=(), max_length=30)
+    evidence_ids: tuple[str, ...] = Field(default=(), max_length=50)
+    recent_tool_results: tuple[str, ...] = Field(default=(), max_length=20)
+    token_budget: int = Field(default=4000, ge=256, le=32000)
+    token_estimate: int = Field(default=0, ge=0)
+    truncated: bool = False
+
+
+class ToolCallRecord(AgentStrictModel):
+    request_id: str = Field(min_length=1, max_length=128)
+    conversation_id: str | None = Field(default=None, max_length=128)
+    tool_name: str = Field(min_length=1, max_length=128)
+    input_hash: str = Field(min_length=64, max_length=64)
+    status: str = Field(min_length=1, max_length=40)
+    duration_ms: int = Field(default=0, ge=0)
+    error_type: str | None = Field(default=None, max_length=120)
+
+
+class ReportFinding(AgentStrictModel):
+    statement: str = Field(min_length=1, max_length=1000)
+    data_evidence_ids: tuple[str, ...] = Field(default=(), max_length=20)
+    document_evidence_ids: tuple[str, ...] = Field(default=(), max_length=20)
+    confidence: str = Field(default="supported", max_length=40)
+
+
+class OperationsReport(AgentStrictModel):
+    title: str = Field(min_length=1, max_length=200)
+    executive_summary: str = Field(min_length=1, max_length=3000)
+    findings: tuple[ReportFinding, ...] = Field(min_length=1, max_length=20)
+    charts: tuple[dict[str, Any], ...] = Field(default=(), max_length=10)
+    data_evidence: tuple[str, ...] = Field(default=(), max_length=50)
+    document_evidence: tuple[str, ...] = Field(default=(), max_length=50)
+    limitations: tuple[str, ...] = Field(default=(), max_length=20)
+
+
+class ToolResult(AgentStrictModel):
+    tool_name: str = Field(min_length=1, max_length=128)
+    status: str = Field(min_length=1, max_length=40)
+    payload: dict[str, Any] = Field(default_factory=dict)
+    evidence_ids: tuple[str, ...] = Field(default=(), max_length=50)
+    error: str | None = Field(default=None, max_length=1000)
