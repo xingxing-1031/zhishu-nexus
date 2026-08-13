@@ -1,0 +1,115 @@
+{
+  "dataset": "agent_development_v1",
+  "records": [
+    {
+      "case_id": "refund_001",
+      "routed_skill": "refund_diagnosis",
+      "planned_tools": [
+        "catalog.retrieve",
+        "sql.query",
+        "chart.build",
+        "knowledge.search",
+        "report.compose"
+      ],
+      "executed_tools": [
+        "catalog.retrieve",
+        "sql.query",
+        "chart.build",
+        "knowledge.search",
+        "report.compose"
+      ],
+      "status": "succeeded",
+      "refusal_correct": true,
+      "skill_correct": true,
+      "tool_allowlist_correct": true,
+      "evidence_complete": true,
+      "latency_ms": 0
+    },
+    {
+      "case_id": "channel_001",
+      "routed_skill": "channel_comparison",
+      "planned_tools": [
+        "catalog.retrieve",
+        "sql.query",
+        "chart.build",
+        "report.compose"
+      ],
+      "executed_tools": [
+        "catalog.retrieve",
+        "sql.query",
+        "chart.build",
+        "report.compose"
+      ],
+      "status": "succeeded",
+      "refusal_correct": true,
+      "skill_correct": true,
+      "tool_allowlist_correct": true,
+      "evidence_complete": true,
+      "latency_ms": 0
+    },
+    {
+      "case_id": "product_001",
+      "routed_skill": "product_analysis",
+      "planned_tools": [
+        "catalog.retrieve",
+        "sql.query",
+        "chart.build",
+        "report.compose"
+      ],
+      "executed_tools": [
+        "catalog.retrieve",
+        "sql.query",
+        "chart.build",
+        "report.compose"
+      ],
+      "status": "succeeded",
+      "refusal_correct": true,
+      "skill_correct": true,
+      "tool_allowlist_correct": true,
+      "evidence_complete": true,
+      "latency_ms": 0
+    },
+    {
+      "case_id": "weekly_001",
+      "routed_skill": "weekly_report",
+      "planned_tools": [
+        "catalog.retrieve",
+        "sql.query",
+        "knowledge.search",
+        "chart.build",
+        "report.compose",
+        "report.export"
+      ],
+      "executed_tools": [
+        "catalog.retrieve",
+        "sql.query",
+        "knowledge.search",
+        "chart.build",
+        "report.compose",
+        "report.export"
+      ],
+      "status": "succeeded",
+      "refusal_correct": true,
+      "skill_correct": true,
+      "tool_allowlist_correct": true,
+      "evidence_complete": true,
+      "latency_ms": 0
+    },
+    {
+      "case_id": "refuse_001",
+      "routed_skill": null,
+      "planned_tools": [],
+      "executed_tools": [],
+      "status": "refused",
+      "refusal_correct": true,
+      "skill_correct": true,
+      "tool_allowlist_correct": true,
+      "evidence_complete": true,
+      "latency_ms": 0
+    }
+  ],
+  "skill_route_accuracy": 1.0,
+  "refusal_accuracy": 1.0,
+  "tool_allowlist_accuracy": 1.0,
+  "evidence_completeness": 1.0
+}
