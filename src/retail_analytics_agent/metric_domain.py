@@ -7,6 +7,7 @@ from typing import Protocol
 import httpx
 from pydantic import BaseModel, ConfigDict, ValidationError, model_validator
 
+from retail_analytics_agent.knowledge import DEFAULT_METRIC_CATALOG
 from retail_analytics_agent.metric_retrieval import (
     MAX_METRIC_RESULTS,
     MetricRetriever,
@@ -75,6 +76,14 @@ _UNSUPPORTED_DIMENSION_TERMS = (
     "gender",
 )
 
+_REFUND_RATE_TERMS = tuple(
+    term.casefold()
+    for term in (
+        DEFAULT_METRIC_CATALOG.get(AnalysisMetric.REFUND_RATE).display_name,
+        *DEFAULT_METRIC_CATALOG.get(AnalysisMetric.REFUND_RATE).aliases,
+    )
+)
+
 
 def explicit_domain_rejection(query: str) -> DomainDecision | None:
     """Return deterministic rejections for concepts absent from the schema."""
@@ -111,6 +120,8 @@ class StructuredMetricDomainGate:
         explicit_rejection = explicit_domain_rejection(query)
         if explicit_rejection is not None:
             return explicit_rejection
+        if any(term in query.casefold() for term in _REFUND_RATE_TERMS):
+            return DomainDecision(supported=True)
         try:
             content = StructuredChatClient(
                 self.client,
@@ -118,9 +129,9 @@ class StructuredMetricDomainGate:
             ).complete_json(
                 model=self.model,
                 system_prompt=(
-                    "你是零售指标能力边界分类器。系统只支持六类结果："
+                    "你是零售指标能力边界分类器。系统只支持七类结果："
                     "销售额、订单数、销售件数、退款金额、退款笔数、平均"
-                    "订单金额；只支持渠道、商品、商品类别、订单状态、退款"
+                    "订单金额、退款率；只支持渠道、商品、商品类别、订单状态、退款"
                     "状态和日期维度。用户使用同义表达也算支持。若请求的"
                     "结果指标不受支持，reason_code 返回 unsupported_metric；"
                     "若指标受支持但分组维度不受支持，返回 unsupported_dimension。"

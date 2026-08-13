@@ -133,6 +133,29 @@ def test_ollama_domain_gate_rejects_inventory_without_model_call() -> None:
     assert decision.reason_code is DomainRejectionReason.UNSUPPORTED_METRIC
 
 
+def test_domain_gate_accepts_catalogued_refund_rate_without_model_call() -> None:
+    client = _client(lambda request: pytest.fail("model must not be called"))
+
+    decision = OllamaMetricDomainGate(client=client).classify(
+        "最近30天各渠道退款率为什么变化"
+    )
+
+    assert decision == DomainDecision(supported=True)
+
+
+def test_domain_gate_rejects_unsupported_metric_even_with_supported_term() -> None:
+    client = _client(lambda request: pytest.fail("model must not be called"))
+
+    decision = OllamaMetricDomainGate(client=client).classify(
+        "按渠道对比退款率和毛利润"
+    )
+
+    assert decision == DomainDecision(
+        supported=False,
+        reason_code=DomainRejectionReason.UNSUPPORTED_METRIC,
+    )
+
+
 def test_domain_gate_stops_unsupported_query_before_retrieval() -> None:
     gate = Mock()
     gate.classify.return_value = DomainDecision(
