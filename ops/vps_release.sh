@@ -2,19 +2,23 @@
 set -euo pipefail
 
 if [[ $# -ne 1 ]]; then
-  echo "usage: $0 <git-ref>" >&2
+  echo "usage: $0 <expected-commit>" >&2
   exit 2
 fi
 
 PROJECT_DIR="${PROJECT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 ENV_FILE="${ENV_FILE:-$PROJECT_DIR/.env.vps}"
-REFERENCE="$1"
+EXPECTED_COMMIT="$1"
+RELEASE_BUNDLE="${RELEASE_BUNDLE:-}"
 SERVICE_TOKEN_FILE="${SERVICE_TOKEN_FILE:-}"
 cd "$PROJECT_DIR"
 
 cleanup() {
   if [[ -n "$SERVICE_TOKEN_FILE" ]]; then
     rm -f "$SERVICE_TOKEN_FILE"
+  fi
+  if [[ -n "$RELEASE_BUNDLE" ]]; then
+    rm -f "$RELEASE_BUNDLE"
   fi
 }
 trap cleanup EXIT
@@ -26,12 +30,17 @@ if [[ -n "$DIRTY_STATUS" ]]; then
   exit 1
 fi
 
-git fetch --tags origin
-TARGET_REFERENCE="$REFERENCE"
-if git rev-parse --verify --quiet "origin/$REFERENCE" >/dev/null; then
-  TARGET_REFERENCE="origin/$REFERENCE"
+if [[ ! -r "$RELEASE_BUNDLE" ]]; then
+  echo "missing release bundle: $RELEASE_BUNDLE" >&2
+  exit 1
 fi
-git checkout --detach "$TARGET_REFERENCE"
+git fetch "$RELEASE_BUNDLE" HEAD
+TARGET_COMMIT="$(git rev-parse FETCH_HEAD)"
+if [[ "$TARGET_COMMIT" != "$EXPECTED_COMMIT" ]]; then
+  echo "release bundle commit mismatch: expected=$EXPECTED_COMMIT actual=$TARGET_COMMIT" >&2
+  exit 1
+fi
+git checkout --detach "$TARGET_COMMIT"
 
 set_env_value() {
   local key="$1"

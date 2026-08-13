@@ -24,6 +24,16 @@ jobs:
     steps:
       - name: Check out release tooling
         uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+          fetch-depth: 1
+
+      - name: Create release bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          git bundle create release.bundle HEAD
+          git rev-parse HEAD > release.sha
 
       - name: Prepare SSH credentials
         shell: bash
@@ -41,7 +51,6 @@ jobs:
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_USER: ${{ secrets.VPS_USER }}
-          RELEASE_REF: ${{ inputs.ref || github.sha }}
           INTERNAL_SERVICE_TOKEN: ${{ secrets.INTERNAL_SERVICE_TOKEN }}
         run: |
           set -euo pipefail
@@ -49,10 +58,13 @@ jobs:
           trap 'rm -f "$token_file"' EXIT
           printf '%s' "$INTERNAL_SERVICE_TOKEN" > "$token_file"
           chmod 600 "$token_file"
+          release_sha="$(tr -d '\r\n' < release.sha)"
           scp -i ~/.ssh/vps_key ops/vps_release.sh \
             "$VPS_USER@$VPS_HOST:/tmp/retail-vps-release.sh"
+          scp -i ~/.ssh/vps_key release.bundle \
+            "$VPS_USER@$VPS_HOST:/tmp/retail-release.bundle"
           scp -i ~/.ssh/vps_key "$token_file" \
             "$VPS_USER@$VPS_HOST:/tmp/retail-internal-service-token"
           ssh -i ~/.ssh/vps_key \
             "$VPS_USER@$VPS_HOST" \
-            "PROJECT_DIR=/home/ubuntu/retail-analytics-agent SERVICE_TOKEN_FILE=/tmp/retail-internal-service-token bash /tmp/retail-vps-release.sh '$RELEASE_REF'"
+            "PROJECT_DIR=/home/ubuntu/retail-analytics-agent SERVICE_TOKEN_FILE=/tmp/retail-internal-service-token RELEASE_BUNDLE=/tmp/retail-release.bundle bash /tmp/retail-vps-release.sh '$release_sha'"
