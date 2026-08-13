@@ -8,6 +8,7 @@ from retail_analytics_agent.agent_models import (
     AgentResponse,
     AgentStreamEvent,
     AgentTaskStatus,
+    SkillId,
     ToolCallRecord,
     ToolResult,
 )
@@ -114,12 +115,17 @@ class EnterpriseAgentService:
         assert self.tool_registry is not None
         skill = self.task_planner.registry.get(plan.skill_id)
         self._ensure_skill_allows(skill.required_tools, "sql.query")
+        analysis_question = request.question
+        if plan.skill_id is SkillId.WEEKLY_REPORT:
+            analysis_question = (
+                f"{request.question}；数据分析口径：按渠道统计销售额和订单数"
+            )
         analysis_outcome = self.tool_registry.call(
             "sql.query",
             {
                 "request_id": request.request_id,
                 "user_id": request.user_id,
-                "question": request.question,
+                "question": analysis_question,
                 "max_rows": request.max_rows,
             },
             access_context=access_context,

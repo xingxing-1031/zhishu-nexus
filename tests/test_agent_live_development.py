@@ -1,4 +1,8 @@
-from scripts.run_agent_live_development import _aggregate, _evaluate_case
+from scripts.run_agent_live_development import (
+    _aggregate,
+    _evaluate_case,
+    _post_json_with_rate_limit_retry,
+)
 
 
 def test_live_evaluation_requires_exact_tools_and_governed_evidence() -> None:
@@ -62,6 +66,8 @@ def test_live_aggregate_keeps_success_degradation_and_refusal_separate() -> None
             "expected_statuses": ["succeeded", "degraded"],
             "status": "degraded",
             "http_status": 200,
+            "rate_limit_retry_count": 0,
+            "rate_limit_wait_seconds": 0.0,
             "latency_seconds": 2.0,
             "tool_calls": [{"tool_name": "sql.query", "status": "succeeded"}],
             "checks": {
@@ -80,6 +86,8 @@ def test_live_aggregate_keeps_success_degradation_and_refusal_separate() -> None
             "expected_statuses": ["refused"],
             "status": "refused",
             "http_status": 200,
+            "rate_limit_retry_count": 0,
+            "rate_limit_wait_seconds": 0.0,
             "latency_seconds": 1.0,
             "tool_calls": [],
             "checks": {
@@ -111,6 +119,8 @@ def test_live_aggregate_excludes_expected_skill_refusal_from_business_rate() -> 
             "expected_statuses": ["refused"],
             "status": "refused",
             "http_status": 200,
+            "rate_limit_retry_count": 0,
+            "rate_limit_wait_seconds": 0.0,
             "latency_seconds": 1.0,
             "tool_calls": [{"tool_name": "sql.query", "status": "succeeded"}],
             "checks": {
@@ -129,6 +139,8 @@ def test_live_aggregate_excludes_expected_skill_refusal_from_business_rate() -> 
             "expected_statuses": ["succeeded"],
             "status": "succeeded",
             "http_status": 200,
+            "rate_limit_retry_count": 0,
+            "rate_limit_wait_seconds": 0.0,
             "latency_seconds": 2.0,
             "tool_calls": [{"tool_name": "sql.query", "status": "succeeded"}],
             "checks": {
@@ -148,3 +160,25 @@ def test_live_aggregate_excludes_expected_skill_refusal_from_business_rate() -> 
 
     assert metrics["business_succeeded_rate"] == 1.0
     assert metrics["business_non_failure_rate"] == 1.0
+
+
+def test_live_request_waits_for_retry_after_on_rate_limit() -> None:
+    responses = iter(
+        [
+            (429, {"detail": "too many requests"}, 3.0),
+            (200, {"status": "refused"}, None),
+        ]
+    )
+    waits: list[float] = []
+
+    status, payload, retry_count, wait_seconds = _post_json_with_rate_limit_retry(
+        post_json=lambda: next(responses),
+        max_retries=2,
+        wait=waits.append,
+    )
+
+    assert status == 200
+    assert payload == {"status": "refused"}
+    assert retry_count == 1
+    assert wait_seconds == 3.0
+    assert waits == [3.0]

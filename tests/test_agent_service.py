@@ -20,7 +20,11 @@ from retail_analytics_agent.task_planner import TaskPlanner
 
 
 class FakeAnalysisRunner:
+    def __init__(self) -> None:
+        self.questions: list[str] = []
+
     def run(self, request, access_context):
+        self.questions.append(request.question)
         return AnalysisResponse(
             request_id=request.request_id,
             status=AnalysisResultStatus.SUCCEEDED,
@@ -145,3 +149,30 @@ def test_agent_service_inherits_skill_for_follow_up() -> None:
     assert response.context.confirmed_constraints == (
         "last_skill=refund_diagnosis",
     )
+
+
+def test_weekly_report_supplies_explicit_metrics_to_sql_tool() -> None:
+    runner = FakeAnalysisRunner()
+    service = EnterpriseAgentService(
+        analysis_runner=runner,
+        context_builder=ContextBuilder(InMemoryConversationStore()),
+        task_planner=TaskPlanner(default_skill_registry()),
+        knowledge=FixtureKnowledgeAdapter(()),
+        knowledge_departments=("admin",),
+        mcp_client=FakeMcpClient(),
+    )
+
+    service.run(
+        AgentRequest(
+            request_id="r-weekly",
+            conversation_id="c-weekly",
+            user_id="u1",
+            question="生成最近7天经营周报，结合制度证据给出复盘",
+        ),
+        AccessContext(user_id="u1", role=AccessRole.ANALYST),
+    )
+
+    assert runner.questions == [
+        "生成最近7天经营周报，结合制度证据给出复盘；"
+        "数据分析口径：按渠道统计销售额和订单数"
+    ]

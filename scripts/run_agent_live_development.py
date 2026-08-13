@@ -8,6 +8,7 @@ import subprocess
 import time
 import urllib.error
 import urllib.request
+from collections.abc import Callable
 from datetime import UTC, datetime
 from http.cookiejar import CookieJar
 from pathlib import Path
@@ -47,7 +48,7 @@ def _post_json(
     url: str,
     payload: dict[str, Any],
     timeout_seconds: float,
-) -> tuple[int, dict[str, Any]]:
+) -> tuple[int, dict[str, Any], float | None]:
     request = urllib.request.Request(
         url,
         data=json.dumps(payload, ensure_ascii=True).encode("ascii"),
@@ -56,14 +57,41 @@ def _post_json(
     )
     try:
         with opener.open(request, timeout=timeout_seconds) as response:
-            return response.status, json.loads(response.read().decode("utf-8"))
+            return (
+                response.status,
+                json.loads(response.read().decode("utf-8")),
+                None,
+            )
     except urllib.error.HTTPError as exc:
         body = exc.read().decode("utf-8")
         try:
             parsed = json.loads(body)
         except json.JSONDecodeError:
             parsed = {"detail": body}
-        return exc.code, parsed
+        retry_after = exc.headers.get("Retry-After")
+        try:
+            retry_after_seconds = float(retry_after) if retry_after else None
+        except ValueError:
+            retry_after_seconds = None
+        return exc.code, parsed, retry_after_seconds
+
+
+def _post_json_with_rate_limit_retry(
+    *,
+    post_json: Callable[[], tuple[int, dict[str, Any], float | None]],
+    max_retries: int,
+    wait: Callable[[float], None] = time.sleep,
+) -> tuple[int, dict[str, Any], int, float]:
+    retry_count = 0
+    wait_seconds = 0.0
+    while True:
+        status, payload, retry_after = post_json()
+        if status != 429 or retry_count >= max_retries:
+            return status, payload, retry_count, wait_seconds
+        delay = max(1.0, retry_after or 1.0)
+        wait(delay)
+        retry_count += 1
+        wait_seconds += delay
 
 
 def _evaluate_case(case: dict[str, Any], response: dict[str, Any]) -> dict[str, Any]:
@@ -182,6 +210,13 @@ def _aggregate(records: list[dict[str, Any]]) -> dict[str, Any]:
             4,
         ),
         "http_success_rate": rate(lambda record: record["http_status"] == 200),
+        "rate_limit_retry_count": sum(
+            record["rate_limit_retry_count"] for record in records
+        ),
+        "rate_limit_wait_seconds": round(
+            sum(record["rate_limit_wait_seconds"] for record in records),
+            3,
+        ),
         "tool_success_rate_by_name": tool_success,
         "latency_seconds": {
             "mean": round(statistics.fmean(latencies), 3),
@@ -209,6 +244,7 @@ def main() -> int:
     )
     parser.add_argument("--timeout-seconds", type=float, default=240)
     parser.add_argument("--interval-seconds", type=float, default=2)
+    parser.add_argument("--rate-limit-retries", type=int, default=2)
     parser.add_argument("--token-budget", type=int, default=1600)
     parser.add_argument(
         "--runtime-commit",
@@ -222,7 +258,7 @@ def main() -> int:
     opener = urllib.request.build_opener(
         urllib.request.HTTPCookieProcessor(CookieJar())
     )
-    status, _session = _post_json(
+    status, _session, _retry_after = _post_json(
         opener,
         f"{args.base_url.rstrip('/')}/auth/login",
         {"username": args.username, "password": password},
@@ -237,19 +273,29 @@ def main() -> int:
     for index, case in enumerate(cases):
         request_id = f"agent-live-{run_id}-{index + 1:02d}-{uuid4().hex[:6]}"
         started = time.perf_counter()
-        http_status, response = _post_json(
-            opener,
-            f"{args.base_url.rstrip('/')}/agent/run",
-            {
-                "request_id": request_id,
-                "conversation_id": f"agent-live-{run_id}-{index + 1:02d}",
-                "user_id": "ANALYST-001",
-                "question": case["question"],
-                "max_rows": 20,
-                "token_budget": args.token_budget,
-            },
-            args.timeout_seconds,
-        )
+        (
+            http_status,
+            response,
+            rate_limit_retry_count,
+            rate_limit_wait_seconds,
+        ) = _post_json_with_rate_limit_retry(
+                post_json=lambda: _post_json(
+                    opener,
+                    f"{args.base_url.rstrip('/')}/agent/run",
+                    {
+                        "request_id": request_id,
+                        "conversation_id": (
+                            f"agent-live-{run_id}-{index + 1:02d}"
+                        ),
+                        "user_id": "ANALYST-001",
+                        "question": case["question"],
+                        "max_rows": 20,
+                        "token_budget": args.token_budget,
+                    },
+                    args.timeout_seconds,
+                ),
+                max_retries=args.rate_limit_retries,
+            )
         latency = time.perf_counter() - started
         checks = _evaluate_case(case, response)
         records.append(
@@ -257,6 +303,8 @@ def main() -> int:
                 **case,
                 "request_id": request_id,
                 "http_status": http_status,
+                "rate_limit_retry_count": rate_limit_retry_count,
+                "rate_limit_wait_seconds": rate_limit_wait_seconds,
                 "latency_seconds": round(latency, 3),
                 "status": response.get("status"),
                 "skill_id": response.get("skill_id"),
