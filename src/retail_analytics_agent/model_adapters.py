@@ -248,6 +248,28 @@ class _GeneratedSummary(BaseModel):
 
 
 _NUMBER_PATTERN = re.compile(r"(?<![\w.])-?\d[\d,]*(?:\.\d+)?")
+_UNSUPPORTED_EXPLANATION_MARKERS = (
+    "根据制度",
+    "根据售后",
+    "可能因为",
+    "可能由于",
+    "导致",
+    "需复盘",
+    "建议",
+)
+
+
+def _keep_observed_summary_sentences(answer: str) -> str:
+    sentences = re.findall(r"[^。！？!?]+[。！？!?]?", answer)
+    observed: list[str] = []
+    for sentence in sentences:
+        stripped = sentence.strip()
+        if not stripped:
+            continue
+        if any(marker in stripped for marker in _UNSUPPORTED_EXPLANATION_MARKERS):
+            break
+        observed.append(stripped)
+    return "".join(observed).strip()
 
 
 def _normalized_numbers(value: object) -> set[Decimal]:
@@ -1076,7 +1098,12 @@ class StructuredResultSummarizer:
             plan=plan,
             rows=rows,
         )
-        return answer
+        observed_answer = _keep_observed_summary_sentences(answer)
+        if not observed_answer:
+            raise ModelInvocationError(
+                "Model summarizer returned no row-grounded observation"
+            )
+        return observed_answer
 
 
 # Backward-compatible imports for existing callers and evaluation scripts.

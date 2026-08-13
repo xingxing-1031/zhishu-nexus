@@ -872,6 +872,46 @@ def test_ollama_summarizer_rejects_ungrounded_numbers() -> None:
         )
 
 
+def test_summarizer_removes_causal_claims_absent_from_query_rows() -> None:
+    summarizer = OllamaResultSummarizer(
+        client=_client(
+            lambda request: httpx.Response(
+                200,
+                json={
+                    "message": {
+                        "content": json.dumps(
+                            {
+                                "answer": (
+                                    "淘宝退款率为12.5%，京东为10%。"
+                                    "根据售后制度，可能因为平台规则宽松导致退款率较高。"
+                                    "需复盘商品描述和物流时效。"
+                                )
+                            },
+                            ensure_ascii=False,
+                        )
+                    }
+                },
+            )
+        )
+    )
+    plan = AnalysisPlan(
+        analysis_goal="按渠道统计退款率",
+        metrics=["refund_rate"],
+        dimensions=["channel"],
+    )
+
+    answer = summarizer.summarize(
+        question="最近30天各渠道退款率为什么变化？",
+        plan=plan,
+        rows=[
+            {"channel": "淘宝", "refund_rate": "0.125"},
+            {"channel": "京东", "refund_rate": "0.10"},
+        ],
+    )
+
+    assert answer == "淘宝退款率为12.5%，京东为10%。"
+
+
 def test_ollama_planner_retries_transient_http_failure() -> None:
     attempts = 0
 
