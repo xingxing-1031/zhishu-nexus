@@ -77,7 +77,7 @@ class McpToolClient:
                                 value = json.loads(text)
                             except json.JSONDecodeError:
                                 value = {"content": text}
-        except (OSError, asyncio.TimeoutError, RuntimeError) as exc:
+        except Exception as exc:
             raise McpClientError("MCP server unavailable") from exc
         if error is not None:
             raise error

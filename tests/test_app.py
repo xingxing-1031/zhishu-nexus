@@ -16,6 +16,7 @@ from retail_analytics_agent.analysis_service import (
     get_analysis_runner,
 )
 from retail_analytics_agent.app import (
+    _mcp_server_path,
     analysis_rate_limiter,
     app,
     get_agent_service,
@@ -44,6 +45,12 @@ from retail_analytics_agent.tracing import (
 )
 
 client = TestClient(app)
+
+
+def test_mcp_server_path_is_available_from_repository_layout() -> None:
+    path = _mcp_server_path()
+    assert path is not None
+    assert path.name == "operations_export_server.py"
 
 
 def _access_context() -> AccessContext:

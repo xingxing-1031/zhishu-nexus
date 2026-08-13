@@ -85,6 +85,16 @@ from retail_analytics_agent.tracing import ExecutionTraceResponse
 logger = logging.getLogger(__name__)
 
 
+def _mcp_server_path() -> Path | None:
+    """Locate the bundled MCP server in source and installed-container layouts."""
+    candidates = (
+        Path(__file__).resolve().parents[2] / "mcp_server" / "operations_export_server.py",
+        Path.cwd() / "mcp_server" / "operations_export_server.py",
+        Path("/app/mcp_server/operations_export_server.py"),
+    )
+    return next((path for path in candidates if path.is_file()), None)
+
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     configure_logging()
@@ -535,16 +545,15 @@ def get_agent_service(
             service_token=settings.knowledge_service_token.get_secret_value(),
         )
     if settings.mcp_export_enabled:
-        mcp_server = (
-            Path(__file__).resolve().parents[2]
-            / "mcp_server"
-            / "operations_export_server.py"
-        )
-        mcp_client = McpToolClient(
-            command=sys.executable,
-            args=(str(mcp_server),),
-            timeout_seconds=settings.mcp_export_timeout_seconds,
-        )
+        mcp_server = _mcp_server_path()
+        if mcp_server is None:
+            logger.warning("MCP export server file is unavailable; export disabled")
+        else:
+            mcp_client = McpToolClient(
+                command=sys.executable,
+                args=(str(mcp_server),),
+                timeout_seconds=settings.mcp_export_timeout_seconds,
+            )
     try:
         yield EnterpriseAgentService(
             analysis_runner=runner,
