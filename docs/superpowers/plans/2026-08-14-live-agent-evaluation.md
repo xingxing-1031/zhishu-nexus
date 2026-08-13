@@ -83,4 +83,4 @@
 - [x] Record the final per-metric values, sample count, production commit and report path.
 - [x] Write concise resume bullets and deeper follow-up answers without claiming causality or generalization beyond the suite.
 - [x] Verify documentation against the JSON report field by field.
-- [ ] Commit and push the evidence package, then perform final health, repository and deployment checks.
+- [x] Commit and push the evidence package, then perform final health, repository and deployment checks.
