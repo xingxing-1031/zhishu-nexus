@@ -7,7 +7,8 @@
 - 当前计划任务：项目一 v0.1、W7 演示加固和 Agent Runtime 升级均已完成，进入实习投递与面试复盘阶段
 - 公网演示：`http://106.52.176.63/` 已部署固定分析员/管理员演示账号、130 条可复现订单和浏览器本地会话
 - 已实现：本地 `qwen3:4b` 与远程 Qwen 端到端分析、4 个业务 Skill、服务端会话上下文、Tool Registry、项目二 RAG Evidence API、MCP Markdown 导出、演示级权限与人工审批、有限重试、请求幂等、可信结果降级和结构化执行 Trace
-- 自动化验证：项目一 Agent/API 聚焦回归 `47/47`、项目二全量 pytest `207` 条通过、前端 TypeScript/Vite production build 通过；确定性 Agent development 评测 5 条样本的 Skill 路由、拒答、工具白名单和最低证据完整性均为 `1.0`
+- 自动化验证：项目一 `494` 条测试全部通过，项目二 `211` 条通过、`1` 条跳过，Ruff 与前端 TypeScript/Vite production build 通过；确定性 Agent development 评测 5 条规则样本的 Skill 路由、拒答、工具白名单和最低证据完整性均为 `1.0`
+- 线上评测：远程 `qwen-plus` + 公网 VPS + PostgreSQL + 项目二 RAG + MCP 的 12 条 live development 中逐题通过 `11/12`，Skill 路由、工具选择、证据要求、拒答和上下文预算均为 `100%`，P50/P95 为 `16.181s / 29.535s`
 - 当前边界：域名 HTTPS 受 ICP 备案状态限制；服务端跨设备会话、独立异地备份、分布式限流和高可用不在当前单 VPS 求职演示范围内
 
 当前为 v0.1 演示级权限体系：公网提供固定分析员和管理员账号，身份由签名 Cookie 与服务端角色配置决定，并在 SQL AST 与确定性安全校验层限制允许访问的表、字段及敏感字段。浏览器按账号隔离保存最近 8 个会话、每会话最近 8 轮；这不是正式注册系统或服务端多租户历史。关键词启发式判断仅用于前置拦截，不作为最终安全边界。
@@ -117,7 +118,7 @@
 
 主演示问题：`最近 30 天指定区域的退款率为什么变化？结合渠道、商品和企业售后制度给出证据充分的经营复盘报告。`
 
-该评测数字是规则层 deterministic fixture 结果，不是远程模型端到端准确率；真实 Qwen、PostgreSQL 和项目二服务实测后才允许写入简历的延迟、成功率或提升幅度。
+规则层 deterministic fixture 结果不是远程模型准确率。当前已另存真实 Qwen、PostgreSQL、项目二 Evidence API 与 MCP 的线上 development 原始报告；详细口径、失败样本与限制见 [Agent 评测协议](docs/EVALUATION_PROTOCOL.md) 和 [简历证据](docs/RESUME_EVIDENCE_AGENT.md)。
 
 目标工作流：
 

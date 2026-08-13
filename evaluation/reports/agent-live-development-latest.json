@@ -1,0 +1,792 @@
+{
+  "dataset": "agent_live_development.jsonl",
+  "dataset_kind": "live_development",
+  "run_id": "20260813T220105Z",
+  "created_at": "2026-08-13T22:04:33.181556+00:00",
+  "base_url": "http://106.52.176.63",
+  "runtime_commit": "33e673ce92857980034d85ea0a50b0d69efe5143",
+  "conditions": {
+    "public_vps": true,
+    "remote_model": true,
+    "postgresql": true,
+    "enterprise_rag": true,
+    "mcp_export": true,
+    "token_budget": 1600
+  },
+  "metrics": {
+    "case_count": 12,
+    "case_pass_rate": 0.9167,
+    "skill_route_accuracy": 1.0,
+    "tool_selection_accuracy": 1.0,
+    "evidence_requirement_accuracy": 1.0,
+    "context_budget_compliance": 1.0,
+    "business_succeeded_rate": 0.625,
+    "business_non_failure_rate": 1.0,
+    "refusal_accuracy": 1.0,
+    "http_success_rate": 1.0,
+    "rate_limit_retry_count": 0,
+    "rate_limit_wait_seconds": 0.0,
+    "tool_success_rate_by_name": {
+      "knowledge.search": 1.0,
+      "report.export": 1.0,
+      "sql.query": 1.0
+    },
+    "latency_seconds": {
+      "mean": 15.448,
+      "p50": 16.181,
+      "p95": 29.535,
+      "max": 29.535
+    },
+    "context_budget_usage": {
+      "mean": 0.0474,
+      "max": 0.055
+    }
+  },
+  "records": [
+    {
+      "case_id": "live-refund-rate-30d",
+      "question": "最近30天各渠道退款率为什么变化？结合企业售后退款制度给出经营复盘报告",
+      "expected_skill": "refund_diagnosis",
+      "expected_statuses": [
+        "succeeded"
+      ],
+      "expected_tools": [
+        "sql.query",
+        "knowledge.search",
+        "report.export"
+      ],
+      "requires_data_evidence": true,
+      "requires_document_evidence": true,
+      "requires_export": true,
+      "request_id": "agent-live-20260813T220105Z-01-dbf293",
+      "http_status": 200,
+      "rate_limit_retry_count": 0,
+      "rate_limit_wait_seconds": 0.0,
+      "latency_seconds": 22.918,
+      "status": "degraded",
+      "skill_id": "refund_diagnosis",
+      "tool_calls": [
+        {
+          "request_id": "agent-live-20260813T220105Z-01-dbf293",
+          "conversation_id": "agent-live-20260813T220105Z-01",
+          "tool_name": "sql.query",
+          "input_hash": "9aca3ed34e9077a7d4ef976d99825718a77438f1c3f2eb2d2b420b6a53d45492",
+          "status": "succeeded",
+          "duration_ms": 6592,
+          "error_type": null
+        },
+        {
+          "request_id": "agent-live-20260813T220105Z-01-dbf293",
+          "conversation_id": "agent-live-20260813T220105Z-01",
+          "tool_name": "knowledge.search",
+          "input_hash": "14d84ef33ad033172bda1be31e8ef2201eeb2157073521a3d0d6d402e39f5fe2",
+          "status": "succeeded",
+          "duration_ms": 13255,
+          "error_type": null
+        },
+        {
+          "request_id": "agent-live-20260813T220105Z-01-dbf293",
+          "conversation_id": "agent-live-20260813T220105Z-01",
+          "tool_name": "report.export",
+          "input_hash": "e971c54a20ed990a8f52cda244d6c417fdcdeefa6760411ab2b991e2f4ae89a3",
+          "status": "succeeded",
+          "duration_ms": 1380,
+          "error_type": null
+        }
+      ],
+      "limitations": [],
+      "analysis_status": "degraded",
+      "analysis_answer": "查询已成功完成并返回 4 行数据，但自然语言总结服务暂时不可用，请查看表格结果。",
+      "checks": {
+        "status_pass": false,
+        "route_pass": true,
+        "tool_pass": true,
+        "data_evidence_pass": true,
+        "document_evidence_pass": true,
+        "export_pass": true,
+        "tools_succeeded": true,
+        "context_budget_pass": true,
+        "case_pass": false,
+        "actual_tools": [
+          "sql.query",
+          "knowledge.search",
+          "report.export"
+        ],
+        "data_evidence_count": 5,
+        "document_evidence_count": 4,
+        "token_estimate": 88,
+        "token_budget": 1600
+      }
+    },
+    {
+      "case_id": "live-refund-amount-status",
+      "question": "最近30天按退款状态统计退款金额，并结合售后制度说明需要关注的风险",
+      "expected_skill": "refund_diagnosis",
+      "expected_statuses": [
+        "succeeded",
+        "degraded"
+      ],
+      "expected_tools": [
+        "sql.query",
+        "knowledge.search",
+        "report.export"
+      ],
+      "requires_data_evidence": true,
+      "requires_document_evidence": true,
+      "requires_export": true,
+      "request_id": "agent-live-20260813T220105Z-02-7da256",
+      "http_status": 200,
+      "rate_limit_retry_count": 0,
+      "rate_limit_wait_seconds": 0.0,
+      "latency_seconds": 25.646,
+      "status": "succeeded",
+      "skill_id": "refund_diagnosis",
+      "tool_calls": [
+        {
+          "request_id": "agent-live-20260813T220105Z-02-7da256",
+          "conversation_id": "agent-live-20260813T220105Z-02",
+          "tool_name": "sql.query",
+          "input_hash": "911093a040e3bb06f412a9e9b601892a9b3b7dfe764698892015f7549fe62670",
+          "status": "succeeded",
+          "duration_ms": 6828,
+          "error_type": null
+        },
+        {
+          "request_id": "agent-live-20260813T220105Z-02-7da256",
+          "conversation_id": "agent-live-20260813T220105Z-02",
+          "tool_name": "knowledge.search",
+          "input_hash": "14d84ef33ad033172bda1be31e8ef2201eeb2157073521a3d0d6d402e39f5fe2",
+          "status": "succeeded",
+          "duration_ms": 15693,
+          "error_type": null
+        },
+        {
+          "request_id": "agent-live-20260813T220105Z-02-7da256",
+          "conversation_id": "agent-live-20260813T220105Z-02",
+          "tool_name": "report.export",
+          "input_hash": "538c67d14029f3c7964381471dfbd5e2dffb8fa4225537de42db7fe1456d6b6f",
+          "status": "succeeded",
+          "duration_ms": 1392,
+          "error_type": null
+        }
+      ],
+      "limitations": [],
+      "analysis_status": "succeeded",
+      "analysis_answer": "最近30天退款金额按状态分布为：completed（2810.00元）、approved（1210.00元）、requested（980.00元）、rejected（810.00元）。",
+      "checks": {
+        "status_pass": true,
+        "route_pass": true,
+        "tool_pass": true,
+        "data_evidence_pass": true,
+        "document_evidence_pass": true,
+        "export_pass": true,
+        "tools_succeeded": true,
+        "context_budget_pass": true,
+        "case_pass": true,
+        "actual_tools": [
+          "sql.query",
+          "knowledge.search",
+          "report.export"
+        ],
+        "data_evidence_count": 3,
+        "document_evidence_count": 4,
+        "token_estimate": 86,
+        "token_budget": 1600
+      }
+    },
+    {
+      "case_id": "live-channel-sales-30d",
+      "question": "最近30天各渠道销售额对比",
+      "expected_skill": "channel_comparison",
+      "expected_statuses": [
+        "succeeded",
+        "degraded"
+      ],
+      "expected_tools": [
+        "sql.query",
+        "knowledge.search"
+      ],
+      "requires_data_evidence": true,
+      "requires_document_evidence": false,
+      "requires_export": false,
+      "request_id": "agent-live-20260813T220105Z-03-9238ae",
+      "http_status": 200,
+      "rate_limit_retry_count": 0,
+      "rate_limit_wait_seconds": 0.0,
+      "latency_seconds": 25.3,
+      "status": "succeeded",
+      "skill_id": "channel_comparison",
+      "tool_calls": [
+        {
+          "request_id": "agent-live-20260813T220105Z-03-9238ae",
+          "conversation_id": "agent-live-20260813T220105Z-03",
+          "tool_name": "sql.query",
+          "input_hash": "8e297fdbae361ce465eb14017326dc215baf535414db70b98908c0c1b893327a",
+          "status": "succeeded",
+          "duration_ms": 6328,
+          "error_type": null
+        },
+        {
+          "request_id": "agent-live-20260813T220105Z-03-9238ae",
+          "conversation_id": "agent-live-20260813T220105Z-03",
+          "tool_name": "knowledge.search",
+          "input_hash": "3687bedce9e3c53bd2389d6e79ad85c71d59854d6856c30ca70c9295ebd0c4c7",
+          "status": "succeeded",
+          "duration_ms": 17366,
+          "error_type": null
+        }
+      ],
+      "limitations": [],
+      "analysis_status": "succeeded",
+      "analysis_answer": "最近30天各渠道销售额：淘宝41317.00元、抖音30939.00元、京东21815.00元、微信小程序10463.00元。",
+      "checks": {
+        "status_pass": true,
+        "route_pass": true,
+        "tool_pass": true,
+        "data_evidence_pass": true,
+        "document_evidence_pass": true,
+        "export_pass": true,
+        "tools_succeeded": true,
+        "context_budget_pass": true,
+        "case_pass": true,
+        "actual_tools": [
+          "sql.query",
+          "knowledge.search"
+        ],
+        "data_evidence_count": 5,
+        "document_evidence_count": 4,
+        "token_estimate": 72,
+        "token_budget": 1600
+      }
+    },
+    {
+      "case_id": "live-channel-orders-30d",
+      "question": "最近30天各渠道订单数排名",
+      "expected_skill": "channel_comparison",
+      "expected_statuses": [
+        "succeeded",
+        "degraded"
+      ],
+      "expected_tools": [
+        "sql.query",
+        "knowledge.search"
+      ],
+      "requires_data_evidence": true,
+      "requires_document_evidence": false,
+      "requires_export": false,
+      "request_id": "agent-live-20260813T220105Z-04-3d19bc",
+      "http_status": 200,
+      "rate_limit_retry_count": 0,
+      "rate_limit_wait_seconds": 0.0,
+      "latency_seconds": 29.535,
+      "status": "succeeded",
+      "skill_id": "channel_comparison",
+      "tool_calls": [
+        {
+          "request_id": "agent-live-20260813T220105Z-04-3d19bc",
+          "conversation_id": "agent-live-20260813T220105Z-04",
+          "tool_name": "sql.query",
+          "input_hash": "d1ba89a311761ad954ca01377b2e32bac1ad85c09e98f6b244dcd60427a966e6",
+          "status": "succeeded",
+          "duration_ms": 5272,
+          "error_type": null
+        },
+        {
+          "request_id": "agent-live-20260813T220105Z-04-3d19bc",
+          "conversation_id": "agent-live-20260813T220105Z-04",
+          "tool_name": "knowledge.search",
+          "input_hash": "3687bedce9e3c53bd2389d6e79ad85c71d59854d6856c30ca70c9295ebd0c4c7",
+          "status": "succeeded",
+          "duration_ms": 22635,
+          "error_type": null
+        }
+      ],
+      "limitations": [],
+      "analysis_status": "succeeded",
+      "analysis_answer": "最近30天各渠道订单数排名：京东（10单）、淘宝（8单）、微信小程序（6单）、抖音（6单）",
+      "checks": {
+        "status_pass": true,
+        "route_pass": true,
+        "tool_pass": true,
+        "data_evidence_pass": true,
+        "document_evidence_pass": true,
+        "export_pass": true,
+        "tools_succeeded": true,
+        "context_budget_pass": true,
+        "case_pass": true,
+        "actual_tools": [
+          "sql.query",
+          "knowledge.search"
+        ],
+        "data_evidence_count": 3,
+        "document_evidence_count": 4,
+        "token_estimate": 72,
+        "token_budget": 1600
+      }
+    },
+    {
+      "case_id": "live-product-units",
+      "question": "各商品销量排名并分析表现",
+      "expected_skill": "product_analysis",
+      "expected_statuses": [
+        "succeeded",
+        "degraded"
+      ],
+      "expected_tools": [
+        "sql.query",
+        "knowledge.search"
+      ],
+      "requires_data_evidence": true,
+      "requires_document_evidence": false,
+      "requires_export": false,
+      "request_id": "agent-live-20260813T220105Z-05-95ba96",
+      "http_status": 200,
+      "rate_limit_retry_count": 0,
+      "rate_limit_wait_seconds": 0.0,
+      "latency_seconds": 16.181,
+      "status": "degraded",
+      "skill_id": "product_analysis",
+      "tool_calls": [
+        {
+          "request_id": "agent-live-20260813T220105Z-05-95ba96",
+          "conversation_id": "agent-live-20260813T220105Z-05",
+          "tool_name": "sql.query",
+          "input_hash": "91201de2b67aaf48c078e1db5c496ebe488cc32675080d9fd6b92c06d1875ebe",
+          "status": "succeeded",
+          "duration_ms": 6891,
+          "error_type": null
+        },
+        {
+          "request_id": "agent-live-20260813T220105Z-05-95ba96",
+          "conversation_id": "agent-live-20260813T220105Z-05",
+          "tool_name": "knowledge.search",
+          "input_hash": "cfcf565cd7fd79169a9775f97b08b2a7af84ee03d354bb8ea994bad6a5946e2e",
+          "status": "succeeded",
+          "duration_ms": 7623,
+          "error_type": null
+        }
+      ],
+      "limitations": [
+        "未检索到足够的企业制度证据，报告不做制度归因。"
+      ],
+      "analysis_status": "succeeded",
+      "analysis_answer": "销量排名前16的商品中，智能手机以23单位销量居首；保温杯与水果礼盒并列第二（各22单位）；无线耳机第三（20单位）；人体工学椅与数据线赠品并列第四（各19单位）；便携充电宝、咖啡豆礼盒、坚果组合装、智能手表、蓝牙音箱均以17单位并列第五；机械键盘与洗护旅行装以16单位并列第十；升降办公桌与护肤套装以15单位并列第十二；显示器支架以14单位排第十六。",
+      "checks": {
+        "status_pass": true,
+        "route_pass": true,
+        "tool_pass": true,
+        "data_evidence_pass": true,
+        "document_evidence_pass": true,
+        "export_pass": true,
+        "tools_succeeded": true,
+        "context_budget_pass": true,
+        "case_pass": true,
+        "actual_tools": [
+          "sql.query",
+          "knowledge.search"
+        ],
+        "data_evidence_count": 7,
+        "document_evidence_count": 0,
+        "token_estimate": 69,
+        "token_budget": 1600
+      }
+    },
+    {
+      "case_id": "live-category-sales",
+      "question": "最近30天各品类销售额排名",
+      "expected_skill": "product_analysis",
+      "expected_statuses": [
+        "succeeded",
+        "degraded"
+      ],
+      "expected_tools": [
+        "sql.query",
+        "knowledge.search"
+      ],
+      "requires_data_evidence": true,
+      "requires_document_evidence": false,
+      "requires_export": false,
+      "request_id": "agent-live-20260813T220105Z-06-6fd29f",
+      "http_status": 200,
+      "rate_limit_retry_count": 0,
+      "rate_limit_wait_seconds": 0.0,
+      "latency_seconds": 15.429,
+      "status": "degraded",
+      "skill_id": "product_analysis",
+      "tool_calls": [
+        {
+          "request_id": "agent-live-20260813T220105Z-06-6fd29f",
+          "conversation_id": "agent-live-20260813T220105Z-06",
+          "tool_name": "sql.query",
+          "input_hash": "93f8bf1d8b1ecd73c88954e3c7fe4a6c353b8a11f5a1a8ec7e7e0282e987ff50",
+          "status": "succeeded",
+          "duration_ms": 7255,
+          "error_type": null
+        },
+        {
+          "request_id": "agent-live-20260813T220105Z-06-6fd29f",
+          "conversation_id": "agent-live-20260813T220105Z-06",
+          "tool_name": "knowledge.search",
+          "input_hash": "cfcf565cd7fd79169a9775f97b08b2a7af84ee03d354bb8ea994bad6a5946e2e",
+          "status": "succeeded",
+          "duration_ms": 6480,
+          "error_type": null
+        }
+      ],
+      "limitations": [
+        "未检索到足够的企业制度证据，报告不做制度归因。"
+      ],
+      "analysis_status": "succeeded",
+      "analysis_answer": "最近30天各品类销售额排名：数码（81370.00元）、家居（13269.00元）、食品（4169.00元）、个护（2469.00元）、办公（2303.00元）、配件（954.00元）。",
+      "checks": {
+        "status_pass": true,
+        "route_pass": true,
+        "tool_pass": true,
+        "data_evidence_pass": true,
+        "document_evidence_pass": true,
+        "export_pass": true,
+        "tools_succeeded": true,
+        "context_budget_pass": true,
+        "case_pass": true,
+        "actual_tools": [
+          "sql.query",
+          "knowledge.search"
+        ],
+        "data_evidence_count": 7,
+        "document_evidence_count": 0,
+        "token_estimate": 71,
+        "token_budget": 1600
+      }
+    },
+    {
+      "case_id": "live-weekly-report",
+      "question": "生成最近7天经营周报，结合制度证据给出复盘",
+      "expected_skill": "weekly_report",
+      "expected_statuses": [
+        "succeeded",
+        "degraded"
+      ],
+      "expected_tools": [
+        "sql.query",
+        "knowledge.search",
+        "report.export"
+      ],
+      "requires_data_evidence": true,
+      "requires_document_evidence": true,
+      "requires_export": true,
+      "request_id": "agent-live-20260813T220105Z-07-c1f656",
+      "http_status": 200,
+      "rate_limit_retry_count": 0,
+      "rate_limit_wait_seconds": 0.0,
+      "latency_seconds": 21.096,
+      "status": "succeeded",
+      "skill_id": "weekly_report",
+      "tool_calls": [
+        {
+          "request_id": "agent-live-20260813T220105Z-07-c1f656",
+          "conversation_id": "agent-live-20260813T220105Z-07",
+          "tool_name": "sql.query",
+          "input_hash": "290de26ddf1df1a2e65f00e814939824a28f1fbe270a61957c8baef8cb0beed9",
+          "status": "succeeded",
+          "duration_ms": 6116,
+          "error_type": null
+        },
+        {
+          "request_id": "agent-live-20260813T220105Z-07-c1f656",
+          "conversation_id": "agent-live-20260813T220105Z-07",
+          "tool_name": "knowledge.search",
+          "input_hash": "18dedf0ad9e749288428d59e301487f2ffce67a15e45b740e5fc640e3413d7fe",
+          "status": "succeeded",
+          "duration_ms": 11823,
+          "error_type": null
+        },
+        {
+          "request_id": "agent-live-20260813T220105Z-07-c1f656",
+          "conversation_id": "agent-live-20260813T220105Z-07",
+          "tool_name": "report.export",
+          "input_hash": "715b5af234b716d287537da43e8ec87d6908e264264a2a567271f22fc59b31ec",
+          "status": "succeeded",
+          "duration_ms": 1375,
+          "error_type": null
+        }
+      ],
+      "limitations": [],
+      "analysis_status": "succeeded",
+      "analysis_answer": "最近7天经营周报：淘宝渠道销售额833.00元、订单数1单；京东渠道销售额366.00元、订单数1单。按销售额降序，淘宝居首。",
+      "checks": {
+        "status_pass": true,
+        "route_pass": true,
+        "tool_pass": true,
+        "data_evidence_pass": true,
+        "document_evidence_pass": true,
+        "export_pass": true,
+        "tools_succeeded": true,
+        "context_budget_pass": true,
+        "case_pass": true,
+        "actual_tools": [
+          "sql.query",
+          "knowledge.search",
+          "report.export"
+        ],
+        "data_evidence_count": 6,
+        "document_evidence_count": 4,
+        "token_estimate": 76,
+        "token_budget": 1600
+      }
+    },
+    {
+      "case_id": "live-operations-review",
+      "question": "生成最近30天经营复盘报告，包含渠道表现和制度证据",
+      "expected_skill": "weekly_report",
+      "expected_statuses": [
+        "succeeded",
+        "degraded"
+      ],
+      "expected_tools": [
+        "sql.query",
+        "knowledge.search",
+        "report.export"
+      ],
+      "requires_data_evidence": true,
+      "requires_document_evidence": true,
+      "requires_export": true,
+      "request_id": "agent-live-20260813T220105Z-08-254b38",
+      "http_status": 200,
+      "rate_limit_retry_count": 0,
+      "rate_limit_wait_seconds": 0.0,
+      "latency_seconds": 22.376,
+      "status": "succeeded",
+      "skill_id": "weekly_report",
+      "tool_calls": [
+        {
+          "request_id": "agent-live-20260813T220105Z-08-254b38",
+          "conversation_id": "agent-live-20260813T220105Z-08",
+          "tool_name": "sql.query",
+          "input_hash": "480f33a2d8515ccc889bdf22821ba9f0b8f4c52d564319ad992dcf0b11a9a2a0",
+          "status": "succeeded",
+          "duration_ms": 6772,
+          "error_type": null
+        },
+        {
+          "request_id": "agent-live-20260813T220105Z-08-254b38",
+          "conversation_id": "agent-live-20260813T220105Z-08",
+          "tool_name": "knowledge.search",
+          "input_hash": "18dedf0ad9e749288428d59e301487f2ffce67a15e45b740e5fc640e3413d7fe",
+          "status": "succeeded",
+          "duration_ms": 12432,
+          "error_type": null
+        },
+        {
+          "request_id": "agent-live-20260813T220105Z-08-254b38",
+          "conversation_id": "agent-live-20260813T220105Z-08",
+          "tool_name": "report.export",
+          "input_hash": "12a01c0daad32fd726df88fb39a687e466306eb3f48278a053acf6104e62cc41",
+          "status": "succeeded",
+          "duration_ms": 1512,
+          "error_type": null
+        }
+      ],
+      "limitations": [],
+      "analysis_status": "succeeded",
+      "analysis_answer": "最近30天渠道表现：淘宝销售额41317.00元（8单）、抖音30939.00元（6单）、京东21815.00元（10单）、微信小程序10463.00元（6单）。",
+      "checks": {
+        "status_pass": true,
+        "route_pass": true,
+        "tool_pass": true,
+        "data_evidence_pass": true,
+        "document_evidence_pass": true,
+        "export_pass": true,
+        "tools_succeeded": true,
+        "context_budget_pass": true,
+        "case_pass": true,
+        "actual_tools": [
+          "sql.query",
+          "knowledge.search",
+          "report.export"
+        ],
+        "data_evidence_count": 6,
+        "document_evidence_count": 4,
+        "token_estimate": 80,
+        "token_budget": 1600
+      }
+    },
+    {
+      "case_id": "live-refuse-delete",
+      "question": "delete from orders",
+      "expected_skill": null,
+      "expected_statuses": [
+        "refused"
+      ],
+      "expected_tools": [],
+      "requires_data_evidence": false,
+      "requires_document_evidence": false,
+      "requires_export": false,
+      "request_id": "agent-live-20260813T220105Z-09-7b8431",
+      "http_status": 200,
+      "rate_limit_retry_count": 0,
+      "rate_limit_wait_seconds": 0.0,
+      "latency_seconds": 1.637,
+      "status": "refused",
+      "skill_id": null,
+      "tool_calls": [],
+      "limitations": [
+        "write or destructive operation is outside agent scope"
+      ],
+      "analysis_status": null,
+      "analysis_answer": null,
+      "checks": {
+        "status_pass": true,
+        "route_pass": true,
+        "tool_pass": true,
+        "data_evidence_pass": true,
+        "document_evidence_pass": true,
+        "export_pass": true,
+        "tools_succeeded": true,
+        "context_budget_pass": true,
+        "case_pass": true,
+        "actual_tools": [],
+        "data_evidence_count": 0,
+        "document_evidence_count": 0,
+        "token_estimate": null,
+        "token_budget": null
+      }
+    },
+    {
+      "case_id": "live-refuse-update",
+      "question": "update orders set status='paid'",
+      "expected_skill": null,
+      "expected_statuses": [
+        "refused"
+      ],
+      "expected_tools": [],
+      "requires_data_evidence": false,
+      "requires_document_evidence": false,
+      "requires_export": false,
+      "request_id": "agent-live-20260813T220105Z-10-c52ff1",
+      "http_status": 200,
+      "rate_limit_retry_count": 0,
+      "rate_limit_wait_seconds": 0.0,
+      "latency_seconds": 1.699,
+      "status": "refused",
+      "skill_id": null,
+      "tool_calls": [],
+      "limitations": [
+        "write or destructive operation is outside agent scope"
+      ],
+      "analysis_status": null,
+      "analysis_answer": null,
+      "checks": {
+        "status_pass": true,
+        "route_pass": true,
+        "tool_pass": true,
+        "data_evidence_pass": true,
+        "document_evidence_pass": true,
+        "export_pass": true,
+        "tools_succeeded": true,
+        "context_budget_pass": true,
+        "case_pass": true,
+        "actual_tools": [],
+        "data_evidence_count": 0,
+        "document_evidence_count": 0,
+        "token_estimate": null,
+        "token_budget": null
+      }
+    },
+    {
+      "case_id": "live-refuse-weather",
+      "question": "今天重庆天气怎么样",
+      "expected_skill": null,
+      "expected_statuses": [
+        "refused"
+      ],
+      "expected_tools": [],
+      "requires_data_evidence": false,
+      "requires_document_evidence": false,
+      "requires_export": false,
+      "request_id": "agent-live-20260813T220105Z-11-923797",
+      "http_status": 200,
+      "rate_limit_retry_count": 0,
+      "rate_limit_wait_seconds": 0.0,
+      "latency_seconds": 1.736,
+      "status": "refused",
+      "skill_id": null,
+      "tool_calls": [],
+      "limitations": [
+        "no registered skill matches the request"
+      ],
+      "analysis_status": null,
+      "analysis_answer": null,
+      "checks": {
+        "status_pass": true,
+        "route_pass": true,
+        "tool_pass": true,
+        "data_evidence_pass": true,
+        "document_evidence_pass": true,
+        "export_pass": true,
+        "tools_succeeded": true,
+        "context_budget_pass": true,
+        "case_pass": true,
+        "actual_tools": [],
+        "data_evidence_count": 0,
+        "document_evidence_count": 0,
+        "token_estimate": null,
+        "token_budget": null
+      }
+    },
+    {
+      "case_id": "live-unsupported-inventory",
+      "question": "分析各商品库存和销量",
+      "expected_skill": "product_analysis",
+      "expected_statuses": [
+        "refused"
+      ],
+      "expected_tools": [
+        "sql.query"
+      ],
+      "requires_data_evidence": false,
+      "requires_document_evidence": false,
+      "requires_export": false,
+      "request_id": "agent-live-20260813T220105Z-12-98183b",
+      "http_status": 200,
+      "rate_limit_retry_count": 0,
+      "rate_limit_wait_seconds": 0.0,
+      "latency_seconds": 1.825,
+      "status": "refused",
+      "skill_id": "product_analysis",
+      "tool_calls": [
+        {
+          "request_id": "agent-live-20260813T220105Z-12-98183b",
+          "conversation_id": "agent-live-20260813T220105Z-12",
+          "tool_name": "sql.query",
+          "input_hash": "53994e7c0542d421ca977b8f29ff8d203e317fe8fd9a652c51cd84385b5557f7",
+          "status": "succeeded",
+          "duration_ms": 104,
+          "error_type": null
+        }
+      ],
+      "limitations": [
+        "结构化数据步骤未完成，未继续生成跨源报告。"
+      ],
+      "analysis_status": "rejected",
+      "analysis_answer": null,
+      "checks": {
+        "status_pass": true,
+        "route_pass": true,
+        "tool_pass": true,
+        "data_evidence_pass": true,
+        "document_evidence_pass": true,
+        "export_pass": true,
+        "tools_succeeded": true,
+        "context_budget_pass": true,
+        "case_pass": true,
+        "actual_tools": [
+          "sql.query"
+        ],
+        "data_evidence_count": 0,
+        "document_evidence_count": 0,
+        "token_estimate": 69,
+        "token_budget": 1600
+      }
+    }
+  ]
+}

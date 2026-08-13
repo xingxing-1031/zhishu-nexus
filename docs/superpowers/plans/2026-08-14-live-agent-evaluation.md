@@ -46,11 +46,11 @@
 - Production input is `POST /agent/run` after `POST /auth/login`.
 - Every report records `runtime_commit`, runtime conditions, 12 sample-level records and aggregate metrics.
 
-- [ ] Run the full backend suite and `ruff check src tests` before publishing.
-- [ ] Commit and push the runner, tests, cases and this plan; wait for the VPS deployment to complete.
-- [ ] Verify the production health endpoint and deployed commit before evaluation.
-- [ ] Set `AGENT_DEMO_PASSWORD` only in the process environment and run all 12 cases.
-- [ ] Inspect every failed case instead of relying only on aggregate metrics.
+- [x] Run the full backend suite and `ruff check src tests` before publishing.
+- [x] Commit and push the runner, tests, cases and this plan; wait for the VPS deployment to complete.
+- [x] Verify the production health endpoint and deployed commit before evaluation.
+- [x] Set `AGENT_DEMO_PASSWORD` only in the process environment and run all 12 cases.
+- [x] Inspect every failed case instead of relying only on aggregate metrics.
 
 ### Task 3: Fix evidence-backed development failures
 
@@ -62,10 +62,10 @@
 - Safety refusal, SQL AST/business validation, RAG permission filtering and MCP idempotency remain hard boundaries.
 - No case expectation may be weakened merely to increase a metric.
 
-- [ ] Classify each failure as implementation defect, external-service failure, ambiguous case or expected model variance.
-- [ ] Add a focused test before each justified runtime fix.
-- [ ] Run focused tests, the full suite and Ruff; publish and verify the new production SHA.
-- [ ] Rerun the complete 12-case suite once under the same configuration and archive the final raw report.
+- [x] Classify each failure as implementation defect, external-service failure, ambiguous case or expected model variance.
+- [x] Add a focused test before each justified runtime fix.
+- [x] Run focused tests, the full suite and Ruff; publish and verify the new production SHA.
+- [x] Rerun the complete 12-case suite once under the same configuration and archive the final raw report.
 
 ### Task 4: Package defensible recruiting evidence
 
@@ -79,8 +79,8 @@
 - Resume bullets contain project scope, concrete engineering choices and only measured metrics.
 - Interview notes explain numerator/denominator, dataset size, environment, limitations and how to reproduce each number.
 
-- [ ] Document the distinction between deterministic fixtures, live development and project two's frozen holdout.
-- [ ] Record the final per-metric values, sample count, production commit and report path.
-- [ ] Write concise resume bullets and deeper follow-up answers without claiming causality or generalization beyond the suite.
-- [ ] Verify documentation against the JSON report field by field.
+- [x] Document the distinction between deterministic fixtures, live development and project two's frozen holdout.
+- [x] Record the final per-metric values, sample count, production commit and report path.
+- [x] Write concise resume bullets and deeper follow-up answers without claiming causality or generalization beyond the suite.
+- [x] Verify documentation against the JSON report field by field.
 - [ ] Commit and push the evidence package, then perform final health, repository and deployment checks.
