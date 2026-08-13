@@ -99,6 +99,39 @@ class FakeAgentService:
         )
 
 
+class FakeInternalDataAgentService(FakeAgentService):
+    def run(self, request, access_context):
+        self.run_calls.append((request, access_context))
+        return AgentResponse(
+            request_id=request.request_id,
+            conversation_id=request.conversation_id,
+            status=AgentTaskStatus.SUCCEEDED,
+            analysis=AnalysisResponse(
+                request_id=request.request_id,
+                status="succeeded",
+                access_role=access_context.role,
+                answer="华东退款率为 12%，较上期上升 3 个百分点。",
+                plan={
+                    "analysis_goal": "退款率趋势",
+                    "metrics": ["refund_rate"],
+                    "dimensions": ["channel"],
+                    "time_range": {"days": 30},
+                    "limit": 20,
+                },
+                rows=[{"channel": "华东", "refund_rate": "0.12"}],
+                chart_spec={
+                    "chart_type": "bar",
+                    "title": "退款率趋势",
+                    "x_field": "channel",
+                    "y_fields": ["refund_rate"],
+                },
+                evidence_source_ids=("metric.refund_rate.v1",),
+                retry_count=0,
+                trace=("execute_sql",),
+            ),
+        )
+
+
 def test_run_agent_returns_structured_response_and_enforces_identity() -> None:
     service = FakeAgentService()
     app.dependency_overrides[get_agent_service] = lambda: service
@@ -134,7 +167,7 @@ def test_run_agent_returns_structured_response_and_enforces_identity() -> None:
 
 
 def test_internal_agent_requires_token_and_maps_governed_response() -> None:
-    service = FakeAgentService()
+    service = FakeInternalDataAgentService()
     settings = _agent_settings().model_copy(
         update={"internal_service_token": SecretStr("a" * 64)}
     )
@@ -162,6 +195,10 @@ def test_internal_agent_requires_token_and_maps_governed_response() -> None:
     assert unauthorized.status_code == 401
     assert response.status_code == 200
     assert response.json()["status"] == "succeeded"
+    assert response.json()["answer"] == "华东退款率为 12%，较上期上升 3 个百分点。"
+    assert response.json()["rows"] == [
+        {"channel": "华东", "refund_rate": "0.12"}
+    ]
     assert service.run_calls[0][1].user_id == "employee-1"
     assert service.run_calls[0][1].role is AccessRole.ANALYST
     assert service.run_calls[0][0].include_knowledge is False

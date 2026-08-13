@@ -666,10 +666,14 @@ def run_internal_agent(
     chart_spec = getattr(analysis, "chart_spec", None)
     chart = chart_spec.model_dump(mode="json") if chart_spec is not None else None
     report = response.report.model_dump(mode="json") if response.report else None
+    analysis_answer = getattr(analysis, "answer", "")
     answer = (
-        response.report.executive_summary
-        if response.report is not None
-        else getattr(analysis, "answer", "")
+        analysis_answer
+        or (
+            response.report.executive_summary
+            if response.report is not None
+            else ""
+        )
     )
     evidence_ids: list[str] = []
     if response.report is not None:
