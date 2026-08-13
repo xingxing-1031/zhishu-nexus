@@ -178,7 +178,7 @@ class EnterpriseAgentService:
             evidence_ids=(query_id, *analysis.evidence_source_ids),
         )
 
-        knowledge_required = any(
+        knowledge_required = request.include_knowledge and any(
             "knowledge.search" in subtask.required_tools
             for subtask in plan.subtasks
         )

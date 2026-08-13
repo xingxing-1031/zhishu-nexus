@@ -114,6 +114,26 @@ def test_agent_service_combines_sql_rag_context_and_report() -> None:
     assert response.exported_report.startswith("# 企业经营分析复盘报告")
 
 
+def test_internal_data_only_request_does_not_call_knowledge_tool() -> None:
+    service = _service()
+
+    response = service.run(
+        AgentRequest(
+            request_id="r-data-only",
+            conversation_id="c-data-only",
+            user_id="u1",
+            question="分析最近30天退款率",
+            include_knowledge=False,
+        ),
+        AccessContext(user_id="u1", role=AccessRole.ANALYST),
+    )
+
+    assert response.status is AgentTaskStatus.SUCCEEDED
+    assert all(item.tool_name != "knowledge.search" for item in response.tool_calls)
+    assert response.report is not None
+    assert response.report.document_evidence == ()
+
+
 def test_agent_service_degrades_and_updates_report_when_mcp_is_missing() -> None:
     service = _service()
     service.mcp_client = None

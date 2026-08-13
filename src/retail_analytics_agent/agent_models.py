@@ -112,6 +112,7 @@ class AgentRequest(AgentStrictModel):
     question: str = Field(min_length=1, max_length=4000)
     max_rows: int = Field(default=20, ge=1, le=1000)
     token_budget: int = Field(default=4000, ge=256, le=32000)
+    include_knowledge: bool = True
 
 
 class AgentResponse(AgentStrictModel):

@@ -657,6 +657,7 @@ def run_internal_agent(
             user_id=payload.user_id,
             question=payload.question,
             max_rows=settings.public_demo_max_rows,
+            include_knowledge=False,
         ),
         AccessContext(user_id=payload.user_id, role=role),
     )

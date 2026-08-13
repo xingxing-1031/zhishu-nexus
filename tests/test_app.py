@@ -164,6 +164,7 @@ def test_internal_agent_requires_token_and_maps_governed_response() -> None:
     assert response.json()["status"] == "succeeded"
     assert service.run_calls[0][1].user_id == "employee-1"
     assert service.run_calls[0][1].role is AccessRole.ANALYST
+    assert service.run_calls[0][0].include_knowledge is False
     assert len(service.run_calls) == 1
 
 
