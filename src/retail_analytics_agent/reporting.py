@@ -70,7 +70,8 @@ class ReportComposer:
             charts=tuple(
                 result.payload["chart"]
                 for result in tool_results
-                if result.tool_name == "chart.build" and "chart" in result.payload
+                if result.tool_name in {"chart.build", "sql.query"}
+                and isinstance(result.payload.get("chart"), dict)
             ),
             data_evidence=data_ids,
             document_evidence=document_ids,

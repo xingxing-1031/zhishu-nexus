@@ -6,11 +6,20 @@ from fastapi.testclient import TestClient
 from pydantic import SecretStr
 
 from retail_analytics_agent.access_control import get_access_context
+from retail_analytics_agent.agent_models import (
+    AgentResponse,
+    AgentStreamEvent,
+    AgentTaskStatus,
+)
 from retail_analytics_agent.analysis_service import (
     AnalysisRequestConflictError,
     get_analysis_runner,
 )
-from retail_analytics_agent.app import analysis_rate_limiter, app
+from retail_analytics_agent.app import (
+    analysis_rate_limiter,
+    app,
+    get_agent_service,
+)
 from retail_analytics_agent.database import get_database_connection
 from retail_analytics_agent.model_adapters import ModelInvocationError
 from retail_analytics_agent.models import (
@@ -43,6 +52,105 @@ def _access_context() -> AccessContext:
 
 def _admin_access_context() -> AccessContext:
     return AccessContext(user_id="ADMIN-001", role=AccessRole.ADMIN)
+
+
+def _agent_settings() -> Settings:
+    return Settings(
+        postgres_db="test_db",
+        postgres_user="test_user",
+        postgres_password=SecretStr("test_password"),
+        public_demo_mode=False,
+        _env_file=None,
+    )
+
+
+class FakeAgentService:
+    def __init__(self) -> None:
+        self.run_calls = []
+        self.stream_calls = []
+
+    def run(self, request, access_context):
+        self.run_calls.append((request, access_context))
+        return AgentResponse(
+            request_id=request.request_id,
+            conversation_id=request.conversation_id,
+            status=AgentTaskStatus.SUCCEEDED,
+        )
+
+    def stream(self, request, access_context):
+        self.stream_calls.append((request, access_context))
+        yield AgentStreamEvent(
+            event="status",
+            node="skill_route",
+            message="业务 Skill 路由完成",
+        )
+        yield AgentStreamEvent(
+            event="result",
+            node="report",
+            message="经营分析报告生成完成",
+            response=self.run(request, access_context),
+        )
+
+
+def test_run_agent_returns_structured_response_and_enforces_identity() -> None:
+    service = FakeAgentService()
+    app.dependency_overrides[get_agent_service] = lambda: service
+    app.dependency_overrides[get_access_context] = _access_context
+    app.dependency_overrides[get_settings] = _agent_settings
+
+    try:
+        response = client.post(
+            "/agent/run",
+            json={
+                "request_id": "AGENT-RUN-001",
+                "conversation_id": "CONV-001",
+                "user_id": "USER-001",
+                "question": "最近30天退款率为什么变化？",
+            },
+        )
+        forbidden = client.post(
+            "/agent/run",
+            json={
+                "request_id": "AGENT-RUN-002",
+                "conversation_id": "CONV-001",
+                "user_id": "USER-999",
+                "question": "查询退款率",
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "succeeded"
+    assert len(service.run_calls) == 1
+    assert forbidden.status_code == 403
+    assert len(service.run_calls) == 1
+
+
+def test_stream_agent_emits_status_then_result_events() -> None:
+    service = FakeAgentService()
+    app.dependency_overrides[get_agent_service] = lambda: service
+    app.dependency_overrides[get_access_context] = _access_context
+    app.dependency_overrides[get_settings] = _agent_settings
+
+    try:
+        response = client.post(
+            "/agent/stream",
+            json={
+                "request_id": "AGENT-STREAM-001",
+                "conversation_id": "CONV-002",
+                "user_id": "USER-001",
+                "question": "结合售后制度分析退款率",
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/event-stream")
+    assert response.text.index("event: status") < response.text.index("event: result")
+    assert '"status":"succeeded"' in response.text
+    assert len(service.stream_calls) == 1
 
 
 def _public_demo_settings(**overrides) -> Settings:

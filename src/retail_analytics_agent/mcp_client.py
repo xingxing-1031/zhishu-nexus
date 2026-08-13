@@ -1,40 +1,84 @@
 from __future__ import annotations
 
+import asyncio
 import json
-import subprocess
 from dataclasses import dataclass
 from typing import Any
+
+from mcp import ClientSession, StdioServerParameters
+from mcp.client.stdio import stdio_client
 
 
 class McpClientError(RuntimeError):
     pass
 
 
-@dataclass
+@dataclass(frozen=True)
 class McpToolClient:
-    command: tuple[str, ...]
+    command: str
+    args: tuple[str, ...]
     timeout_seconds: float = 10
 
     def discover(self) -> tuple[str, ...]:
-        return ("read_report_template", "export_operations_report")
+        return asyncio.run(self._request("discover", "", {}))
 
     def call(self, tool_name: str, payload: dict[str, Any]) -> dict[str, Any]:
-        if tool_name not in self.discover():
-            raise McpClientError(f"tool is not discovered: {tool_name}")
-        request = json.dumps({"name": tool_name, **payload}, ensure_ascii=False) + "\n"
+        result = asyncio.run(self._request("call", tool_name, payload))
+        if not isinstance(result, dict):
+            raise McpClientError("MCP tool returned a non-object result")
+        return result
+
+    async def _request(
+        self,
+        action: str,
+        tool_name: str,
+        payload: dict[str, Any],
+    ):
+        parameters = StdioServerParameters(
+            command=self.command,
+            args=list(self.args),
+        )
+        error: McpClientError | None = None
+        value: object = ()
         try:
-            completed = subprocess.run(
-                [*self.command, "--stdio"], input=request, text=True,
-                capture_output=True, timeout=self.timeout_seconds, check=False,
-            )
-        except (OSError, subprocess.TimeoutExpired) as exc:
+            async with stdio_client(parameters) as (read, write):
+                async with ClientSession(read, write) as session:
+                    await session.initialize()
+                    discovered = await asyncio.wait_for(
+                        session.list_tools(),
+                        timeout=self.timeout_seconds,
+                    )
+                    names = tuple(tool.name for tool in discovered.tools)
+                    if action == "discover":
+                        value = names
+                    elif tool_name not in names:
+                        error = McpClientError(
+                            f"tool is not discovered: {tool_name}"
+                        )
+                    else:
+                        result = await asyncio.wait_for(
+                            session.call_tool(tool_name, payload),
+                            timeout=self.timeout_seconds,
+                        )
+                        if result.isError:
+                            message = " ".join(
+                                getattr(item, "text", "")
+                                for item in result.content
+                            ).strip()
+                            error = McpClientError(message or "MCP tool failed")
+                        elif isinstance(result.structuredContent, dict):
+                            value = result.structuredContent
+                        else:
+                            text = "\n".join(
+                                getattr(item, "text", "")
+                                for item in result.content
+                            )
+                            try:
+                                value = json.loads(text)
+                            except json.JSONDecodeError:
+                                value = {"content": text}
+        except (OSError, asyncio.TimeoutError, RuntimeError) as exc:
             raise McpClientError("MCP server unavailable") from exc
-        if completed.returncode != 0:
-            raise McpClientError("MCP server exited with an error")
-        try:
-            response = json.loads(completed.stdout.splitlines()[0])
-        except (IndexError, json.JSONDecodeError) as exc:
-            raise McpClientError("invalid MCP response") from exc
-        if not response.get("ok"):
-            raise McpClientError(str(response.get("error", "MCP tool failed")))
-        return response["result"]
+        if error is not None:
+            raise error
+        return value

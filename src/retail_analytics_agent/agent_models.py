@@ -5,6 +5,8 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from retail_analytics_agent.models import AnalysisOutcome
+
 
 class AgentStrictModel(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
@@ -101,3 +103,39 @@ class ToolResult(AgentStrictModel):
     payload: dict[str, Any] = Field(default_factory=dict)
     evidence_ids: tuple[str, ...] = Field(default=(), max_length=50)
     error: str | None = Field(default=None, max_length=1000)
+
+
+class AgentRequest(AgentStrictModel):
+    request_id: str = Field(min_length=1, max_length=128)
+    conversation_id: str = Field(min_length=1, max_length=128)
+    user_id: str = Field(min_length=1, max_length=128)
+    question: str = Field(min_length=1, max_length=4000)
+    max_rows: int = Field(default=20, ge=1, le=1000)
+    token_budget: int = Field(default=4000, ge=256, le=32000)
+
+
+class AgentResponse(AgentStrictModel):
+    request_id: str = Field(min_length=1, max_length=128)
+    conversation_id: str = Field(min_length=1, max_length=128)
+    status: AgentTaskStatus
+    skill_id: SkillId | None = None
+    task_plan: TaskPlan | None = None
+    context: ContextSnapshot | None = None
+    analysis: AnalysisOutcome | None = None
+    report: OperationsReport | None = None
+    exported_report: str | None = Field(default=None, max_length=50000)
+    tool_calls: tuple[ToolCallRecord, ...] = Field(default=(), max_length=50)
+    limitations: tuple[str, ...] = Field(default=(), max_length=20)
+
+
+class AgentEventType(StrEnum):
+    STATUS = "status"
+    RESULT = "result"
+    ERROR = "error"
+
+
+class AgentStreamEvent(AgentStrictModel):
+    event: AgentEventType
+    node: str | None = Field(default=None, max_length=80)
+    message: str = Field(min_length=1, max_length=500)
+    response: AgentResponse | None = None

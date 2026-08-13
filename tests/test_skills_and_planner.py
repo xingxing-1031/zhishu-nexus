@@ -1,7 +1,11 @@
 import pytest
 
 from retail_analytics_agent.agent_models import SkillId
-from retail_analytics_agent.skills import SkillDefinition, SkillRegistry, default_skill_registry
+from retail_analytics_agent.skills import (
+    SkillDefinition,
+    SkillRegistry,
+    default_skill_registry,
+)
 from retail_analytics_agent.task_planner import TaskPlanner, TaskPlanningError
 
 

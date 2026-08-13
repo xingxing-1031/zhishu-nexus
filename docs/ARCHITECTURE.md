@@ -5,9 +5,10 @@
 ```mermaid
 flowchart LR
     U["运营人员"] --> UI["v0.1 分析工作台"]
-    UI -->|"POST /analysis/stream"| API["FastAPI 边界"]
+    UI -->|"POST /agent/stream 或 /analysis/stream"| API["FastAPI 边界"]
     API --> AUTH["可信 AccessContext"]
-    AUTH --> GRAPH["LangGraph 工作流"]
+    AUTH --> AGENT["Agent Runtime"]
+    AGENT --> GRAPH["LangGraph 工作流"]
 
     subgraph WORKFLOW["单 Agent 受控工作流"]
         PLAN["计划 AnalysisPlan"] --> RETRIEVE["检索 RetrievalEvidence"]
@@ -20,7 +21,13 @@ flowchart LR
     end
 
     GRAPH --> WORKFLOW
+    AGENT --> SKILL["Skill Router / TaskPlan"]
+    AGENT --> CONTEXT["Conversation Store / Context Builder"]
+    AGENT --> REGISTRY["Tool Registry"]
     RETRIEVE --> CATALOG["版本化指标与 Schema 目录"]
+    REGISTRY --> RAG["项目二内部 Evidence API"]
+    RAG --> KNOWLEDGE["权限过滤 / Rerank / 引用边界"]
+    REGISTRY --> MCP["MCP 报告导出工具"]
     PLAN --> OLLAMA["qwen3:4b / Ollama"]
     GEN --> OLLAMA
     SUMMARY --> OLLAMA
@@ -32,7 +39,7 @@ flowchart LR
     EXEC --> AUDIT["查询审计"]
     HITL --> AUDIT
     SUMMARY --> API
-    API -->|"SSE 状态 / 结果"| UI
+    API -->|"SSE 状态 / 结果 / 工具与证据"| UI
 ```
 
 ## 组件职责

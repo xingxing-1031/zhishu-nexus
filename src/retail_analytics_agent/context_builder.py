@@ -3,7 +3,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Sequence
 
-from retail_analytics_agent.agent_models import ContextSnapshot, TaskPlan, ToolCallRecord
+from retail_analytics_agent.agent_models import (
+    ContextSnapshot,
+    TaskPlan,
+    ToolCallRecord,
+)
 from retail_analytics_agent.context_store import ConversationStore, ConversationTurn
 
 
@@ -34,7 +38,7 @@ class ContextBuilder:
         constraints = list(record.confirmed_constraints)
         current = [f"access_role={access_context}"]
         current.extend(constraints)
-        current.extend(f"question={question}")
+        current.append(f"question={question}")
         current.extend(
             f"subtask:{item.id}={item.description} ({item.status.value})"
             for item in task_plan.subtasks

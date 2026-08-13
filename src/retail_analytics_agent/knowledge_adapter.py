@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 from typing import Any, Protocol
 
 import httpx
@@ -29,7 +29,7 @@ class KnowledgeEvidence(BaseModel):
     source_id: str = Field(min_length=1, max_length=256)
     title: str = Field(min_length=1, max_length=500)
     version: str = Field(min_length=1, max_length=80)
-    effective_from: date | None = None
+    effective_from: datetime | date | None = None
     quote: str = Field(min_length=1, max_length=2000)
     score: float = Field(ge=0, le=1)
     permissions: tuple[str, ...] = Field(default=(), max_length=20)
@@ -57,15 +57,21 @@ class HttpKnowledgeAdapter:
     base_url: str
     client: httpx.Client
     timeout_seconds: float = 10
+    service_token: str | None = None
 
     def retrieve(self, query: KnowledgeQuery) -> tuple[KnowledgeEvidence, ...]:
         if not self.base_url.startswith(("http://", "https://")):
             raise KnowledgeAdapterError("knowledge endpoint must be HTTP(S)")
         try:
             response = self.client.post(
-                f"{self.base_url.rstrip('/')}/chat",
+                f"{self.base_url.rstrip('/')}/internal/evidence",
+                headers=(
+                    {"X-Internal-Token": self.service_token}
+                    if self.service_token
+                    else {}
+                ),
                 json={
-                    "question": query.query,
+                    "query": query.query,
                     "user_id": query.user_id,
                     "role": query.role,
                     "departments": list(query.departments),
@@ -79,7 +85,7 @@ class HttpKnowledgeAdapter:
         except (httpx.HTTPError, ValueError) as exc:
             raise KnowledgeAdapterError("knowledge service unavailable") from exc
         try:
-            raw_items = payload.get("evidence", payload.get("citations", []))
+            raw_items = payload.get("evidence", [])
             return tuple(KnowledgeEvidence.model_validate(item) for item in raw_items)[:query.top_k]
         except (AttributeError, TypeError, ValidationError) as exc:
             raise KnowledgeAdapterError("knowledge response did not contain governed evidence") from exc

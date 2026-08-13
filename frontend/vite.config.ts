@@ -17,6 +17,7 @@ export default defineConfig(({ command }) => ({
       "/demo": "http://127.0.0.1:8005",
       "/auth": "http://127.0.0.1:8005",
       "/analysis": "http://127.0.0.1:8005",
+      "/agent": "http://127.0.0.1:8005",
       "/analytics": "http://127.0.0.1:8005",
       "/admin": "http://127.0.0.1:8005"
     }

@@ -92,6 +92,95 @@ export interface StreamEvent {
   rejection?: RejectedResult | null;
 }
 
+export type AgentSkillId =
+  | "refund_diagnosis"
+  | "channel_comparison"
+  | "product_analysis"
+  | "weekly_report";
+
+export type AgentTaskStatus =
+  | "pending"
+  | "running"
+  | "succeeded"
+  | "degraded"
+  | "refused"
+  | "failed";
+
+export interface AgentSubtask {
+  id: string;
+  description: string;
+  required_tools: string[];
+  status: AgentTaskStatus;
+}
+
+export interface AgentTaskPlan {
+  goal: string;
+  skill_id: AgentSkillId;
+  subtasks: AgentSubtask[];
+  completion_criteria: string[];
+  max_steps: number;
+}
+
+export interface AgentContextSnapshot {
+  conversation_id: string;
+  task_goal: string;
+  summary: string;
+  confirmed_constraints: string[];
+  evidence_ids: string[];
+  recent_tool_results: string[];
+  token_budget: number;
+  token_estimate: number;
+  truncated: boolean;
+}
+
+export interface AgentToolCall {
+  request_id: string;
+  conversation_id?: string | null;
+  tool_name: string;
+  input_hash: string;
+  status: string;
+  duration_ms: number;
+  error_type?: string | null;
+}
+
+export interface AgentReportFinding {
+  statement: string;
+  data_evidence_ids: string[];
+  document_evidence_ids: string[];
+  confidence: string;
+}
+
+export interface AgentOperationsReport {
+  title: string;
+  executive_summary: string;
+  findings: AgentReportFinding[];
+  charts: Array<Record<string, unknown>>;
+  data_evidence: string[];
+  document_evidence: string[];
+  limitations: string[];
+}
+
+export interface AgentResponse {
+  request_id: string;
+  conversation_id: string;
+  status: AgentTaskStatus;
+  skill_id?: AgentSkillId | null;
+  task_plan?: AgentTaskPlan | null;
+  context?: AgentContextSnapshot | null;
+  analysis?: AnalysisOutcome | null;
+  report?: AgentOperationsReport | null;
+  exported_report?: string | null;
+  tool_calls: AgentToolCall[];
+  limitations: string[];
+}
+
+export interface AgentStreamEvent {
+  event: "status" | "result" | "error";
+  node?: string | null;
+  message: string;
+  response?: AgentResponse | null;
+}
+
 export interface TraceEvent {
   request_id: string;
   component: string;

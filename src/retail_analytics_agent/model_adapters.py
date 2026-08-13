@@ -119,7 +119,7 @@ def _sql_generation_contract(
     time_column = (
         "refunds.created_at"
         if all(
-            "refunds" in definition.source_tables
+            definition.source_tables == ("refunds",)
             for definition in metric_definitions
         )
         else "orders.created_at"
@@ -223,7 +223,7 @@ def _dimension_sql_expression(
         table = (
             "refunds"
             if all(
-                "refunds" in definition.source_tables
+                definition.source_tables == ("refunds",)
                 for definition in metric_definitions
             )
             else "orders"
@@ -919,7 +919,7 @@ class StructuredAnalysisPlanner:
                 "planning_rules": [
                     "Only add a dimension for an explicit grouping, comparison, or breakdown request.",
                     "A status used only as a condition must not become a dimension.",
-                    "Paid-order filtering for sales_amount, order_count, units_sold, and average_order_value is supplied by fixed metric evidence; do not duplicate order_status=paid in filters.",
+                    "Paid-order filtering for sales_amount, order_count, units_sold, refund_rate, and average_order_value is supplied by fixed metric evidence; do not duplicate order_status=paid in filters.",
                     "Set limit to null unless the question explicitly requests a result count; the application will then apply default_limit.",
                 ],
             },

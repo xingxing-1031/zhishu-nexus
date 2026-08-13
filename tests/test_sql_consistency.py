@@ -256,3 +256,29 @@ def test_consistency_rejects_raw_timestamp_for_day_dimension() -> None:
             plan=plan,
             evidence=_evidence(plan),
         )
+
+
+def test_consistency_accepts_governed_refund_rate_formula() -> None:
+    plan = AnalysisPlan(
+        analysis_goal="最近30天按渠道统计退款率",
+        metrics=["refund_rate"],
+        dimensions=["channel"],
+        time_range={"days": 30},
+        limit=10,
+    )
+    sql = (
+        "SELECT o.channel AS channel, "
+        "COUNT(DISTINCT CASE WHEN r.refund_id IS NOT NULL THEN o.order_id END)::numeric "
+        "/ NULLIF(COUNT(DISTINCT o.order_id), 0) AS refund_rate "
+        "FROM orders AS o LEFT JOIN refunds AS r ON r.order_id = o.order_id "
+        "WHERE o.status = 'paid' AND o.created_at >= %(start_time)s "
+        "AND o.created_at < %(end_time)s GROUP BY o.channel"
+    )
+
+    result = validate_sql_against_evidence(
+        sql,
+        plan=plan,
+        evidence=_evidence(plan),
+    )
+
+    assert result.passed is True

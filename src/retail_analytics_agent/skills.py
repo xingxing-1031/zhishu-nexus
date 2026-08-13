@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Mapping, Sequence
+from typing import Mapping
 
 from pydantic import Field
 
@@ -99,7 +99,14 @@ def default_skill_registry() -> SkillRegistry:
     registry.register(SkillDefinition(
         id=SkillId.REFUND_DIAGNOSIS,
         description="解释退款率、退款金额或售后异常，并结合制度证据给出原因。",
-        required_tools=("catalog.retrieve", "sql.query", "knowledge.search", "chart.build"),
+        required_tools=(
+            "catalog.retrieve",
+            "sql.query",
+            "knowledge.search",
+            "chart.build",
+            "report.compose",
+            "report.export",
+        ),
         completion_criteria=("退款趋势数据", "渠道或商品拆解", "售后制度证据", "引用完整"),
         refusal_conditions=("敏感原文未审批", "缺少可验证数据", "请求写操作"),
         output_schema=("executive_summary", "findings", "data_evidence", "document_evidence"),
@@ -107,7 +114,13 @@ def default_skill_registry() -> SkillRegistry:
     registry.register(SkillDefinition(
         id=SkillId.CHANNEL_COMPARISON,
         description="比较不同渠道的销售、订单和退款表现。",
-        required_tools=("catalog.retrieve", "sql.query", "chart.build"),
+        required_tools=(
+            "catalog.retrieve",
+            "sql.query",
+            "knowledge.search",
+            "chart.build",
+            "report.compose",
+        ),
         completion_criteria=("统一时间范围", "渠道维度对比", "数据口径说明"),
         refusal_conditions=("指标口径不一致", "缺少时间范围", "请求写操作"),
         output_schema=("executive_summary", "findings", "data_evidence"),
@@ -115,7 +128,13 @@ def default_skill_registry() -> SkillRegistry:
     registry.register(SkillDefinition(
         id=SkillId.PRODUCT_ANALYSIS,
         description="分析商品或品类的销量、销售额和退款表现。",
-        required_tools=("catalog.retrieve", "sql.query", "chart.build"),
+        required_tools=(
+            "catalog.retrieve",
+            "sql.query",
+            "knowledge.search",
+            "chart.build",
+            "report.compose",
+        ),
         completion_criteria=("商品或品类拆解", "指标排序", "数据证据"),
         refusal_conditions=("未知商品字段", "缺少指标", "请求写操作"),
         output_schema=("executive_summary", "findings", "data_evidence"),
@@ -123,7 +142,14 @@ def default_skill_registry() -> SkillRegistry:
     registry.register(SkillDefinition(
         id=SkillId.WEEKLY_REPORT,
         description="生成有时间边界、带数据和制度引用的经营周报。",
-        required_tools=("catalog.retrieve", "sql.query", "knowledge.search", "chart.build", "report.export"),
+        required_tools=(
+            "catalog.retrieve",
+            "sql.query",
+            "knowledge.search",
+            "chart.build",
+            "report.compose",
+            "report.export",
+        ),
         completion_criteria=("本周与上周对比", "异常项", "行动建议有证据", "报告可导出"),
         refusal_conditions=("日期范围不明确", "证据不足", "请求写操作"),
         output_schema=("executive_summary", "findings", "charts", "limitations"),

@@ -314,6 +314,37 @@ DEFAULT_METRIC_CATALOG = MetricCatalog(
             ),
         ),
         MetricDefinition(
+            metric=AnalysisMetric.REFUND_RATE,
+            version="v1",
+            display_name="退款率",
+            aliases=("退款率", "退货率", "退款占比", "refund rate"),
+            description="发生退款的已支付去重订单数占已支付去重订单数的比例",
+            formula=(
+                "COUNT(DISTINCT CASE WHEN refunds.refund_id IS NOT NULL "
+                "THEN orders.order_id END)::numeric / "
+                "NULLIF(COUNT(DISTINCT orders.order_id), 0)"
+            ),
+            source_tables=("orders", "refunds"),
+            source_columns=(
+                "orders.order_id",
+                "orders.status",
+                "orders.channel",
+                "orders.created_at",
+                "refunds.refund_id",
+                "refunds.order_id",
+            ),
+            fixed_filters=(
+                AnalysisFilter(
+                    field=AnalysisFilterField.ORDER_STATUS,
+                    value="paid",
+                ),
+            ),
+            supported_dimensions=(
+                AnalysisDimension.CHANNEL,
+                AnalysisDimension.DAY,
+            ),
+        ),
+        MetricDefinition(
             metric=AnalysisMetric.AVERAGE_ORDER_VALUE,
             version="v1",
             display_name="平均订单金额",

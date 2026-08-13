@@ -37,7 +37,9 @@ class ToolSpec(BaseModel):
     description: str = Field(min_length=1, max_length=500)
     input_model: type[BaseModel] = ToolInput
     output_model: type[BaseModel] = ToolResult
-    required_roles: frozenset[AccessRole] = frozenset({AccessRole.ANALYST})
+    required_roles: frozenset[AccessRole] = frozenset(
+        {AccessRole.ANALYST, AccessRole.ADMIN}
+    )
     risk: ToolRisk = ToolRisk.LOW
     timeout_seconds: float = Field(default=30, gt=0, le=900)
     idempotent: bool = True
@@ -56,7 +58,10 @@ class ToolCallOutcome:
 class ToolRegistry:
     _specs: dict[str, ToolSpec] = field(default_factory=dict)
     _handlers: dict[str, ToolHandler] = field(default_factory=dict)
-    _idempotency: dict[tuple[str, str], ToolCallOutcome] = field(default_factory=dict)
+    _idempotency: dict[
+        tuple[str, str, str], tuple[str, ToolCallOutcome]
+    ] = field(default_factory=dict)
+    clock: Callable[[], float] = monotonic
 
     def register(self, spec: ToolSpec, handler: ToolHandler) -> None:
         if spec.name in self._specs:
@@ -94,11 +99,16 @@ class ToolRegistry:
         input_hash = hashlib.sha256(
             json.dumps(parsed.model_dump(mode="json"), sort_keys=True, ensure_ascii=False).encode()
         ).hexdigest()
-        cache_key = (name, idempotency_key or input_hash)
+        cache_key = (name, access_context.user_id, idempotency_key or input_hash)
         if spec.idempotent and cache_key in self._idempotency:
-            return self._idempotency[cache_key]
+            cached_hash, cached_outcome = self._idempotency[cache_key]
+            if cached_hash != input_hash:
+                raise ToolRegistryError(
+                    f"idempotency key for {name} is bound to different input"
+                )
+            return cached_outcome
 
-        started = monotonic()
+        started = self.clock()
         try:
             raw = self._handlers[name](parsed, access_context)
             if isinstance(raw, ToolResult):
@@ -122,7 +132,7 @@ class ToolRegistry:
         except ToolTimeoutError:
             raise
         except Exception as exc:
-            duration_ms = int((monotonic() - started) * 1000)
+            duration_ms = int((self.clock() - started) * 1000)
             record = ToolCallRecord(
                 request_id=request_id,
                 conversation_id=conversation_id,
@@ -137,7 +147,7 @@ class ToolRegistry:
                 record,
             )
 
-        elapsed_seconds = monotonic() - started
+        elapsed_seconds = self.clock() - started
         duration_ms = int(elapsed_seconds * 1000)
         if elapsed_seconds > spec.timeout_seconds:
             record = ToolCallRecord(
@@ -153,5 +163,5 @@ class ToolRegistry:
         )
         outcome = ToolCallOutcome(result, record)
         if spec.idempotent:
-            self._idempotency[cache_key] = outcome
+            self._idempotency[cache_key] = (input_hash, outcome)
         return outcome

@@ -178,6 +178,7 @@ class AnalysisMetric(StrEnum):
     UNITS_SOLD = "units_sold"
     REFUND_AMOUNT = "refund_amount"
     REFUND_COUNT = "refund_count"
+    REFUND_RATE = "refund_rate"
     AVERAGE_ORDER_VALUE = "average_order_value"
 
 

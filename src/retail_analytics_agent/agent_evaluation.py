@@ -95,9 +95,11 @@ def evaluate_cases(
         refusal_correct = (status == "refused") is case.expected_refusal
         skill_correct = routed_skill == case.expected_skill
         tool_allowlist_correct = set(executed).issubset(set(planned))
+        # A skill may retrieve additional corroborating evidence. Completeness
+        # checks the required minimum rather than penalising a safe extra source.
         evidence_complete = (
-            ("sql.query" in executed) == case.requires_data
-            and ("knowledge.search" in executed) == case.requires_document
+            (not case.requires_data or "sql.query" in executed)
+            and (not case.requires_document or "knowledge.search" in executed)
         )
         records.append(AgentEvaluationRecord(
             case_id=case.case_id, routed_skill=routed_skill,

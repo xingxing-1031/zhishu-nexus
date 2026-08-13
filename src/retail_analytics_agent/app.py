@@ -1,5 +1,7 @@
 import asyncio
 import logging
+import sys
+from collections.abc import Iterator
 from contextlib import asynccontextmanager
 from pathlib import Path
 from queue import Queue
@@ -8,6 +10,7 @@ from time import perf_counter
 from typing import Annotated
 from uuid import uuid4
 
+import httpx
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -21,6 +24,12 @@ from retail_analytics_agent.admin_views import (
     list_admin_audit_entries,
     list_metric_definitions,
 )
+from retail_analytics_agent.agent_models import (
+    AgentRequest,
+    AgentResponse,
+    AgentStreamEvent,
+)
+from retail_analytics_agent.agent_service import EnterpriseAgentService
 from retail_analytics_agent.analysis_service import (
     AnalysisRequestConflictError,
     AnalysisRunError,
@@ -32,12 +41,17 @@ from retail_analytics_agent.auth import (
     issue_session,
     verify_password,
 )
+from retail_analytics_agent.context_builder import ContextBuilder
+from retail_analytics_agent.context_store import PostgresConversationStore
 from retail_analytics_agent.database import (
     DatabaseConnection,
     check_database_readiness,
     close_database_pool,
+    connect_to_database,
     get_database_connection,
 )
+from retail_analytics_agent.knowledge_adapter import HttpKnowledgeAdapter
+from retail_analytics_agent.mcp_client import McpToolClient
 from retail_analytics_agent.model_adapters import ModelInvocationError
 from retail_analytics_agent.models import (
     AccessContext,
@@ -64,6 +78,8 @@ from retail_analytics_agent.queries import (
 )
 from retail_analytics_agent.rate_limit import SlidingWindowRateLimiter
 from retail_analytics_agent.settings import Settings, get_settings
+from retail_analytics_agent.skills import default_skill_registry
+from retail_analytics_agent.task_planner import TaskPlanner
 from retail_analytics_agent.tracing import ExecutionTraceResponse
 
 logger = logging.getLogger(__name__)
@@ -499,6 +515,150 @@ def stream_analysis(
             "Cache-Control": "no-cache",
             "X-Accel-Buffering": "no",
         },
+    )
+
+
+def get_agent_service(
+    runner: Annotated[AnalysisRunner, Depends(get_analysis_runner)],
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> Iterator[EnterpriseAgentService]:
+    knowledge = None
+    client = None
+    mcp_client = None
+    if settings.knowledge_service_url:
+        client = httpx.Client(timeout=settings.model_timeout_seconds or 30)
+        assert settings.knowledge_service_token is not None
+        knowledge = HttpKnowledgeAdapter(
+            settings.knowledge_service_url,
+            client,
+            timeout_seconds=settings.model_timeout_seconds or 30,
+            service_token=settings.knowledge_service_token.get_secret_value(),
+        )
+    if settings.mcp_export_enabled:
+        mcp_server = (
+            Path(__file__).resolve().parents[2]
+            / "mcp_server"
+            / "operations_export_server.py"
+        )
+        mcp_client = McpToolClient(
+            command=sys.executable,
+            args=(str(mcp_server),),
+            timeout_seconds=settings.mcp_export_timeout_seconds,
+        )
+    try:
+        yield EnterpriseAgentService(
+            analysis_runner=runner,
+            context_builder=ContextBuilder(
+                PostgresConversationStore(connect_to_database)
+            ),
+            task_planner=TaskPlanner(
+                default_skill_registry(),
+                default_max_steps=settings.agent_max_steps,
+            ),
+            knowledge=knowledge,
+            knowledge_departments=settings.active_knowledge_departments,
+            max_context_token_budget=settings.agent_context_token_budget,
+            mcp_client=mcp_client,
+        )
+    finally:
+        if client is not None:
+            client.close()
+
+
+@app.post("/agent/run", response_model=AgentResponse)
+def run_agent(
+    agent_request: AgentRequest,
+    http_request: Request,
+    service: Annotated[EnterpriseAgentService, Depends(get_agent_service)],
+    access_context: Annotated[AccessContext, Depends(get_access_context)],
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> AgentResponse:
+    if agent_request.user_id != access_context.user_id:
+        raise HTTPException(
+            status_code=403,
+            detail="当前登录身份与请求用户不一致。",
+        )
+    _enforce_public_demo_request(
+        http_request,
+        AnalysisRequest(
+            request_id=agent_request.request_id,
+            user_id=agent_request.user_id,
+            question=agent_request.question,
+            max_rows=agent_request.max_rows,
+        ),
+        settings,
+    )
+    try:
+        return service.run(agent_request, access_context)
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail="当前身份无权执行该任务。") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=public_error_message(exc)) from exc
+
+
+@app.post("/agent/stream")
+async def stream_agent(
+    agent_request: AgentRequest,
+    http_request: Request,
+    service: Annotated[EnterpriseAgentService, Depends(get_agent_service)],
+    access_context: Annotated[AccessContext, Depends(get_access_context)],
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> StreamingResponse:
+    if agent_request.user_id != access_context.user_id:
+        raise HTTPException(
+            status_code=403,
+            detail="当前登录身份与请求用户不一致。",
+        )
+    _enforce_public_demo_request(
+        http_request,
+        AnalysisRequest(
+            request_id=agent_request.request_id,
+            user_id=agent_request.user_id,
+            question=agent_request.question,
+            max_rows=agent_request.max_rows,
+        ),
+        settings,
+    )
+
+    events: Queue[object] = Queue()
+
+    def produce_events() -> None:
+        try:
+            for event in service.stream(agent_request, access_context):
+                events.put(event)
+        except BaseException as exc:
+            events.put(exc)
+        finally:
+            events.put(_STREAM_DONE)
+
+    Thread(
+        target=produce_events,
+        name=f"agent-stream-{agent_request.request_id}",
+        daemon=True,
+    ).start()
+
+    async def encode_events():
+        while True:
+            item = await asyncio.to_thread(events.get)
+            if item is _STREAM_DONE:
+                break
+            if isinstance(item, BaseException):
+                event = AgentStreamEvent(
+                    event="error",
+                    node="agent",
+                    message=public_error_message(item),
+                )
+            else:
+                event = item
+            yield (
+                f"event: {event.event.value}\n"
+                f"data: {event.model_dump_json()}\n\n"
+            )
+
+    return StreamingResponse(
+        encode_events(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
 
 

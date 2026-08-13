@@ -32,12 +32,14 @@
         "catalog.retrieve",
         "sql.query",
         "chart.build",
+        "knowledge.search",
         "report.compose"
       ],
       "executed_tools": [
         "catalog.retrieve",
         "sql.query",
         "chart.build",
+        "knowledge.search",
         "report.compose"
       ],
       "status": "succeeded",
@@ -54,12 +56,14 @@
         "catalog.retrieve",
         "sql.query",
         "chart.build",
+        "knowledge.search",
         "report.compose"
       ],
       "executed_tools": [
         "catalog.retrieve",
         "sql.query",
         "chart.build",
+        "knowledge.search",
         "report.compose"
       ],
       "status": "succeeded",
@@ -67,7 +71,7 @@
       "skill_correct": true,
       "tool_allowlist_correct": true,
       "evidence_complete": true,
-      "latency_ms": 0
+      "latency_ms": 15
     },
     {
       "case_id": "weekly_001",

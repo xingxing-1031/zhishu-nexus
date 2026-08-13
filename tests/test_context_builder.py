@@ -1,6 +1,11 @@
 import pytest
 
-from retail_analytics_agent.agent_models import SkillId, Subtask, TaskPlan, ToolCallRecord
+from retail_analytics_agent.agent_models import (
+    SkillId,
+    Subtask,
+    TaskPlan,
+    ToolCallRecord,
+)
 from retail_analytics_agent.context_builder import ContextBuilder, estimate_tokens
 from retail_analytics_agent.context_store import (
     ContextStoreError,
@@ -37,6 +42,15 @@ def test_confirmed_constraints_are_inherited() -> None:
 
     assert "region=华东" in snapshot.confirmed_constraints
     assert "region=华东" in snapshot.summary
+
+
+def test_question_is_packed_as_one_context_line() -> None:
+    snapshot = ContextBuilder(InMemoryConversationStore()).build(
+        "c1", "退款率变化", _plan(), user_id="u1",
+    )
+
+    assert "question=退款率变化" in snapshot.summary.splitlines()
+    assert "q" not in snapshot.summary.splitlines()
 
 
 def test_context_keeps_evidence_before_old_history_when_budget_is_tight() -> None:

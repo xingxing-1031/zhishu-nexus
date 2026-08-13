@@ -22,6 +22,7 @@ COPY pyproject.toml README.md ./
 COPY src ./src
 COPY --from=frontend-builder /workspace/src/retail_analytics_agent/static ./src/retail_analytics_agent/static
 COPY db ./db
+COPY mcp_server ./mcp_server
 
 RUN pip install --no-cache-dir . \
     && useradd --create-home --uid 10001 appuser

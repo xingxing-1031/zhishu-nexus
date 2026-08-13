@@ -48,6 +48,13 @@ class Settings(BaseSettings):
     auth_session_secret: SecretStr | None = None
     auth_session_ttl_seconds: int = Field(default=28800, ge=300, le=604800)
     auth_cookie_secure: bool = False
+    knowledge_service_url: str | None = None
+    knowledge_service_token: SecretStr | None = None
+    knowledge_departments: str = "admin"
+    agent_context_token_budget: int = Field(default=4000, ge=256, le=32000)
+    agent_max_steps: int = Field(default=8, ge=1, le=30)
+    mcp_export_enabled: bool = True
+    mcp_export_timeout_seconds: float = Field(default=15, gt=0, le=60)
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -112,6 +119,29 @@ class Settings(BaseSettings):
         ):
             raise ValueError("MODEL_API_KEY is required for remote models")
         return self
+
+    @model_validator(mode="after")
+    def validate_agent_service_configuration(self) -> "Settings":
+        if self.knowledge_service_url and not self.knowledge_service_url.startswith(
+            ("http://", "https://")
+        ):
+            raise ValueError("KNOWLEDGE_SERVICE_URL must be an HTTP(S) URL")
+        if self.knowledge_service_url and (
+            self.knowledge_service_token is None
+            or not self.knowledge_service_token.get_secret_value().strip()
+        ):
+            raise ValueError(
+                "KNOWLEDGE_SERVICE_TOKEN is required when knowledge service is enabled"
+            )
+        return self
+
+    @property
+    def active_knowledge_departments(self) -> tuple[str, ...]:
+        return tuple(
+            item.strip()
+            for item in self.knowledge_departments.split(",")
+            if item.strip()
+        )
 
     @property
     def active_model_base_url(self) -> str:

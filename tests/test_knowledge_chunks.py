@@ -12,10 +12,11 @@ from retail_analytics_agent.knowledge_chunks import (
 def test_default_corpus_uses_business_semantic_boundaries() -> None:
     chunks = DEFAULT_KNOWLEDGE_CORPUS.chunks
 
-    assert len(chunks) == 13
-    assert sum(item.knowledge_type is KnowledgeType.METRIC for item in chunks) == 6
+    assert len(chunks) == 14
+    assert sum(item.knowledge_type is KnowledgeType.METRIC for item in chunks) == 7
     assert sum(item.knowledge_type is KnowledgeType.TABLE for item in chunks) == 4
     assert sum(item.knowledge_type is KnowledgeType.JOIN for item in chunks) == 3
+    assert any(item.source_id == "metric.refund_rate.v1" for item in chunks)
 
 
 def test_sales_metric_chunk_keeps_the_complete_business_definition() -> None:

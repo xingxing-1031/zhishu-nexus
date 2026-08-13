@@ -65,11 +65,13 @@ class TaskPlanner:
             SkillId.CHANNEL_COMPARISON: (
                 ("metrics", "按统一口径查询各渠道指标", ("catalog.retrieve", "sql.query")),
                 ("compare", "计算渠道差异并生成图表", ("chart.build",)),
+                ("policy", "检索渠道经营制度作为解释依据", ("knowledge.search",)),
                 ("report", "输出渠道对比结论", ("report.compose",)),
             ),
             SkillId.PRODUCT_ANALYSIS: (
                 ("metrics", "查询商品或品类表现", ("catalog.retrieve", "sql.query")),
                 ("rank", "按指标排序并识别异常商品", ("chart.build",)),
+                ("policy", "检索商品与售后制度作为解释依据", ("knowledge.search",)),
                 ("report", "输出商品分析结论", ("report.compose",)),
             ),
             SkillId.WEEKLY_REPORT: (

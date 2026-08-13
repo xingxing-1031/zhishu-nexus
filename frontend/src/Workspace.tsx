@@ -1,16 +1,19 @@
 import {
   BarChart3,
+  BrainCircuit,
   Check,
   ChevronRight,
   Clock3,
   Database,
   FileSearch,
+  FileOutput,
+  ListChecks,
   Play,
   ShieldAlert,
   TableProperties,
 } from "lucide-react";
 import { FormEvent, lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
-import { api, streamAnalysis } from "./api";
+import { api, streamAgent, streamAnalysis } from "./api";
 import ConversationPanel from "./ConversationPanel";
 import {
   appendTurn,
@@ -37,6 +40,8 @@ import { formatValue, label, localizeAnswer, localizeEvidence, localizeUserMessa
 import type {
   AnalysisOutcome,
   AnalysisResult,
+  AgentResponse,
+  AgentStreamEvent,
   ApprovalRequired,
   Overview,
   SessionInfo,
@@ -70,6 +75,7 @@ const examples = [
 ];
 
 type StageState = "idle" | "running" | "success" | "warning" | "danger" | "skipped";
+type WorkspaceMode = "query" | "agent";
 
 export default function Workspace({
   session,
@@ -81,11 +87,13 @@ export default function Workspace({
   ready: boolean;
 }) {
   const [question, setQuestion] = useState(examples[0][1]);
+  const [mode, setMode] = useState<WorkspaceMode>("agent");
   const [maxRows, setMaxRows] = useState(Math.min(10, session.max_rows));
   const [requestId, setRequestId] = useState("");
   const [running, setRunning] = useState(false);
   const [message, setMessage] = useState("选择一个经营场景，或输入你的业务问题");
   const [outcome, setOutcome] = useState<AnalysisOutcome | null>(null);
+  const [agentResponse, setAgentResponse] = useState<AgentResponse | null>(null);
   const [failure, setFailure] = useState("");
   const [approval, setApproval] = useState<ApprovalRequired | null>(null);
   const [trace, setTrace] = useState<TraceEvent[] | null>(null);
@@ -113,6 +121,7 @@ export default function Workspace({
 
   function resetRun() {
     setOutcome(null);
+    setAgentResponse(null);
     setFailure("");
     setApproval(null);
     setTrace(null);
@@ -176,6 +185,14 @@ export default function Workspace({
     await executeQuestion(question);
   }
 
+  function receiveAgent(event: AgentStreamEvent) {
+    setMessage(event.message);
+    if (event.event === "result" && event.response) {
+      setAgentResponse(event.response);
+    }
+    if (event.event === "error") setFailure(event.message);
+  }
+
   async function executeQuestion(nextQuestion: string) {
     if (!ready || running || !nextQuestion.trim()) return;
     const displayQuestion = nextQuestion.trim();
@@ -190,15 +207,28 @@ export default function Workspace({
     setMessage("分析请求已发送");
     setRequestId(nextRequestId);
     try {
-      await streamAnalysis(
-        {
-          request_id: nextRequestId,
-          user_id: session.user_id,
-          question: submittedQuestion,
-          max_rows: clampRows(maxRows, session.max_rows),
-        },
-        receive,
-      );
+      if (mode === "agent") {
+        await streamAgent(
+          {
+            request_id: nextRequestId,
+            conversation_id: activeConversationId,
+            user_id: session.user_id,
+            question: submittedQuestion,
+            max_rows: clampRows(maxRows, session.max_rows),
+          },
+          receiveAgent,
+        );
+      } else {
+        await streamAnalysis(
+          {
+            request_id: nextRequestId,
+            user_id: session.user_id,
+            question: submittedQuestion,
+            max_rows: clampRows(maxRows, session.max_rows),
+          },
+          receive,
+        );
+      }
     } catch (reason) {
       runFailure = reason instanceof Error ? localizeUserMessage(reason.message) : "分析请求失败，请稍后重试。";
       setFailure(runFailure);
@@ -324,7 +354,12 @@ export default function Workspace({
             onSelectTurn={restoreTurn}
           />
           <aside className="query-panel">
-          <h2>提问分析</h2>
+          <div className="mode-switch" role="tablist" aria-label="分析模式">
+            <button type="button" className={mode === "agent" ? "active" : ""} onClick={() => { setMode("agent"); resetRun(); }}><BrainCircuit size={15} /> Agent 复盘</button>
+            <button type="button" className={mode === "query" ? "active" : ""} onClick={() => { setMode("query"); resetRun(); }}><Database size={15} /> 受控查询</button>
+          </div>
+          <h2>{mode === "agent" ? "经营复盘" : "提问分析"}</h2>
+          <p className="panel-intro">{mode === "agent" ? "由 Skill 规划任务，联合数据库与企业制度证据。" : "直接运行只读、可审计的结构化数据查询。"}</p>
           <form onSubmit={run}>
             <label htmlFor="question">业务问题</label>
             <textarea
@@ -379,6 +414,7 @@ export default function Workspace({
         </div>
 
         <section className="analysis-content">
+          {mode === "agent" && <AgentPanel response={agentResponse} running={running} />}
           <section className="workflow-card" aria-labelledby="workflow-heading">
             <div className="section-title-row">
               <div>
@@ -582,6 +618,47 @@ function makeRequestId() {
   }
 
   return `REQ-${date}-${suffix}`;
+}
+
+function AgentPanel({ response, running }: { response: AgentResponse | null; running: boolean }) {
+  const plan = response?.task_plan;
+  const report = response?.report;
+  return (
+    <section className="agent-card" aria-labelledby="agent-heading">
+      <div className="section-title-row">
+        <div>
+          <h2 id="agent-heading">Agent 执行面板</h2>
+          <p>{running ? "正在按计划收集数据与制度证据" : "保留可解释的任务边界、工具调用和证据链"}</p>
+        </div>
+        {response && <StatusPill status={response.status === "succeeded" ? "success" : response.status === "degraded" ? "warning" : "danger"}>{agentStatusLabel(response.status)}</StatusPill>}
+      </div>
+      {!response ? <EmptyState>提交一个复盘问题后，这里会显示 Agent 的执行状态</EmptyState> : (
+        <>
+          <div className="agent-summary-grid">
+            <div><span>Skill</span><strong>{skillLabel(response.skill_id)}</strong></div>
+            <div><span>上下文</span><strong className="mono">{response.context?.token_estimate ?? 0} / {response.context?.token_budget ?? 0} tokens</strong></div>
+            <div><span>工具调用</span><strong className="mono">{response.tool_calls.length} 次</strong></div>
+            <div><span>证据</span><strong className="mono">{(report?.data_evidence.length ?? 0) + (report?.document_evidence.length ?? 0)} 条</strong></div>
+          </div>
+          {plan && <div className="agent-section"><div className="agent-section-title"><ListChecks size={15} />任务计划</div><ol className="agent-task-list">{plan.subtasks.map((task) => <li key={task.id}><span className={`task-dot ${task.status}`} /> <span>{task.description}</span><code>{task.required_tools.join(" · ")}</code></li>)}</ol></div>}
+          <div className="agent-columns">
+            <div className="agent-section"><div className="agent-section-title"><Clock3 size={15} />工具时间线</div><ul className="agent-tool-list">{response.tool_calls.map((call, index) => <li key={`${call.tool_name}-${index}`}><strong>{call.tool_name}</strong><span>{call.status}</span><code>{call.duration_ms} ms</code></li>)}</ul></div>
+            <div className="agent-section"><div className="agent-section-title"><FileSearch size={15} />证据账本</div><ul className="plain-list">{(report?.data_evidence ?? []).map((item) => <li key={item}>数据 · {item}</li>)}{(report?.document_evidence ?? []).map((item) => <li key={item}>制度 · {item}</li>)}{!report?.data_evidence.length && !report?.document_evidence.length && <li>当前没有可引用证据</li>}</ul></div>
+          </div>
+          {report && <div className={`agent-report ${response.status === "degraded" ? "warning" : ""}`}><div className="agent-section-title"><FileOutput size={15} />复盘报告</div><p>{report.executive_summary}</p><ul className="plain-list">{report.findings.map((finding, index) => <li key={`${finding.statement}-${index}`}>{finding.statement}</li>)}</ul>{response.exported_report && <details><summary>查看 Markdown 导出</summary><pre>{response.exported_report}</pre></details>}</div>}
+          {response.limitations.length > 0 && <div className="agent-limitations"><ShieldAlert size={15} /><span>{response.limitations.join("；")}</span></div>}
+        </>
+      )}
+    </section>
+  );
+}
+
+function skillLabel(skill?: AgentResponse["skill_id"] | null) {
+  return ({ refund_diagnosis: "退款异常诊断", channel_comparison: "渠道对比", product_analysis: "商品分析", weekly_report: "经营周报" } as Record<string, string>)[skill ?? ""] ?? "等待路由";
+}
+
+function agentStatusLabel(status: AgentResponse["status"]) {
+  return ({ succeeded: "已完成", degraded: "部分完成", pending: "等待审批", refused: "已拒绝", failed: "失败", running: "执行中" } as Record<string, string>)[status] ?? status;
 }
 
 function clampRows(value: number, maximum: number) {

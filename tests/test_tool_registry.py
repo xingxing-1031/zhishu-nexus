@@ -1,5 +1,3 @@
-import time
-
 import pytest
 from pydantic import Field
 
@@ -71,6 +69,15 @@ def test_registry_records_failure_and_supports_idempotency() -> None:
     assert calls == 1
     assert first.record.input_hash == second.record.input_hash
 
+    with pytest.raises(ToolRegistryError, match="different input"):
+        registry.call(
+            "sql.query",
+            {"query": "select 2"},
+            access_context=_context(),
+            request_id="r2",
+            idempotency_key="k1",
+        )
+
 
 def test_registry_classifies_handler_failure() -> None:
     registry = ToolRegistry()
@@ -81,10 +88,10 @@ def test_registry_classifies_handler_failure() -> None:
 
 
 def test_registry_classifies_timeout_after_handler_returns() -> None:
-    registry = ToolRegistry()
+    ticks = iter((0.0, 0.01))
+    registry = ToolRegistry(clock=lambda: next(ticks))
 
     def slow(payload, context):
-        time.sleep(0.01)
         return {"value": payload.query}
 
     registry.register(ToolSpec(name="sql.query", description="query", input_model=QueryInput, timeout_seconds=0.001), slow)

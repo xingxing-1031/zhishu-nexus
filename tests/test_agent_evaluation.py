@@ -20,3 +20,4 @@ def test_agent_development_report_has_sample_level_records() -> None:
     assert len(report.records) == 5
     assert report.skill_route_accuracy >= 0.8
     assert all(record.planned_tools or record.status == "refused" for record in report.records)
+    assert report.evidence_completeness == 1.0

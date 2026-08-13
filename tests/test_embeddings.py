@@ -88,7 +88,7 @@ def test_corpus_embedding_preserves_source_and_model_metadata() -> None:
     assert embedded.corpus_id == "retail-knowledge-v1"
     assert embedded.embedding_model == "fake:embedding-v1"
     assert embedded.vector_dimension == 2
-    assert len(embedded.chunks) == 13
+    assert len(embedded.chunks) == 14
     assert embedded.chunks[0].chunk.source_id == "metric.sales_amount.v1"
     assert embedded.chunks[0].embedding == (0.0, float(len(embedded.chunks[0].chunk.content)))
 
@@ -98,7 +98,7 @@ def test_corpus_embedding_rejects_provider_count_mismatch() -> None:
         def embed(self, texts: Sequence[str]) -> list[list[float]]:
             return [[1.0, 0.0]]
 
-    with pytest.raises(ValueError, match="expected 13 embeddings"):
+    with pytest.raises(ValueError, match="expected 14 embeddings"):
         embed_knowledge_corpus(
             MissingVectorProvider(),
             DEFAULT_KNOWLEDGE_CORPUS,

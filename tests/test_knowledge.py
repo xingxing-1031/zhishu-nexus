@@ -49,6 +49,16 @@ def test_metric_catalog_returns_latest_version() -> None:
     assert catalog.get("sales_amount", version="v1").formula == v1.formula
 
 
+def test_refund_rate_metric_has_order_denominator_and_refund_numerator() -> None:
+    definition = DEFAULT_METRIC_CATALOG.get(AnalysisMetric.REFUND_RATE)
+
+    assert definition.source_tables == ("orders", "refunds")
+    assert "refunds.refund_id" in definition.formula
+    assert "orders.order_id" in definition.formula
+    assert definition.fixed_filters[0].value == "paid"
+    assert AnalysisDimension.CHANNEL in definition.supported_dimensions
+
+
 def test_metric_catalog_rejects_duplicate_metric_versions() -> None:
     definition = DEFAULT_METRIC_CATALOG.get("sales_amount")
 

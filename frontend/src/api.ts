@@ -1,5 +1,6 @@
 import type {
   AnalysisOutcome,
+  AgentStreamEvent,
   AuditEntry,
   MetricDefinition,
   Overview,
@@ -111,6 +112,48 @@ export async function streamAnalysis(
         .map((line) => line.slice(5).trim())
         .join("\n");
       if (data) onEvent(JSON.parse(data) as StreamEvent);
+    }
+    if (done) break;
+  }
+}
+
+export async function streamAgent(
+  payload: {
+    request_id: string;
+    conversation_id: string;
+    user_id: string;
+    question: string;
+    max_rows: number;
+    token_budget?: number;
+  },
+  onEvent: (event: AgentStreamEvent) => void,
+  signal?: AbortSignal,
+): Promise<void> {
+  const response = await fetch("/agent/stream", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "same-origin",
+    body: JSON.stringify(payload),
+    signal,
+  });
+  if (!response.ok) return parseError(response);
+  if (!response.body) throw new ApiError("浏览器未收到 Agent 流式响应。", 502);
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  while (true) {
+    const { done, value } = await reader.read();
+    buffer += decoder.decode(value, { stream: !done });
+    const blocks = buffer.split("\n\n");
+    buffer = blocks.pop() ?? "";
+    for (const block of blocks) {
+      const data = block
+        .split("\n")
+        .filter((line) => line.startsWith("data:"))
+        .map((line) => line.slice(5).trim())
+        .join("\n");
+      if (data) onEvent(JSON.parse(data) as AgentStreamEvent);
     }
     if (done) break;
   }

@@ -4,10 +4,10 @@
 
 ## 当前状态
 
-- 当前计划任务：项目一 v0.1、W7 演示加固和一次性 frozen holdout 验收均已完成，进入简历投递与面试复盘阶段
+- 当前计划任务：项目一 v0.1、W7 演示加固和 Agent Runtime 升级均已完成，进入实习投递与面试复盘阶段
 - 公网演示：`http://106.52.176.63/` 已部署固定分析员/管理员演示账号、130 条可复现订单和浏览器本地会话
-- 已实现：本地 `qwen3:4b` 与远程 Qwen 端到端分析、演示级权限与人工审批、有限重试、请求幂等、可信结果降级、确定性故障注入和结构化执行 Trace
-- 自动化验证：最新 GitHub Actions 的 Python 3.11/3.12、前端构建、Docker 镜像与空卷 PostgreSQL smoke 均通过；评测保存 120 次 development 工作流记录和 20 条一次性 frozen holdout 记录
+- 已实现：本地 `qwen3:4b` 与远程 Qwen 端到端分析、4 个业务 Skill、服务端会话上下文、Tool Registry、项目二 RAG Evidence API、MCP Markdown 导出、演示级权限与人工审批、有限重试、请求幂等、可信结果降级和结构化执行 Trace
+- 自动化验证：项目一 Agent/API 聚焦回归 `47/47`、项目二全量 pytest `207` 条通过、前端 TypeScript/Vite production build 通过；确定性 Agent development 评测 5 条样本的 Skill 路由、拒答、工具白名单和最低证据完整性均为 `1.0`
 - 当前边界：域名 HTTPS 受 ICP 备案状态限制；服务端跨设备会话、独立异地备份、分布式限流和高可用不在当前单 VPS 求职演示范围内
 
 当前为 v0.1 演示级权限体系：公网提供固定分析员和管理员账号，身份由签名 Cookie 与服务端角色配置决定，并在 SQL AST 与确定性安全校验层限制允许访问的表、字段及敏感字段。浏览器按账号隔离保存最近 8 个会话、每会话最近 8 轮；这不是正式注册系统或服务端多租户历史。关键词启发式判断仅用于前置拦截，不作为最终安全边界。
@@ -102,6 +102,23 @@
 
 ## 项目范围
 
+### Agent Runtime 主链路
+
+```text
+用户问题
+-> Skill Router
+-> TaskPlan（有界子任务与完成条件）
+-> Context Builder（会话、约束、证据、Token 预算）
+-> Tool Registry（Schema、角色、风险、超时、幂等、Trace）
+-> SQL/RAG 联合取证
+-> Report Composer
+-> MCP Markdown 导出
+```
+
+主演示问题：`最近 30 天指定区域的退款率为什么变化？结合渠道、商品和企业售后制度给出证据充分的经营复盘报告。`
+
+该评测数字是规则层 deterministic fixture 结果，不是远程模型端到端准确率；真实 Qwen、PostgreSQL 和项目二服务实测后才允许写入简历的延迟、成功率或提升幅度。
+
 目标工作流：
 
 ```text
@@ -115,7 +132,7 @@
 -> 输出结论、SQL、指标口径和数据来源
 ```
 
-当前仓库已实现自然语言到安全 SQL、真实查询、结果解释、权限控制和可恢复审批链路。范围与非目标见 [PROJECT_SCOPE.md](docs/PROJECT_SCOPE.md)，后续工程任务见 [UPGRADE_BACKLOG.md](docs/UPGRADE_BACKLOG.md)。
+当前仓库已实现自然语言到安全 SQL、SQL/RAG 联合分析、Skill/上下文/工具治理、真实查询、结果解释、权限控制和可恢复审批链路。范围与非目标见 [PROJECT_SCOPE.md](docs/PROJECT_SCOPE.md)，面试讲解见 [INTERVIEW_GUIDE_OPERATIONS_AGENT.md](docs/INTERVIEW_GUIDE_OPERATIONS_AGENT.md)。
 
 完整组件和安全边界见 [系统架构](docs/ARCHITECTURE.md)。
 

@@ -149,7 +149,10 @@ def validate_sql_against_evidence(
     if plan.time_range is not None:
         time_column = (
             "refunds.created_at"
-            if all("refunds" in item.source_tables for item in definitions)
+            if all(
+                item.source_tables == ("refunds",)
+                for item in definitions
+            )
             else "orders.created_at"
         )
         reasons.extend(_check_time_range(statement, aliases, time_column))
@@ -343,6 +346,12 @@ def _metric_formula_matches(
         return _has_sum(statement, aliases, "refunds.refund_amount")
     if metric is AnalysisMetric.REFUND_COUNT:
         return _has_distinct_count(statement, aliases, "refunds.refund_id")
+    if metric is AnalysisMetric.REFUND_RATE:
+        return (
+            statement.find(exp.Div) is not None
+            and _has_distinct_count(statement, aliases, "orders.order_id")
+            and "refunds.refund_id" in _expression_columns(statement, aliases)
+        )
     if metric is AnalysisMetric.AVERAGE_ORDER_VALUE:
         return (
             statement.find(exp.Div) is not None

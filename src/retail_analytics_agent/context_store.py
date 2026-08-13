@@ -148,39 +148,59 @@ class PostgresConversationStore:
 
     def create_or_get(self, conversation_id: str, user_id: str) -> ConversationRecord:
         with self._connection() as connection:
-            row = connection.execute(
+            self._upsert_conversation(connection, conversation_id, user_id)
+            return self._read_record(connection, conversation_id, user_id)
+
+    def _upsert_conversation(self, connection, conversation_id: str, user_id: str) -> None:
+        connection.execute(
                 """
                 INSERT INTO agent_conversations (conversation_id, user_id)
                 VALUES (%s, %s)
                 ON CONFLICT (conversation_id, user_id) DO UPDATE
                     SET updated_at = agent_conversations.updated_at
-                RETURNING conversation_id, user_id, summary,
-                    confirmed_constraints, updated_at
                 """,
                 (conversation_id, user_id),
-            ).fetchone()
-            if row is None:
-                raise ContextStoreError("conversation upsert returned no row")
-            turns = connection.execute(
-                """
-                SELECT request_id, role, content, evidence_ids,
-                    confirmed_constraints, created_at
-                FROM agent_conversation_turns
-                WHERE conversation_id = %s AND user_id = %s
-                ORDER BY created_at DESC LIMIT 100
-                """,
-                (conversation_id, user_id),
-            ).fetchall()
+            )
+
+    def _read_record(self, connection, conversation_id: str, user_id: str) -> ConversationRecord:
+        row = connection.execute(
+            """
+            SELECT conversation_id, user_id, summary,
+                confirmed_constraints, updated_at
+            FROM agent_conversations
+            WHERE conversation_id = %s AND user_id = %s
+            """,
+            (conversation_id, user_id),
+        ).fetchone()
+        if row is None:
+            raise ContextStoreError("conversation was not found")
+        turns = connection.execute(
+            """
+            SELECT request_id, role, content, evidence_ids,
+                confirmed_constraints, created_at
+            FROM agent_conversation_turns
+            WHERE conversation_id = %s AND user_id = %s
+            ORDER BY created_at DESC LIMIT 100
+            """,
+            (conversation_id, user_id),
+        ).fetchall()
         return ConversationRecord(
             **row,
             turns=tuple(ConversationTurn.model_validate(item) for item in reversed(turns)),
         )
 
     def get(self, conversation_id: str, user_id: str) -> ConversationRecord | None:
-        try:
-            return self.create_or_get(conversation_id, user_id)
-        except Exception as exc:
-            raise ContextStoreError("conversation lookup failed") from exc
+        with self._connection() as connection:
+            row = connection.execute(
+                """
+                SELECT 1 FROM agent_conversations
+                WHERE conversation_id = %s AND user_id = %s
+                """,
+                (conversation_id, user_id),
+            ).fetchone()
+            if row is None:
+                return None
+            return self._read_record(connection, conversation_id, user_id)
 
     def append_turn(
         self,
@@ -189,7 +209,7 @@ class PostgresConversationStore:
         turn: ConversationTurn,
     ) -> ConversationRecord:
         with self._connection() as connection:
-            self.create_or_get(conversation_id, user_id)
+            self._upsert_conversation(connection, conversation_id, user_id)
             connection.execute(
                 """
                 INSERT INTO agent_conversation_turns
@@ -204,7 +224,7 @@ class PostgresConversationStore:
                     list(turn.confirmed_constraints),
                 ),
             )
-        return self.create_or_get(conversation_id, user_id)
+            return self._read_record(connection, conversation_id, user_id)
 
     def save_summary(
         self,
@@ -215,7 +235,7 @@ class PostgresConversationStore:
         confirmed_constraints: tuple[str, ...] = (),
     ) -> ConversationRecord:
         with self._connection() as connection:
-            self.create_or_get(conversation_id, user_id)
+            self._upsert_conversation(connection, conversation_id, user_id)
             connection.execute(
                 """
                 UPDATE agent_conversations
@@ -226,4 +246,4 @@ class PostgresConversationStore:
                 """,
                 (summary, list(confirmed_constraints), conversation_id, user_id),
             )
-        return self.create_or_get(conversation_id, user_id)
+            return self._read_record(connection, conversation_id, user_id)

@@ -145,12 +145,18 @@ def test_ollama_planner_returns_validated_analysis_plan() -> None:
                         "aliases": ["退款金额"],
                         "supported_dimensions": ["refund_status", "day"],
                     },
-                    {
-                        "metric": "refund_count",
-                        "display_name": "退款笔数",
-                        "aliases": ["退款笔数", "退款单数"],
-                        "supported_dimensions": ["refund_status", "day"],
-                    },
+                        {
+                            "metric": "refund_count",
+                            "display_name": "退款笔数",
+                            "aliases": ["退款笔数", "退款单数"],
+                            "supported_dimensions": ["refund_status", "day"],
+                        },
+                        {
+                            "metric": "refund_rate",
+                            "display_name": "退款率",
+                            "aliases": ["退款率", "退货率", "退款占比", "refund rate"],
+                            "supported_dimensions": ["channel", "day"],
+                        },
                     {
                         "metric": "average_order_value",
                         "display_name": "平均订单金额",
@@ -175,7 +181,7 @@ def test_ollama_planner_returns_validated_analysis_plan() -> None:
             "planning_rules": [
                 "Only add a dimension for an explicit grouping, comparison, or breakdown request.",
                 "A status used only as a condition must not become a dimension.",
-                "Paid-order filtering for sales_amount, order_count, units_sold, and average_order_value is supplied by fixed metric evidence; do not duplicate order_status=paid in filters.",
+                    "Paid-order filtering for sales_amount, order_count, units_sold, refund_rate, and average_order_value is supplied by fixed metric evidence; do not duplicate order_status=paid in filters.",
                 "Set limit to null unless the question explicitly requests a result count; the application will then apply default_limit.",
             ],
         }

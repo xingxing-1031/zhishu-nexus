@@ -6,7 +6,10 @@ from retail_analytics_agent.mcp_client import McpClientError, McpToolClient
 
 
 def _client() -> McpToolClient:
-    return McpToolClient((sys.executable, "mcp_server/operations_export_server.py"))
+    return McpToolClient(
+        sys.executable,
+        ("mcp_server/operations_export_server.py",),
+    )
 
 
 def test_mcp_client_discovers_and_calls_export_tool() -> None:
@@ -17,8 +20,9 @@ def test_mcp_client_discovers_and_calls_export_tool() -> None:
         "findings": [{"statement": "退款率上升"}],
         "data_evidence": ["query:1"], "document_evidence": ["policy:1"],
     }})
-    assert "退款率上升" in result["markdown"]
-    assert "query:1" in result["markdown"]
+    content = result.get("result", result.get("content", ""))
+    assert "退款率上升" in content
+    assert "query:1" in content
 
 
 def test_mcp_client_rejects_unknown_tool() -> None:
