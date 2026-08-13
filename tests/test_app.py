@@ -129,8 +129,41 @@ def test_run_agent_returns_structured_response_and_enforces_identity() -> None:
 
     assert response.status_code == 200
     assert response.json()["status"] == "succeeded"
-    assert len(service.run_calls) == 1
     assert forbidden.status_code == 403
+    assert len(service.run_calls) == 1
+
+
+def test_internal_agent_requires_token_and_maps_governed_response() -> None:
+    service = FakeAgentService()
+    settings = _agent_settings().model_copy(
+        update={"internal_service_token": SecretStr("a" * 64)}
+    )
+    app.dependency_overrides[get_agent_service] = lambda: service
+    app.dependency_overrides[get_settings] = lambda: settings
+    payload = {
+        "request_id": "INTERNAL-AGENT-001",
+        "session_id": "SESSION-001",
+        "user_id": "employee-1",
+        "role": "employee",
+        "departments": ["finance"],
+        "question": "分析最近30天退款率",
+    }
+
+    try:
+        unauthorized = client.post("/internal/agent", json=payload)
+        response = client.post(
+            "/internal/agent",
+            json=payload,
+            headers={"X-Internal-Token": "a" * 64},
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert unauthorized.status_code == 401
+    assert response.status_code == 200
+    assert response.json()["status"] == "succeeded"
+    assert service.run_calls[0][1].user_id == "employee-1"
+    assert service.run_calls[0][1].role is AccessRole.ANALYST
     assert len(service.run_calls) == 1
 
 

@@ -1,4 +1,5 @@
 import asyncio
+import hmac
 import logging
 import sys
 from collections.abc import Iterator
@@ -155,6 +156,28 @@ async def record_request(request: Request, call_next):
 class LoginRequest(BaseModel):
     username: str = Field(min_length=1, max_length=100)
     password: str = Field(min_length=1, max_length=200)
+
+
+class InternalAgentRequest(BaseModel):
+    request_id: str = Field(min_length=1, max_length=128)
+    session_id: str | None = Field(default=None, max_length=128)
+    user_id: str = Field(min_length=1, max_length=128)
+    role: str = Field(min_length=1, max_length=40)
+    departments: list[str] = Field(default_factory=list, max_length=20)
+    question: str = Field(min_length=1, max_length=4000)
+    as_of: str | None = None
+
+
+class InternalAgentResult(BaseModel):
+    status: str
+    skill_id: str | None = None
+    answer: str = ""
+    rows: list[dict] = Field(default_factory=list)
+    chart: dict | None = None
+    report: dict | None = None
+    tool_calls: list[dict] = Field(default_factory=list)
+    evidence_ids: list[str] = Field(default_factory=list)
+    limitations: list[str] = Field(default_factory=list)
 
 
 def _enforce_public_demo_request(
@@ -603,6 +626,65 @@ def run_agent(
         raise HTTPException(status_code=403, detail="当前身份无权执行该任务。") from exc
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=public_error_message(exc)) from exc
+
+
+@app.post(
+    "/internal/agent",
+    response_model=InternalAgentResult,
+    include_in_schema=False,
+)
+def run_internal_agent(
+    payload: InternalAgentRequest,
+    request: Request,
+    service: Annotated[EnterpriseAgentService, Depends(get_agent_service)],
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> InternalAgentResult:
+    configured = settings.internal_service_token
+    supplied = request.headers.get("X-Internal-Token", "")
+    if configured is None or not hmac.compare_digest(
+        supplied, configured.get_secret_value()
+    ):
+        raise HTTPException(status_code=401, detail="内部服务认证失败。")
+    role = (
+        AccessRole.ADMIN
+        if payload.role in {"department_admin", "knowledge_admin", "admin"}
+        else AccessRole.ANALYST
+    )
+    response = service.run(
+        AgentRequest(
+            request_id=payload.request_id,
+            conversation_id=payload.session_id or payload.request_id,
+            user_id=payload.user_id,
+            question=payload.question,
+            max_rows=settings.public_demo_max_rows,
+        ),
+        AccessContext(user_id=payload.user_id, role=role),
+    )
+    analysis = response.analysis
+    rows = list(getattr(analysis, "rows", []) or [])
+    chart_spec = getattr(analysis, "chart_spec", None)
+    chart = chart_spec.model_dump(mode="json") if chart_spec is not None else None
+    report = response.report.model_dump(mode="json") if response.report else None
+    answer = (
+        response.report.executive_summary
+        if response.report is not None
+        else getattr(analysis, "answer", "")
+    )
+    evidence_ids: list[str] = []
+    if response.report is not None:
+        evidence_ids.extend(response.report.data_evidence)
+        evidence_ids.extend(response.report.document_evidence)
+    return InternalAgentResult(
+        status=response.status.value,
+        skill_id=response.skill_id.value if response.skill_id else None,
+        answer=answer,
+        rows=rows,
+        chart=chart,
+        report=report,
+        tool_calls=[item.model_dump(mode="json") for item in response.tool_calls],
+        evidence_ids=list(dict.fromkeys(evidence_ids)),
+        limitations=list(response.limitations),
+    )
 
 
 @app.post("/agent/stream")

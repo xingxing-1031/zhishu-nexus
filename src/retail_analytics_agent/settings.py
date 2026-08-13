@@ -50,6 +50,7 @@ class Settings(BaseSettings):
     auth_cookie_secure: bool = False
     knowledge_service_url: str | None = None
     knowledge_service_token: SecretStr | None = None
+    internal_service_token: SecretStr | None = None
     knowledge_departments: str = "admin"
     agent_context_token_budget: int = Field(default=4000, ge=256, le=32000)
     agent_max_steps: int = Field(default=8, ge=1, le=30)

@@ -89,6 +89,7 @@ if [[ ! "$INTERNAL_SERVICE_TOKEN" =~ ^[0-9a-fA-F]{64}$ ]]; then
 fi
 set_env_value KNOWLEDGE_SERVICE_URL http://host.docker.internal:8010
 set_env_value KNOWLEDGE_SERVICE_TOKEN "$INTERNAL_SERVICE_TOKEN"
+set_env_value INTERNAL_SERVICE_TOKEN "$INTERNAL_SERVICE_TOKEN"
 set_env_value KNOWLEDGE_DEPARTMENTS admin
 set_env_value AGENT_CONTEXT_TOKEN_BUDGET 4000
 set_env_value AGENT_MAX_STEPS 8
