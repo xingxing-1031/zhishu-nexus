@@ -94,6 +94,7 @@ set_env_value AGENT_CONTEXT_TOKEN_BUDGET 4000
 set_env_value AGENT_MAX_STEPS 8
 set_env_value MCP_EXPORT_ENABLED true
 set_env_value MCP_EXPORT_TIMEOUT_SECONDS 15
+set_env_value PIP_INDEX_URL https://mirrors.cloud.tencent.com/pypi/simple
 unset INTERNAL_SERVICE_TOKEN
 
 docker compose --env-file "$ENV_FILE" -f compose.vps.yaml --profile tools run --rm --build migrate

@@ -38,6 +38,16 @@ def test_image_contains_database_migrations_for_release_command() -> None:
     assert "COPY db ./db" in dockerfile
 
 
+def test_vps_image_caches_dependencies_before_copying_application_source() -> None:
+    dockerfile = (PROJECT_ROOT / "Dockerfile").read_text(encoding="utf-8")
+    compose = (PROJECT_ROOT / "compose.vps.yaml").read_text(encoding="utf-8")
+
+    dependency_install = dockerfile.index("pip install --no-cache-dir .")
+    source_copy = dockerfile.index("COPY src ./src")
+    assert dependency_install < source_copy
+    assert "PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.org/simple}" in compose
+
+
 def test_vps_compose_keeps_database_private_and_uses_caddy() -> None:
     compose = (PROJECT_ROOT / "compose.vps.yaml").read_text(encoding="utf-8")
     caddyfile = (PROJECT_ROOT / "Caddyfile").read_text(encoding="utf-8")

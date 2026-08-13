@@ -26,6 +26,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.org/simple}
     environment:
       POSTGRES_DB: ${POSTGRES_DB:?set POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER}
@@ -44,6 +46,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.org/simple}
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB:?set POSTGRES_DB}
