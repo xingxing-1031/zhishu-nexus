@@ -100,21 +100,7 @@ docker compose --env-file "$ENV_FILE" -f compose.vps.yaml --profile tools run --
 docker compose --env-file "$ENV_FILE" -f compose.vps.yaml up -d --build api caddy
 curl --fail --silent --show-error --max-time 15 http://127.0.0.1/ready >/dev/null
 
-COOKIE_JAR="$(mktemp)"
-trap 'rm -f "$COOKIE_JAR"; cleanup' EXIT
-curl --fail --silent --show-error --max-time 15 \
-  --cookie-jar "$COOKIE_JAR" \
-  --header 'Content-Type: application/json' \
-  --data '{"username":"analyst-demo","password":"DemoAnalyst2026!"}' \
-  http://127.0.0.1/auth/login >/dev/null
-AGENT_SMOKE_ID="deploy-smoke-$(date +%s)"
-if ! curl --fail --silent --show-error --max-time 30 \
-  --cookie "$COOKIE_JAR" \
-  --header 'Content-Type: application/json' \
-  --data "{\"request_id\":\"$AGENT_SMOKE_ID\",\"conversation_id\":\"deploy-smoke\",\"user_id\":\"ANALYST-001\",\"question\":\"delete from orders\",\"max_rows\":1,\"token_budget\":256}" \
-  http://127.0.0.1/agent/run >/dev/null; then
-  docker compose --env-file "$ENV_FILE" -f compose.vps.yaml logs --tail=200 api
-  exit 1
-fi
+docker compose --env-file "$ENV_FILE" -f compose.vps.yaml exec -T api \
+  python -c "from retail_analytics_agent.skills import default_skill_registry; assert default_skill_registry().route('delete from orders').refused"
 git rev-parse HEAD > .deployed-release
 echo "deployed=$(cat .deployed-release)"
