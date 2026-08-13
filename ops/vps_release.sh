@@ -9,7 +9,15 @@ fi
 PROJECT_DIR="${PROJECT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 ENV_FILE="${ENV_FILE:-$PROJECT_DIR/.env.vps}"
 REFERENCE="$1"
+SERVICE_TOKEN_FILE="${SERVICE_TOKEN_FILE:-}"
 cd "$PROJECT_DIR"
+
+cleanup() {
+  if [[ -n "$SERVICE_TOKEN_FILE" ]]; then
+    rm -f "$SERVICE_TOKEN_FILE"
+  fi
+}
+trap cleanup EXIT
 
 DIRTY_STATUS="$(git status --porcelain --untracked-files=all | grep -vE '^\?\? \.deployed-release$' || true)"
 if [[ -n "$DIRTY_STATUS" ]]; then
@@ -61,6 +69,23 @@ set_env_value AUTH_ADMIN_PASSWORD_HASH "$(hash_demo_password 'DemoAdmin2026!')"
 if ! grep -q '^AUTH_SESSION_SECRET=.' "$ENV_FILE"; then
   set_env_value AUTH_SESSION_SECRET "$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')"
 fi
+if [[ ! -r "$SERVICE_TOKEN_FILE" ]]; then
+  echo "missing internal service token file" >&2
+  exit 1
+fi
+INTERNAL_SERVICE_TOKEN="$(<"$SERVICE_TOKEN_FILE")"
+if [[ -z "$INTERNAL_SERVICE_TOKEN" ]]; then
+  echo "internal service token must not be empty" >&2
+  exit 1
+fi
+set_env_value KNOWLEDGE_SERVICE_URL http://host.docker.internal:8010
+set_env_value KNOWLEDGE_SERVICE_TOKEN "$INTERNAL_SERVICE_TOKEN"
+set_env_value KNOWLEDGE_DEPARTMENTS admin
+set_env_value AGENT_CONTEXT_TOKEN_BUDGET 4000
+set_env_value AGENT_MAX_STEPS 8
+set_env_value MCP_EXPORT_ENABLED true
+set_env_value MCP_EXPORT_TIMEOUT_SECONDS 15
+unset INTERNAL_SERVICE_TOKEN
 
 docker compose --env-file "$ENV_FILE" -f compose.vps.yaml --profile tools run --rm --build migrate
 docker compose --env-file "$ENV_FILE" -f compose.vps.yaml up -d --build api caddy

@@ -42,10 +42,17 @@ jobs:
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_USER: ${{ secrets.VPS_USER }}
           RELEASE_REF: ${{ inputs.ref || github.sha }}
+          INTERNAL_SERVICE_TOKEN: ${{ secrets.INTERNAL_SERVICE_TOKEN }}
         run: |
           set -euo pipefail
+          token_file="$(mktemp)"
+          trap 'rm -f "$token_file"' EXIT
+          printf '%s' "$INTERNAL_SERVICE_TOKEN" > "$token_file"
+          chmod 600 "$token_file"
           scp -i ~/.ssh/vps_key ops/vps_release.sh \
             "$VPS_USER@$VPS_HOST:/tmp/retail-vps-release.sh"
+          scp -i ~/.ssh/vps_key "$token_file" \
+            "$VPS_USER@$VPS_HOST:/tmp/retail-internal-service-token"
           ssh -i ~/.ssh/vps_key \
             "$VPS_USER@$VPS_HOST" \
-            "PROJECT_DIR=/home/ubuntu/retail-analytics-agent bash /tmp/retail-vps-release.sh '$RELEASE_REF'"
+            "PROJECT_DIR=/home/ubuntu/retail-analytics-agent SERVICE_TOKEN_FILE=/tmp/retail-internal-service-token bash /tmp/retail-vps-release.sh '$RELEASE_REF'"
