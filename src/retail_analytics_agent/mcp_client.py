@@ -43,7 +43,10 @@ class McpToolClient:
         try:
             async with stdio_client(parameters) as (read, write):
                 async with ClientSession(read, write) as session:
-                    await session.initialize()
+                    await asyncio.wait_for(
+                        session.initialize(),
+                        timeout=self.timeout_seconds,
+                    )
                     discovered = await asyncio.wait_for(
                         session.list_tools(),
                         timeout=self.timeout_seconds,
