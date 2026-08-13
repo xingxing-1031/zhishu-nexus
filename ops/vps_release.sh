@@ -82,9 +82,9 @@ if [[ ! -r "$SERVICE_TOKEN_FILE" ]]; then
   echo "missing internal service token file" >&2
   exit 1
 fi
-INTERNAL_SERVICE_TOKEN="$(<"$SERVICE_TOKEN_FILE")"
-if [[ -z "$INTERNAL_SERVICE_TOKEN" ]]; then
-  echo "internal service token must not be empty" >&2
+INTERNAL_SERVICE_TOKEN="$(sed '1s/^\xEF\xBB\xBF//' "$SERVICE_TOKEN_FILE" | tr -d '\r\n')"
+if [[ ! "$INTERNAL_SERVICE_TOKEN" =~ ^[0-9a-fA-F]{64}$ ]]; then
+  echo "internal service token must be 64 hexadecimal characters" >&2
   exit 1
 fi
 set_env_value KNOWLEDGE_SERVICE_URL http://host.docker.internal:8010

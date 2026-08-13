@@ -56,7 +56,10 @@ jobs:
           set -euo pipefail
           token_file="$(mktemp)"
           trap 'rm -f "$token_file"' EXIT
-          printf '%s' "$INTERNAL_SERVICE_TOKEN" > "$token_file"
+          printf '%s' "$INTERNAL_SERVICE_TOKEN" \
+            | sed '1s/^\xEF\xBB\xBF//' \
+            | tr -d '\r\n' > "$token_file"
+          grep -Eq '^[0-9a-fA-F]{64}$' "$token_file"
           chmod 600 "$token_file"
           release_sha="$(tr -d '\r\n' < release.sha)"
           scp -i ~/.ssh/vps_key ops/vps_release.sh \
