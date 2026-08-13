@@ -8,7 +8,7 @@ from typing import Any, Callable, Mapping
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from retail_analytics_agent.agent_models import ToolCallRecord, ToolRisk, ToolResult
+from retail_analytics_agent.agent_models import ToolCallRecord, ToolResult, ToolRisk
 from retail_analytics_agent.models import AccessContext, AccessRole
 
 
@@ -25,7 +25,9 @@ class ToolTimeoutError(ToolRegistryError):
 
 
 class ToolInput(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    # Generic adapters may accept a small structured envelope; concrete tools
+    # should provide a stricter input_model when they need field validation.
+    model_config = ConfigDict(extra="allow")
 
 
 class ToolSpec(BaseModel):
@@ -135,8 +137,9 @@ class ToolRegistry:
                 record,
             )
 
-        duration_ms = int((monotonic() - started) * 1000)
-        if duration_ms > spec.timeout_seconds * 1000:
+        elapsed_seconds = monotonic() - started
+        duration_ms = int(elapsed_seconds * 1000)
+        if elapsed_seconds > spec.timeout_seconds:
             record = ToolCallRecord(
                 request_id=request_id, conversation_id=conversation_id,
                 tool_name=name, input_hash=input_hash, status="timeout",
