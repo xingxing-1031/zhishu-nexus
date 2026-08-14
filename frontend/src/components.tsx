@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import type { ReactNode } from "react";
 import type { Role, SessionInfo } from "./types";
+import { BrandLockup, BrandMark, BRAND } from "./brand";
 
 export type Page = "workspace" | "audit" | "metrics";
 export type VisualStatus =
@@ -35,8 +36,7 @@ export function Header({
     <>
       <aside className="app-sidebar" aria-label="主导航">
         <button className="sidebar-brand" type="button" onClick={() => onPage("workspace")}>
-          <span className="logo-mark">析</span>
-          <span><strong>企析</strong><small>企业专业智能助理</small></span>
+          <BrandLockup />
         </button>
         <div className="sidebar-context"><span className="sidebar-context-dot" />{session.public_demo_mode ? "公网演示环境" : "受控访问环境"}</div>
         <nav className="sidebar-nav" aria-label="主要页面">
@@ -55,8 +55,8 @@ export function Header({
         </div>
       </aside>
       <header className="app-header">
-        <div className="mobile-brand"><span className="logo-mark">析</span><strong>企析</strong></div>
-        <div className="header-title"><span>{page === "workspace" ? "智能工作台" : page === "audit" ? "审计记录" : "指标口径"}</span><small>企业知识与经营分析</small></div>
+        <div className="mobile-brand"><BrandMark decorative /><strong>{BRAND.chineseName}</strong></div>
+        <div className="header-title"><span>{page === "workspace" ? BRAND.workspaceName : page === "audit" ? "审计记录" : "指标口径"}</span><small>企业知识、经营数据与受控工具</small></div>
         <div className="header-status">
           <span className={`service-dot ${online ? "online" : "offline"}`} />
           <span>{online ? "服务在线" : "服务未就绪"}</span>

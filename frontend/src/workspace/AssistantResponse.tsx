@@ -12,6 +12,7 @@ import { localizeAnswer } from "../localization";
 import type { AnalysisOutcome, AnalysisResult, ResultDisplayMode } from "../types";
 import AgentProgress from "./AgentProgress";
 import ResultTable from "./ResultTable";
+import { BrandMark, BRAND } from "../brand";
 
 const ResultChart = lazy(() => import("../ResultChart"));
 
@@ -46,8 +47,8 @@ export default function AssistantResponse({
     && (resultDisplay !== "auto" || !analysis?.chart_spec);
 
   return (
-    <article className="assistant-message" aria-label="企析回答">
-      <div className="assistant-identity"><span className="assistant-mark">析</span><div><strong>企析</strong><small>{modeLabel(response?.agent_mode)}</small></div></div>
+    <article className="assistant-message" aria-label="知枢 AI 回答">
+      <div className="assistant-identity"><BrandMark decorative className="assistant-mark" /><div><strong>{BRAND.assistantName}</strong><small>{modeLabel(response?.agent_mode)}</small></div></div>
       <div className="assistant-content">
         <AgentProgress view={view} onOpen={onOpenExecution} />
 

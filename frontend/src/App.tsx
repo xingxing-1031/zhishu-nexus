@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api, ApiError } from "./api";
 import { AuditPage, MetricsPage } from "./AdminPages";
 import { Header, LoadingBlock, type Page } from "./components";
+import { BrandMark, BRAND } from "./brand";
 import LoginPage from "./LoginPage";
 import type { Overview, SessionInfo } from "./types";
 import Workspace from "./Workspace";
@@ -67,7 +68,7 @@ export default function App() {
   }
 
   if (loading) {
-    return <div className="app-loading"><span className="logo-mark large">析</span><LoadingBlock text="正在连接企析服务" /></div>;
+    return <div className="app-loading"><BrandMark size="large" /><LoadingBlock text={`正在连接${BRAND.chineseName}服务`} /></div>;
   }
   if (needsLogin || session === null) {
     return <LoginPage onLogin={(activeSession) => { setSession(activeSession); setNeedsLogin(false); void bootstrap(); }} />;

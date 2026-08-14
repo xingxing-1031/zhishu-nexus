@@ -1,6 +1,7 @@
 import { LockKeyhole, UserRound } from "lucide-react";
 import { FormEvent, useState } from "react";
 import { api } from "./api";
+import { BrandMark, BRAND } from "./brand";
 import type { SessionInfo } from "./types";
 
 const demoAccounts = [
@@ -18,7 +19,7 @@ const demoAccounts = [
   },
 ] as const;
 
-const TRUST_POINTS = ["只读执行", "服务端权限", "版本化口径"];
+const TRUST_POINTS = ["自然语言对话", "知识检索", "经营分析", "受控工具调用"];
 
 export default function LoginPage({ onLogin }: { onLogin: (session: SessionInfo) => void }) {
   const [username, setUsername] = useState("");
@@ -44,11 +45,11 @@ export default function LoginPage({ onLogin }: { onLogin: (session: SessionInfo)
       <form className="login-card" onSubmit={submit}>
         <div className="login-brand-panel">
           <div className="login-brand">
-            <span className="logo-mark large">析</span>
-            <h1>企析</h1>
+            <BrandMark size="large" />
+            <h1>{BRAND.productName}</h1>
           </div>
-          <p className="login-hero">你的企业专业智能助理</p>
-          <p className="login-tagline">擅长业务数据分析与企业知识，也能处理一般问题</p>
+          <p className="login-hero">把企业问题交给知枢</p>
+          <p className="login-tagline">{BRAND.positioning}。知枢 Nexus 会根据问题自动选择合适的知识、数据和工具，并保留可核验的依据与执行过程。</p>
           <ul className="login-points">
             {TRUST_POINTS.map((point) => (
               <li key={point}>{point}</li>
@@ -76,7 +77,7 @@ export default function LoginPage({ onLogin }: { onLogin: (session: SessionInfo)
         </div>
 
         <div className="login-form-area">
-          <p className="login-subtitle">登录后进入受控企业智能工作台</p>
+          <p className="login-subtitle">登录后进入受控的{BRAND.workspaceSubtitle}</p>
           <label htmlFor="username">用户名</label>
           <div className="input-with-icon">
             <UserRound size={16} />
@@ -104,7 +105,7 @@ export default function LoginPage({ onLogin }: { onLogin: (session: SessionInfo)
           </div>
           {error && <p className="form-error">{error}</p>}
           <button className="primary-button login-submit" type="submit" disabled={submitting}>
-            {submitting ? "正在登录" : "登录"}
+            {submitting ? "正在进入" : "进入知枢工作台"}
           </button>
           <div className="login-notice">
             <span className="service-dot online" />

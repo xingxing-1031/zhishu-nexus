@@ -10,6 +10,7 @@ import { auditSummary, type Conversation } from "../conversations";
 import { roleLabel, type Page } from "../components";
 import type { SessionInfo } from "../types";
 import type { ConversationSyncState } from "../useConversationSync";
+import { BrandLockup } from "../brand";
 
 export default function ConversationRail({
   session,
@@ -46,8 +47,7 @@ export default function ConversationRail({
       <aside className={`conversation-rail ${open ? "open" : ""}`} aria-label="会话导航">
         <div className="rail-brand-row">
           <button className="rail-brand" type="button" onClick={() => onPage("workspace")}>
-            <span className="logo-mark">析</span>
-            <span><strong>企析</strong><small>企业专业智能助理</small></span>
+            <BrandLockup />
           </button>
           <button className="rail-close" type="button" onClick={onClose} aria-label="关闭会话导航" title="关闭导航">
             <PanelLeftClose size={18} />

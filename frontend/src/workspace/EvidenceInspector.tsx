@@ -38,7 +38,7 @@ export default function EvidenceInspector({
       {open && <button className="inspector-scrim" type="button" onClick={onClose} aria-label="关闭证据面板" />}
       <aside className={`evidence-inspector ${open ? "open" : ""}`} aria-label="证据与执行详情">
         <header className="inspector-header">
-          <div><strong>任务详情</strong><small>{view?.requestId ?? "选择一条企析回答"}</small></div>
+          <div><strong>任务详情</strong><small>{view?.requestId ?? "选择一条知枢回答"}</small></div>
           <button type="button" onClick={onClose} aria-label="关闭证据面板" title="关闭"><X size={18} /></button>
         </header>
         <div className="inspector-tabs" role="tablist" aria-label="任务详情分类">
@@ -47,7 +47,7 @@ export default function EvidenceInspector({
           <button className={tab === "audit" ? "active" : ""} type="button" role="tab" aria-selected={tab === "audit"} onClick={() => onTab("audit")}><ShieldCheck size={15} />审计</button>
         </div>
         <div className="inspector-body">
-          {!view ? <EmptyState>从一条企析回答中打开引用、执行过程或请求详情</EmptyState> : tab === "sources" ? (
+          {!view ? <EmptyState>从一条知枢回答中打开引用、执行过程或请求详情</EmptyState> : tab === "sources" ? (
             <SourcesPanel view={view} analysis={analysis} />
           ) : tab === "execution" ? (
             <ExecutionPanel view={view} trace={trace} traceError={traceError} onLoadTrace={onLoadTrace} />

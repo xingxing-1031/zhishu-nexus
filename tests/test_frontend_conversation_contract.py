@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 FRONTEND = Path(__file__).parents[1] / "frontend" / "src"
@@ -46,3 +47,20 @@ def test_mobile_conversation_delete_action_is_not_hidden_by_hover_state() -> Non
     assert ".rail-conversation > button:last-child {" in styles
     delete_rule = styles.split(".rail-conversation > button:last-child {", maxsplit=1)[1].split("}", maxsplit=1)[0]
     assert "opacity: 0" not in delete_rule
+
+
+def test_zhishu_brand_is_consistent_across_active_workspace() -> None:
+    root = Path(__file__).parents[1]
+    login = (FRONTEND / "LoginPage.tsx").read_text(encoding="utf-8")
+    assistant = (
+        FRONTEND / "workspace" / "AssistantResponse.tsx"
+    ).read_text(encoding="utf-8")
+    brand = (FRONTEND / "brand.tsx").read_text(encoding="utf-8")
+    package = json.loads(
+        (root / "frontend" / "package.json").read_text(encoding="utf-8")
+    )
+
+    assert "把企业问题交给知枢" in login
+    assert 'assistantName: "知枢 AI"' in brand
+    assert package["name"] == "zhishu-nexus-console"
+    assert ">析<" not in login + assistant

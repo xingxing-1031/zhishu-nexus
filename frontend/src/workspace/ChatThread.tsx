@@ -4,6 +4,7 @@ import { assistantFromLiveTurn, assistantFromTurn, type InspectorTab, type LiveT
 import type { Conversation } from "../conversations";
 import type { AnalysisResult, ResultDisplayMode } from "../types";
 import AssistantResponse from "./AssistantResponse";
+import { BrandMark } from "../brand";
 
 export const suggestedQuestions = [
   { icon: <FileSearch size={17} />, label: "企业制度", question: "公司的差旅报销制度是什么？" },
@@ -63,9 +64,9 @@ export default function ChatThread({
     <div className="chat-thread" ref={containerRef} onScroll={trackScroll} tabIndex={0} aria-label="对话内容">
       {conversation.turns.length === 0 && liveTurn === null ? (
         <section className="chat-empty-state">
-          <span className="empty-brand-mark">析</span>
-          <h1>今天想了解什么？</h1>
-          <p>我可以查询企业知识、分析经营数据，也可以使用通用工具处理日常问题。</p>
+          <BrandMark size="large" decorative className="empty-brand-mark" />
+          <h1>今天要处理什么企业问题？</h1>
+          <p>可以直接提问，也可以让知枢查知识、看数据或调用受控工具。</p>
           <div className="suggestion-list">
             {suggestedQuestions.map((item) => (
               <button type="button" key={item.label} onClick={() => onAsk(item.question)}>

@@ -2,6 +2,7 @@ import { CornerDownLeft, SendHorizontal, Settings2, X } from "lucide-react";
 import { FormEvent, KeyboardEvent, useEffect, useRef } from "react";
 import type { FollowUpContext } from "../conversations";
 import type { ResultDisplayMode } from "../types";
+import { BRAND } from "../brand";
 
 export default function MessageComposer({
   question,
@@ -70,8 +71,8 @@ export default function MessageComposer({
           onKeyDown={keyDown}
           rows={1}
           maxLength={800}
-          placeholder={ready ? "向企析提问，系统会自动选择知识、数据或工具能力" : "服务正在准备，请稍候"}
-          aria-label="向企析提问"
+          placeholder={ready ? "向知枢提问，系统会自动选择知识、数据或工具能力" : "服务正在准备，请稍候"}
+          aria-label="向知枢提问"
           disabled={!ready}
         />
         <div className="composer-toolbar">
@@ -106,7 +107,7 @@ export default function MessageComposer({
           </button>
         </div>
       </form>
-      <p className="composer-disclaimer">企析可能会犯错。重要结论请核对右侧证据与审计信息。</p>
+      <p className="composer-disclaimer">{BRAND.assistantName} 生成的内容可能存在偏差，重要结论请核对引用、数据和执行记录。</p>
     </div>
   );
 }

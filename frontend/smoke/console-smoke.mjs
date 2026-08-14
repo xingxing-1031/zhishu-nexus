@@ -14,7 +14,7 @@ async function get(path) {
 }
 
 const home = await get("/");
-for (const marker of ["企析 · 企业专业智能助理", "/static/assets/"]) {
+for (const marker of ["知枢 Nexus · 企业智能工作台", "/static/assets/"]) {
   if (!home.body.includes(marker)) throw new Error(`homepage is missing marker: ${marker}`);
 }
 
@@ -22,7 +22,7 @@ const scriptPath = home.body.match(/src="([^"]+\.js)"/)?.[1];
 if (!scriptPath) throw new Error("homepage does not reference a JavaScript bundle");
 const script = await get(scriptPath);
 if (script.body.includes("demo-path-rail")) throw new Error("bundle still contains the removed guided demo rail");
-for (const marker of ["最近对话", "智能工作台", "任务详情", "基于结果追问", "analyst-demo", "admin-demo"]) {
+for (const marker of ["知枢 Nexus", "知枢 AI", "最近对话", "知枢工作台", "任务详情", "基于结果追问", "analyst-demo", "admin-demo"]) {
   if (!script.body.includes(marker)) throw new Error(`bundle is missing workspace marker: ${marker}`);
 }
 
