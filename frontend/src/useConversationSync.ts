@@ -103,8 +103,10 @@ export function useConversationSync(
 
   useEffect(() => {
     const timer = window.setInterval(() => {
-      if (document.visibilityState === "visible") void refresh();
-    }, 10_000);
+      // Hidden mobile tabs may throttle visibility-aware callbacks. The GET
+      // is cheap and keeps another signed-in device from waiting for reload.
+      void refresh();
+    }, 5_000);
     return () => window.clearInterval(timer);
   }, [refresh]);
 

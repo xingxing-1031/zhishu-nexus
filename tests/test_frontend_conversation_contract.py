@@ -34,8 +34,10 @@ def test_conversation_sync_refreshes_visible_accounts_and_preserves_pending_dele
 
     assert "reconcileConversations" in sync
     assert "setInterval" in sync
-    assert "10_000" in sync
+    assert "5_000" in sync
     assert "pendingDeletesRef.current.has" in sync
+    interval_block = sync.split("const timer = window.setInterval(() =>", maxsplit=1)[1].split("},", maxsplit=1)[0]
+    assert "document.visibilityState" not in interval_block
 
 
 def test_mobile_conversation_delete_action_is_not_hidden_by_hover_state() -> None:
