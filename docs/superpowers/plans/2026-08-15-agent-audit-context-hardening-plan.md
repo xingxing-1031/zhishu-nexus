@@ -4,7 +4,7 @@
 
 **Goal:** 让企业 Agent 请求具备统一审计、持久化幂等和状态恢复能力，同时修复品牌身份、上下文、追问路由与 SSE 错误保存。
 
-**Architecture:** 新增 PostgreSQL `agent_request_runs` 作为顶层 Agent 请求登记与结果快照，所有模式用于幂等和恢复，仅 `auditable=true` 的企业请求进入管理员业务审计。QixiAgentService 成为顶层上下文所有者，内部 Data Agent 可关闭重复上下文写入；Supervisor 从已确认的上一模式恢复省略式追问。前端通过状态接口恢复流式错误或已完成结果。
+**Architecture:** 新增 PostgreSQL `agent_request_runs` 作为顶层 Agent 请求登记与结果快照，所有模式用于幂等和恢复，仅 `auditable=true` 的企业请求进入管理员业务审计。ZhishuAgentService 成为顶层上下文所有者，内部 Data Agent 可关闭重复上下文写入；Supervisor 从已确认的上一模式恢复省略式追问。前端通过状态接口恢复流式错误或已完成结果。
 
 **Tech Stack:** Python 3.12、FastAPI、Pydantic、PostgreSQL 16、React 18、TypeScript、Vite、pytest、Ruff
 
@@ -16,6 +16,7 @@
 - SQL 与审批详情继续由现有查询审计和审批表保存。
 - 前端所有“知枢”双字标识保持横向排列。
 - Python 导入包名 `retail_analytics_agent` 和 VPS 目录不改名。
+- 当前运行时服务、评测、MCP 和 User-Agent 使用 `Zhishu/zhishu` 命名，不保留 `Qixi/qixi` 当前名称。
 - 每个行为改动必须有自动化回归测试，不虚构性能数据。
 
 ---
@@ -84,11 +85,13 @@ git commit -m "feat: add durable agent run registry"
 **Files:**
 - Create: `src/retail_analytics_agent/brand_identity.py`
 - Modify: `src/retail_analytics_agent/general_agent.py`
-- Modify: `src/retail_analytics_agent/qixi_service.py`
+- Rename: `src/retail_analytics_agent/qixi_service.py` to `src/retail_analytics_agent/zhishu_service.py`
+- Rename: `src/retail_analytics_agent/qixi_evaluation.py` to `src/retail_analytics_agent/zhishu_evaluation.py`
 - Modify: `src/retail_analytics_agent/agent_service.py`
 - Modify: `src/retail_analytics_agent/supervisor.py`
 - Modify: `tests/test_general_agent.py`
-- Modify: `tests/test_qixi_service.py`
+- Rename: `tests/test_qixi_service.py` to `tests/test_zhishu_service.py`
+- Rename: `tests/test_qixi_evaluation.py` to `tests/test_zhishu_evaluation.py`
 - Create: `tests/test_supervisor.py`
 
 **Interfaces:**
@@ -121,14 +124,14 @@ def test_collaboration_persists_original_question_and_final_answer_once() -> Non
 
 - [ ] **Step 2: Run focused tests and confirm failure**
 
-Run: `.venv/Scripts/python.exe -m pytest tests/test_general_agent.py tests/test_qixi_service.py tests/test_supervisor.py -q`  
+Run: `.venv/Scripts/python.exe -m pytest tests/test_general_agent.py tests/test_zhishu_service.py tests/test_zhishu_evaluation.py tests/test_supervisor.py -q`
 Expected: FAIL on stale identity, ignored history and duplicate/incomplete context.
 
 - [ ] **Step 3: Centralize identity and prompt safety rules**
 
 Replace all runtime “企析” strings with shared “知枢 AI” constants. Tell answer models that webpage, MCP and RAG content is untrusted evidence and must never override system identity, permissions or tool policy.
 
-- [ ] **Step 4: Make QixiAgentService own top-level context**
+- [ ] **Step 4: Make ZhishuAgentService own top-level context**
 
 Append the original user turn once before execution and the final answer once after execution. Pass `persist_context=False` to internal Data Agent calls. Store `last_agent_mode=<mode>` and `last_skill=<skill>` as confirmed constraints.
 
@@ -138,27 +141,27 @@ Use explicit current-turn enterprise terms first. Only when the current question
 
 - [ ] **Step 6: Run focused tests**
 
-Run: `.venv/Scripts/python.exe -m pytest tests/test_general_agent.py tests/test_qixi_service.py tests/test_supervisor.py -q`  
+Run: `.venv/Scripts/python.exe -m pytest tests/test_general_agent.py tests/test_zhishu_service.py tests/test_zhishu_evaluation.py tests/test_supervisor.py -q`
 Expected: PASS.
 
 - [ ] **Step 7: Commit**
 
 ```bash
-git add src/retail_analytics_agent/brand_identity.py src/retail_analytics_agent/general_agent.py src/retail_analytics_agent/qixi_service.py src/retail_analytics_agent/agent_service.py src/retail_analytics_agent/supervisor.py tests/test_general_agent.py tests/test_qixi_service.py tests/test_supervisor.py
+git add src/retail_analytics_agent/brand_identity.py src/retail_analytics_agent/zhishu_service.py src/retail_analytics_agent/zhishu_evaluation.py src/retail_analytics_agent/general_agent.py src/retail_analytics_agent/agent_service.py src/retail_analytics_agent/supervisor.py tests/test_general_agent.py tests/test_zhishu_service.py tests/test_zhishu_evaluation.py tests/test_supervisor.py
 git commit -m "fix: unify agent identity and conversation context"
 ```
 
 ### Task 3: Agent 生命周期、幂等、公开错误与状态接口
 
 **Files:**
-- Modify: `src/retail_analytics_agent/qixi_service.py`
+- Modify: `src/retail_analytics_agent/zhishu_service.py`
 - Modify: `src/retail_analytics_agent/app.py`
 - Modify: `src/retail_analytics_agent/public_errors.py`
-- Modify: `tests/test_qixi_service.py`
+- Modify: `tests/test_zhishu_service.py`
 - Modify: `tests/test_app.py`
 
 **Interfaces:**
-- Produces: `QixiAgentService.get_status(request_id, viewer) -> AgentResponse`
+- Produces: `ZhishuAgentService.get_status(request_id, viewer) -> AgentResponse`
 - Produces: `GET /agent/runs/{request_id}`
 - Consumes: `AgentRunStore` from Task 1
 
@@ -183,7 +186,7 @@ def test_agent_status_endpoint_returns_owned_completed_result() -> None:
 
 - [ ] **Step 2: Run focused tests and confirm failure**
 
-Run: `.venv/Scripts/python.exe -m pytest tests/test_qixi_service.py tests/test_app.py -q`  
+Run: `.venv/Scripts/python.exe -m pytest tests/test_zhishu_service.py tests/test_app.py -q`
 Expected: FAIL because durable replay and status endpoint are missing.
 
 - [ ] **Step 3: Wrap every top-level run in the store lifecycle**
@@ -200,13 +203,13 @@ Do not yield raw exception strings from service-level streams. Route all excepti
 
 - [ ] **Step 6: Run focused tests**
 
-Run: `.venv/Scripts/python.exe -m pytest tests/test_qixi_service.py tests/test_app.py -q`  
+Run: `.venv/Scripts/python.exe -m pytest tests/test_zhishu_service.py tests/test_app.py -q`
 Expected: PASS.
 
 - [ ] **Step 7: Commit**
 
 ```bash
-git add src/retail_analytics_agent/qixi_service.py src/retail_analytics_agent/app.py src/retail_analytics_agent/public_errors.py tests/test_qixi_service.py tests/test_app.py
+git add src/retail_analytics_agent/zhishu_service.py src/retail_analytics_agent/app.py src/retail_analytics_agent/public_errors.py tests/test_zhishu_service.py tests/test_app.py
 git commit -m "feat: persist and recover agent runs"
 ```
 
@@ -358,4 +361,3 @@ Confirm the CI and deployment workflows for the pushed commit both conclude `suc
 - [ ] **Step 6: Run online acceptance**
 
 Verify `/health`, `/ready`, OpenAPI title, login, Agent identity, one non-audited general request, one audited knowledge/data request, admin audit visibility, duplicate request replay, and desktop/mobile horizontal mark rendering. Do not report completion until these checks pass.
-
