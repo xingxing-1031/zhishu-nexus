@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import { ArrowUpRight, Database, FileSearch, Globe2, Sparkles } from "lucide-react";
 import { assistantFromLiveTurn, assistantFromTurn, type InspectorTab, type LiveTurn } from "../chatModels";
 import type { Conversation } from "../conversations";
-import type { AnalysisResult } from "../types";
+import type { AnalysisResult, ResultDisplayMode } from "../types";
 import AssistantResponse from "./AssistantResponse";
 
 export const suggestedQuestions = [
@@ -21,6 +21,7 @@ export default function ChatThread({
   onRetry,
   pendingApprovalRequestId,
   onOpenApproval,
+  resultDisplay,
 }: {
   conversation: Conversation;
   liveTurn: LiveTurn | null;
@@ -30,6 +31,7 @@ export default function ChatThread({
   onRetry: (question: string) => void;
   pendingApprovalRequestId: string | null;
   onOpenApproval: () => void;
+  resultDisplay: ResultDisplayMode;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const shouldStickRef = useRef(true);
@@ -76,6 +78,7 @@ export default function ChatThread({
                 onFollowUp={onFollowUp}
                 onRetry={() => onRetry(turn.question)}
                 onOpenApproval={turn.requestId === pendingApprovalRequestId ? onOpenApproval : undefined}
+                resultDisplay={resultDisplay}
               />
             </div>
           ))}
@@ -90,6 +93,7 @@ export default function ChatThread({
                 onFollowUp={onFollowUp}
                 onRetry={() => onRetry(liveTurn.question)}
                 onOpenApproval={liveTurn.requestId === pendingApprovalRequestId ? onOpenApproval : undefined}
+                resultDisplay={resultDisplay}
               />
             </div>
           )}

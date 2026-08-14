@@ -107,6 +107,7 @@ export type AgentTaskStatus =
   | "failed";
 
 export type AgentMode = "general" | "knowledge" | "data" | "collaboration";
+export type ResultDisplayMode = "auto" | "chart_table" | "table";
 
 export interface AgentStep {
   agent: string;

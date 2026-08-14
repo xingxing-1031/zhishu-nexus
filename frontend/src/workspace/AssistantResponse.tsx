@@ -9,7 +9,7 @@ import { lazy, Suspense } from "react";
 import type { AssistantView } from "../chatModels";
 import { EmptyState, StatusPill } from "../components";
 import { localizeAnswer } from "../localization";
-import type { AnalysisOutcome, AnalysisResult } from "../types";
+import type { AnalysisOutcome, AnalysisResult, ResultDisplayMode } from "../types";
 import AgentProgress from "./AgentProgress";
 import ResultTable from "./ResultTable";
 
@@ -23,6 +23,7 @@ export default function AssistantResponse({
   onFollowUp,
   onRetry,
   onOpenApproval,
+  resultDisplay = "auto",
 }: {
   view: AssistantView;
   onOpenSources: () => void;
@@ -31,6 +32,7 @@ export default function AssistantResponse({
   onFollowUp: (result: AnalysisResult) => void;
   onRetry: () => void;
   onOpenApproval?: () => void;
+  resultDisplay?: ResultDisplayMode;
 }) {
   const response = view.response;
   const outcome = response?.analysis ?? view.outcome;
@@ -39,6 +41,9 @@ export default function AssistantResponse({
   const knowledgeCount = response?.knowledge_evidence?.length ?? 0;
   const dataCount = response?.report?.data_evidence.length ?? analysis?.evidence_source_ids.length ?? 0;
   const limitations = response?.limitations ?? [];
+  const showChart = Boolean(analysis?.chart_spec) && resultDisplay !== "table";
+  const showTable = Boolean(analysis?.rows.length)
+    && (resultDisplay !== "auto" || !analysis?.chart_spec);
 
   return (
     <article className="assistant-message" aria-label="企析回答">
@@ -74,20 +79,20 @@ export default function AssistantResponse({
           <div className="answer-limitations"><strong>当前边界</strong><p>{limitations.join("；")}</p></div>
         )}
 
-        {analysis && (analysis.chart_spec || analysis.rows.length > 0) && (
+        {analysis && (showChart || showTable) && (
           <section className="inline-analysis" aria-label="分析结果">
             <div className="inline-analysis-heading">
               <div><Database size={16} /><span>{analysis.plan?.analysis_goal ? localizeAnswer(analysis.plan.analysis_goal) : "受控数据查询"}</span></div>
               <StatusPill status={analysis.status === "degraded" ? "warning" : "success"}>{analysis.status === "degraded" ? "结果降级" : "数据已验证"}</StatusPill>
             </div>
-            {analysis.chart_spec && (
+            {showChart && analysis.chart_spec && (
               <div className="inline-chart-panel">
                 <Suspense fallback={<EmptyState>正在准备图表</EmptyState>}>
                   <ResultChart spec={analysis.chart_spec} rows={analysis.rows} />
                 </Suspense>
               </div>
             )}
-            {analysis.rows.length > 0 && <ResultTable rows={analysis.rows} />}
+            {showTable && <ResultTable rows={analysis.rows} />}
           </section>
         )}
 

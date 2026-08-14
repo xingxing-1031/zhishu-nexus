@@ -21,6 +21,7 @@ import type {
   AgentStreamEvent,
   ApprovalRequired,
   Overview,
+  ResultDisplayMode,
   SessionInfo,
   TraceEvent,
 } from "./types";
@@ -72,6 +73,12 @@ export default function Workspace({
   const [activeConversationId, setActiveConversationId] = useState(initialConversations[0].id);
   const [question, setQuestion] = useState("");
   const [maxRows, setMaxRows] = useState(Math.min(10, session.max_rows));
+  const initialPreferences = useMemo(
+    () => loadQueryPreferences(session.user_id),
+    [session.user_id],
+  );
+  const [resultDisplay, setResultDisplay] = useState<ResultDisplayMode>(initialPreferences.resultDisplay);
+  const [autoOpenEvidence, setAutoOpenEvidence] = useState(initialPreferences.autoOpenEvidence);
   const [running, setRunning] = useState(false);
   const [liveTurn, setLiveTurn] = useState<LiveTurn | null>(null);
   const [liveConversationId, setLiveConversationId] = useState<string | null>(null);
@@ -105,6 +112,10 @@ export default function Workspace({
   useEffect(() => {
     saveConversations(session.user_id, conversations);
   }, [conversations, session.user_id]);
+
+  useEffect(() => {
+    saveQueryPreferences(session.user_id, { resultDisplay, autoOpenEvidence });
+  }, [autoOpenEvidence, resultDisplay, session.user_id]);
 
   useEffect(() => {
     if (conversations.some((item) => item.id === activeConversationId)) return;
@@ -161,6 +172,8 @@ export default function Workspace({
           user_id: session.user_id,
           question: submittedQuestion,
           max_rows: clampRows(maxRows, session.max_rows),
+          result_display: resultDisplay,
+          auto_open_evidence: autoOpenEvidence,
         },
         receiveAgent,
       );
@@ -196,6 +209,10 @@ export default function Workspace({
       const stages = outcome && "trace" in outcome ? terminalStages(outcome.trace) : {};
       stageStateRef.current = stages;
       setLiveTurn((current) => current ? { ...current, response, outcome, stageState: stages, statusMessage: "任务已完成" } : current);
+      if (autoOpenEvidence) {
+        setInspectorTab("sources");
+        setInspectorOpen(true);
+      }
       if (outcome?.status === "pending") {
         setApproval(outcome);
         setApprovalOpen(true);
@@ -325,6 +342,7 @@ export default function Workspace({
             onRetry={(value) => void executeQuestion(value)}
             pendingApprovalRequestId={approval?.request_id ?? null}
             onOpenApproval={() => setApprovalOpen(true)}
+            resultDisplay={resultDisplay}
           />
         )}
         composer={(
@@ -332,11 +350,15 @@ export default function Workspace({
             question={question}
             maxRows={maxRows}
             maxAllowedRows={session.max_rows}
+            resultDisplay={resultDisplay}
+            autoOpenEvidence={autoOpenEvidence}
             ready={ready}
             running={running}
             followUpContext={followUpContext}
             onQuestion={setQuestion}
             onMaxRows={(value) => setMaxRows(clampRows(value, session.max_rows))}
+            onResultDisplay={setResultDisplay}
+            onAutoOpenEvidence={setAutoOpenEvidence}
             onCancelFollowUp={() => setFollowUpContext(null)}
             onSubmit={() => void executeQuestion()}
           />
@@ -406,4 +428,34 @@ function makeRequestId() {
     ? globalThis.crypto.randomUUID().slice(0, 8).toUpperCase()
     : Math.random().toString(16).slice(2, 10).toUpperCase();
   return `REQ-${date}-${suffix}`;
+}
+
+interface QueryPreferences {
+  resultDisplay: ResultDisplayMode;
+  autoOpenEvidence: boolean;
+}
+
+function queryPreferencesKey(userId: string) {
+  return `retail-analytics:query-preferences:v1:${encodeURIComponent(userId)}`;
+}
+
+function loadQueryPreferences(userId: string): QueryPreferences {
+  try {
+    const raw = globalThis.localStorage?.getItem(queryPreferencesKey(userId));
+    const parsed = raw ? JSON.parse(raw) as Partial<QueryPreferences> : {};
+    const resultDisplay = ["auto", "chart_table", "table"].includes(parsed.resultDisplay ?? "")
+      ? parsed.resultDisplay as ResultDisplayMode
+      : "auto";
+    return { resultDisplay, autoOpenEvidence: parsed.autoOpenEvidence === true };
+  } catch {
+    return { resultDisplay: "auto", autoOpenEvidence: false };
+  }
+}
+
+function saveQueryPreferences(userId: string, preferences: QueryPreferences) {
+  try {
+    globalThis.localStorage?.setItem(queryPreferencesKey(userId), JSON.stringify(preferences));
+  } catch {
+    // Query preferences remain available for the active browser session.
+  }
 }

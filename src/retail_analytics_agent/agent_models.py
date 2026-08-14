@@ -26,6 +26,12 @@ class AgentMode(StrEnum):
     COLLABORATION = "collaboration"
 
 
+class ResultDisplayMode(StrEnum):
+    AUTO = "auto"
+    CHART_TABLE = "chart_table"
+    TABLE = "table"
+
+
 class ToolRisk(StrEnum):
     LOW = "low"
     MEDIUM = "medium"
@@ -141,6 +147,8 @@ class AgentRequest(AgentStrictModel):
     max_rows: int = Field(default=20, ge=1, le=1000)
     token_budget: int = Field(default=4000, ge=256, le=32000)
     include_knowledge: bool = True
+    result_display: ResultDisplayMode = ResultDisplayMode.AUTO
+    auto_open_evidence: bool = False
 
 
 class AgentResponse(AgentStrictModel):

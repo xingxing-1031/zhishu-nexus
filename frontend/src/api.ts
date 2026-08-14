@@ -4,6 +4,7 @@ import type {
   AuditEntry,
   MetricDefinition,
   Overview,
+  ResultDisplayMode,
   SessionInfo,
   StreamEvent,
   TraceResponse,
@@ -149,6 +150,8 @@ export async function streamAgent(
     question: string;
     max_rows: number;
     token_budget?: number;
+    result_display?: ResultDisplayMode;
+    auto_open_evidence?: boolean;
   },
   onEvent: (event: AgentStreamEvent) => void,
   signal?: AbortSignal,

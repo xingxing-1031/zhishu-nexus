@@ -1,27 +1,36 @@
 import { CornerDownLeft, SendHorizontal, Settings2, X } from "lucide-react";
 import { FormEvent, KeyboardEvent } from "react";
 import type { FollowUpContext } from "../conversations";
+import type { ResultDisplayMode } from "../types";
 
 export default function MessageComposer({
   question,
   maxRows,
   maxAllowedRows,
+  resultDisplay,
+  autoOpenEvidence,
   ready,
   running,
   followUpContext,
   onQuestion,
   onMaxRows,
+  onResultDisplay,
+  onAutoOpenEvidence,
   onCancelFollowUp,
   onSubmit,
 }: {
   question: string;
   maxRows: number;
   maxAllowedRows: number;
+  resultDisplay: ResultDisplayMode;
+  autoOpenEvidence: boolean;
   ready: boolean;
   running: boolean;
   followUpContext: FollowUpContext | null;
   onQuestion: (value: string) => void;
   onMaxRows: (value: number) => void;
+  onResultDisplay: (value: ResultDisplayMode) => void;
+  onAutoOpenEvidence: (value: boolean) => void;
   onCancelFollowUp: () => void;
   onSubmit: () => void;
 }) {
@@ -57,9 +66,26 @@ export default function MessageComposer({
           <details className="composer-options">
             <summary title="查询设置"><Settings2 size={16} /><span>查询设置</span></summary>
             <div className="composer-options-popover">
-              <label htmlFor="composerMaxRows">最大返回行数</label>
-              <input id="composerMaxRows" type="number" min={1} max={maxAllowedRows} value={maxRows} onChange={(event) => onMaxRows(Number(event.target.value))} />
-              <small>聚合分析通常使用 10 条结果</small>
+              <div className="query-setting-row">
+                <label htmlFor="composerMaxRows">最大返回行数</label>
+                <input id="composerMaxRows" type="number" min={1} max={maxAllowedRows} value={maxRows} onChange={(event) => onMaxRows(Number(event.target.value))} />
+                <small>最多 {maxAllowedRows} 行</small>
+              </div>
+              <fieldset className="display-mode-setting">
+                <legend>结果展示</legend>
+                <div className="segmented-control">
+                  {DISPLAY_MODES.map((mode) => (
+                    <label key={mode.value}>
+                      <input type="radio" name="resultDisplay" value={mode.value} checked={resultDisplay === mode.value} onChange={() => onResultDisplay(mode.value)} />
+                      <span>{mode.label}</span>
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+              <label className="toggle-setting">
+                <span><strong>自动打开证据</strong><small>回答完成后展示引用与执行信息</small></span>
+                <input type="checkbox" checked={autoOpenEvidence} onChange={(event) => onAutoOpenEvidence(event.target.checked)} />
+              </label>
             </div>
           </details>
           <span className="composer-hint"><CornerDownLeft size={13} />Enter 发送 · Shift+Enter 换行</span>
@@ -72,3 +98,9 @@ export default function MessageComposer({
     </div>
   );
 }
+
+const DISPLAY_MODES: Array<{ value: ResultDisplayMode; label: string }> = [
+  { value: "auto", label: "自动" },
+  { value: "chart_table", label: "图表+表格" },
+  { value: "table", label: "仅表格" },
+];

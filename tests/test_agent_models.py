@@ -2,6 +2,7 @@ import pytest
 from pydantic import ValidationError
 
 from retail_analytics_agent.agent_models import (
+    AgentRequest,
     ContextSnapshot,
     OperationsReport,
     SkillId,
@@ -43,4 +44,29 @@ def test_report_requires_at_least_one_finding() -> None:
             title="复盘",
             executive_summary="summary",
             findings=[],
+        )
+
+
+def test_agent_request_accepts_result_display_preferences() -> None:
+    request = AgentRequest(
+        request_id="REQ-1",
+        conversation_id="CONV-1",
+        user_id="USER-1",
+        question="查看渠道趋势",
+        result_display="chart_table",
+        auto_open_evidence=True,
+    )
+
+    assert request.result_display.value == "chart_table"
+    assert request.auto_open_evidence is True
+
+
+def test_agent_request_rejects_unknown_result_display() -> None:
+    with pytest.raises(ValidationError):
+        AgentRequest(
+            request_id="REQ-1",
+            conversation_id="CONV-1",
+            user_id="USER-1",
+            question="查看渠道趋势",
+            result_display="everything",
         )
