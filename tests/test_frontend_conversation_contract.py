@@ -64,3 +64,17 @@ def test_zhishu_brand_is_consistent_across_active_workspace() -> None:
     assert 'assistantName: "知枢 AI"' in brand
     assert package["name"] == "zhishu-nexus-console"
     assert ">析<" not in login + assistant
+
+
+def test_storage_namespaces_migrate_legacy_values_without_removing_them() -> None:
+    conversations = (FRONTEND / "conversations.ts").read_text(encoding="utf-8")
+    workspace = (FRONTEND / "Workspace.tsx").read_text(encoding="utf-8")
+    migration = (FRONTEND / "storageMigration.ts").read_text(encoding="utf-8")
+
+    assert "zhishu-nexus:conversations:v" in conversations
+    assert "retail-analytics:conversations:v" in conversations
+    assert "zhishu-nexus:query-preferences:v1" in workspace
+    assert "retail-analytics:query-preferences:v1" in workspace
+    assert "readMigratedStorage" in conversations + workspace
+    assert "storage.setItem(primaryKey, legacy)" in migration
+    assert "removeItem" not in migration

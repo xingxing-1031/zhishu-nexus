@@ -14,6 +14,7 @@ import {
   type StoredStageState,
 } from "./conversations";
 import { localizeUserMessage } from "./localization";
+import { readMigratedStorage } from "./storageMigration";
 import type {
   AnalysisOutcome,
   AnalysisResult,
@@ -436,12 +437,20 @@ interface QueryPreferences {
 }
 
 function queryPreferencesKey(userId: string) {
+  return `zhishu-nexus:query-preferences:v1:${encodeURIComponent(userId)}`;
+}
+
+function legacyQueryPreferencesKey(userId: string) {
   return `retail-analytics:query-preferences:v1:${encodeURIComponent(userId)}`;
 }
 
 function loadQueryPreferences(userId: string): QueryPreferences {
   try {
-    const raw = globalThis.localStorage?.getItem(queryPreferencesKey(userId));
+    const raw = readMigratedStorage(
+      globalThis.localStorage,
+      queryPreferencesKey(userId),
+      legacyQueryPreferencesKey(userId),
+    );
     const parsed = raw ? JSON.parse(raw) as Partial<QueryPreferences> : {};
     const resultDisplay = ["auto", "chart_table", "table"].includes(parsed.resultDisplay ?? "")
       ? parsed.resultDisplay as ResultDisplayMode

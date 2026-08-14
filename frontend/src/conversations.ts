@@ -1,4 +1,5 @@
 import type { AgentResponse, AnalysisOutcome, AnalysisResult, ChartSpec } from "./types";
+import { readMigratedStorage } from "./storageMigration";
 
 export const MAX_CONVERSATIONS = 8;
 export const MAX_TURNS = 8;
@@ -52,6 +53,10 @@ export interface ConversationAuditSummary {
 const STORAGE_VERSION = 1;
 
 function storageKey(userId: string) {
+  return `zhishu-nexus:conversations:v${STORAGE_VERSION}:${encodeURIComponent(userId)}`;
+}
+
+function legacyStorageKey(userId: string) {
   return `retail-analytics:conversations:v${STORAGE_VERSION}:${encodeURIComponent(userId)}`;
 }
 
@@ -69,7 +74,11 @@ export function newConversation(): Conversation {
 
 export function loadConversations(userId: string): Conversation[] {
   try {
-    const raw = globalThis.localStorage?.getItem(storageKey(userId));
+    const raw = readMigratedStorage(
+      globalThis.localStorage,
+      storageKey(userId),
+      legacyStorageKey(userId),
+    );
     if (!raw) return [];
     return normalizeConversations(JSON.parse(raw) as unknown);
   } catch {
