@@ -127,7 +127,7 @@ async def lifespan(_app: FastAPI):
 
 
 app = FastAPI(
-    title="零售运营可审计分析助手",
+    title="知枢 Nexus 企业智能 Agent 平台",
     version="0.1.0",
     lifespan=lifespan,
 )

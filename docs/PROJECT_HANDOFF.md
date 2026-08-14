@@ -23,10 +23,10 @@
 
 | 项目 | 当前值 |
 |---|---|
-| 仓库目录 | `E:\qiuzhaoxiangmu\retail-analytics-agent` |
-| GitHub | `xingxing-1031/retail-analytics-agent`（私有仓库） |
+| 仓库目录 | `E:\qiuzhaoxiangmu\zhishu-nexus` |
+| GitHub | `xingxing-1031/zhishu-nexus`（私有仓库） |
 | 默认分支 | `main` |
-| 当前提交 | `9fa7998` |
+| 当前提交 | 运行 `git log -1 --oneline` 获取，本文不固化自引用提交 |
 | 工作区 | 当前交接文档已纳入版本控制；除用户本地未跟踪文件外，工作区干净 |
 | 公网演示 | `http://106.52.176.63/` |
 | 域名 | `yuxingji.cn`，DNS 已指向 VPS，但因 ICP 备案未完成被腾讯云拦截 |
@@ -50,7 +50,9 @@
 
 ## 3. 项目定位
 
-项目名称：**零售运营可审计分析 Agent**。
+项目名称：**知枢 Nexus 企业智能 Agent 平台**。
+
+知枢 Nexus 连接企业知识、经营数据与受控工具。可审计零售经营分析是 Data Agent 的特化能力，不再作为整个平台名称。
 
 目标用户是不熟悉 SQL 的零售运营人员。用户通过自然语言查询订单、商品、渠道和退款数据，系统必须做到：
 
@@ -284,7 +286,7 @@ Frozen holdout 最终验收：
 VPS：
 
 - 公网 IP：`106.52.176.63`
-- 项目目录：`/home/ubuntu/retail-analytics-agent`
+- 项目目录：`/home/ubuntu/retail-analytics-agent`（为避免发布中断保留的 VPS 兼容路径，不代表当前产品名）
 - 当前访问：`http://106.52.176.63/`
 - Caddy 当前使用 `SITE_ADDRESS=:80`
 - PostgreSQL、API 和 Caddy 由 `compose.vps.yaml` 编排
@@ -331,7 +333,7 @@ VPS：
 推荐重新创建本地虚拟环境：
 
 ```powershell
-cd E:\qiuzhaoxiangmu\retail-analytics-agent
+cd E:\qiuzhaoxiangmu\zhishu-nexus
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install -e ".[dev]"
@@ -409,10 +411,10 @@ npm run build
 ## 18. 新对话首条消息模板
 
 ```text
-请接手零售运营可审计分析 Agent 项目。
+请接手知枢 Nexus 企业智能 Agent 平台项目。
 
 项目目录：
-E:\qiuzhaoxiangmu\retail-analytics-agent
+E:\qiuzhaoxiangmu\zhishu-nexus
 
 开始工作前，请完整读取：
 - AGENTS.md

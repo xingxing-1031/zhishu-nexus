@@ -97,7 +97,7 @@ jobs:
         run: docker compose --profile demo config --quiet
 
       - name: Build the FastAPI demo image
-        run: docker build -t retail-analytics-agent:ci .
+        run: docker build -t zhishu-nexus:ci .
 
       - name: Start a fresh pgvector database
         run: docker compose up -d --wait --wait-timeout 90 postgres

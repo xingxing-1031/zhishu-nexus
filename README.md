@@ -1,14 +1,14 @@
-# 企析｜企业专业智能助理
+# 知枢 Nexus｜企业智能 Agent 平台
 
-企析是一个面向企业知识与经营分析的完整 Agent 工作系统。它通过 Supervisor 自动选择通用对话、企业知识、经营数据或跨域协作路径；特化能力是可审计的零售经营分析，但普通问题、时间、天气、汇率和公开网页信息也可以通过受治理的 MCP 工具处理。
+知枢 Nexus 是连接企业知识、经营数据与智能工具的企业智能工作台。它通过 Supervisor 自动选择通用对话、企业知识、经营数据或跨域协作路径；特化能力是可审计的零售经营分析，但普通问题、时间、天气、汇率和公开网页信息也可以通过受治理的 MCP 工具处理。
 
-企业知识来自独立项目 `enterprise-knowledge-rag` 的受认证 Evidence API。依赖方向始终是“企析 -> RAG”，项目二不会反向调用本项目。
+企业知识来自独立项目 `enterprise-knowledge-rag` 的受认证 Evidence API。依赖方向始终是“知枢 Nexus -> RAG”，项目二不会反向调用本项目。
 
 ## 当前状态
 
 - 公网演示：`http://106.52.176.63/`；重新发布完成前可能仍显示上一版本界面
 - 已实现：四类 Supervisor 路由、通用 Agent、五类只读 MCP 工具、服务端上下文、Text-to-SQL 数据 Agent、项目二 RAG Evidence API、跨域协作与审核、SSE、人工审批、请求幂等、可信降级和结构化 Trace
-- 新增 24 条企析 development 契约与公网评测脚本，覆盖四种模式、五类工具和知识/数据证据；只有生成实际报告后才在简历引用新结果
+- 新增 24 条知枢 Nexus development 契约与公网评测脚本，覆盖四种模式、五类工具和知识/数据证据；只有生成实际报告后才在简历引用新结果
 - 线上评测：远程 `qwen-plus` + 公网 VPS + PostgreSQL + 项目二 RAG + MCP 的 12 条 live development 中逐题通过 `11/12`，Skill 路由、工具选择、证据要求、拒答和上下文预算均为 `100%`，P50/P95 为 `16.181s / 29.535s`
 - 当前边界：域名 HTTPS 受 ICP 备案状态限制；服务端跨设备会话、独立异地备份、分布式限流和高可用不在当前单 VPS 求职演示范围内
 
@@ -102,7 +102,7 @@
 
 详细实验条件、结果和边界见 [W6-2 development 受控评测报告](docs/EVALUATION_REPORT.md)与 [Frozen Holdout 最终验收](docs/FINAL_ACCEPTANCE.md)。
 
-## 企析主链路
+## 知枢 Nexus 主链路
 
 ```text
 用户问题
@@ -205,7 +205,7 @@ PUBLIC_DEMO_MAX_ROWS=20
 ## 目录结构
 
 ```text
-retail-analytics-agent/
+zhishu-nexus/
 |-- db/
 |   |-- migrations/
 |   |-- seeds/

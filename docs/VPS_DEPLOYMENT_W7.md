@@ -11,11 +11,13 @@
 在服务器安装 Docker 和 Compose 插件后执行：
 
 ```bash
-git clone https://github.com/xingxing-1031/retail-analytics-agent.git
-cd retail-analytics-agent
+git clone https://github.com/xingxing-1031/zhishu-nexus.git
+cd zhishu-nexus
 cp .env.vps.example .env.vps
 nano .env.vps
 ```
+
+当前线上自动发布仍使用 `/home/ubuntu/retail-analytics-agent` 作为兼容目录，以避免迁移期间中断；这是服务器内部路径，不是当前产品或仓库名称。
 
 把 `.env.vps` 中的数据库密码、模型密钥和域名替换为真实值。这个文件只保存在服务器，不提交 Git。
 

@@ -3,9 +3,9 @@ requires = ["setuptools>=75"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "retail-analytics-agent"
+name = "zhishu-nexus"
 version = "0.1.0"
-description = "Auditable retail analytics agent built as an autumn recruiting project."
+description = "Enterprise AI agent platform connecting governed knowledge, business data, and tools."
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [

@@ -1,8 +1,8 @@
-# 企析企业专业智能助理面试讲解
+# 知枢 Nexus 企业智能 Agent 平台面试讲解
 
 ## 一句话介绍
 
-我把可审计 Text-to-SQL 工作流升级成完整的企业专业智能助理“企析”。Supervisor 先判断问题是通用、企业知识、经营数据还是跨域协作：普通问题由通用 Agent 回答，需要实时信息时调用 MCP；制度问题调用独立 RAG Evidence API；经营问题进入 Text-to-SQL；同时需要制度和数据时并行取证，再由综合 Agent 和审核 Agent输出受证据约束的结论。
+我把可审计 Text-to-SQL 工作流升级成企业智能 Agent 平台“知枢 Nexus”。它连接企业知识、经营数据与受控工具：Supervisor 先判断问题是通用、企业知识、经营数据还是跨域协作；普通问题由通用 Agent 回答，需要实时信息时调用 MCP；制度问题调用独立 RAG Evidence API；经营问题进入 Text-to-SQL；同时需要制度和数据时并行取证，再由综合 Agent 和审核 Agent 输出受证据约束的结论。
 
 ## 主流程
 

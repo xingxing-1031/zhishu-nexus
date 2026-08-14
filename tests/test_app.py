@@ -49,6 +49,13 @@ from retail_analytics_agent.workspace_history import InMemoryWorkspaceHistorySto
 client = TestClient(app)
 
 
+def test_openapi_uses_zhishu_product_title() -> None:
+    response = client.get("/openapi.json")
+
+    assert response.status_code == 200
+    assert response.json()["info"]["title"] == "知枢 Nexus 企业智能 Agent 平台"
+
+
 def test_mcp_server_path_is_available_from_repository_layout() -> None:
     path = _mcp_server_path()
     assert path is not None
@@ -324,7 +331,7 @@ def test_demo_homepage_and_static_assets_are_available() -> None:
 
     assert page.status_code == 200
     assert page.headers["content-type"].startswith("text/html")
-    assert "企析 · 企业专业智能助理" in page.text
+    assert "知枢 Nexus · 企业智能工作台" in page.text
     assert '<div id="root"></div>' in page.text
     stylesheet_path = re.search(r'href="([^"]+\.css)"', page.text)
     script_path = re.search(r'src="([^"]+\.js)"', page.text)

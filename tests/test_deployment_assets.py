@@ -1,6 +1,15 @@
+import tomllib
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+
+
+def test_python_distribution_uses_zhishu_nexus_name() -> None:
+    metadata = tomllib.loads(
+        (PROJECT_ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    )
+
+    assert metadata["project"]["name"] == "zhishu-nexus"
 
 
 def test_dockerfile_uses_platform_port_and_non_root_user() -> None:

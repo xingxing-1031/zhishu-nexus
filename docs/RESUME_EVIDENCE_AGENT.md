@@ -2,24 +2,24 @@
 
 ## 推荐项目名称
 
-企析｜面向电商运营场景的企业专业智能助理
+知枢 Nexus｜面向电商运营场景的企业智能 Agent 平台
 
 ## 一页简历推荐版
 
-- 独立设计并实现企业专业智能助理“企析”，基于 FastAPI、LangGraph、PostgreSQL 与 React/TypeScript 构建 Supervisor，将请求路由至通用对话、企业知识、经营数据或跨域协作模式；通用 Agent 通过 MCP 调用时间、天气、网页搜索、网页摘要和汇率工具，复杂任务由知识/数据 Agent 并行取证后综合并审核。
+- 独立设计并实现企业智能 Agent 平台“知枢 Nexus”，基于 FastAPI、LangGraph、PostgreSQL 与 React/TypeScript 构建 Supervisor，将请求路由至通用对话、企业知识、经营数据或跨域协作模式；通用 Agent 通过 MCP 调用时间、天气、网页搜索、网页摘要和汇率工具，复杂任务由知识/数据 Agent 并行取证后综合并审核。
 - 将企业知识作为独立 RAG Evidence API 接入，保留权限、版本、生效时间、混合检索、Reranker、引用和拒答边界；服务端上下文按用户/会话隔离并执行 Token 预算控制，工具记录参数哈希、耗时、状态与失败类型。
 - 构建 SQLGlot AST 只读校验与指标、JOIN、时间范围业务一致性双层防线，复用 checkpoint、人工审批、请求指纹、幂等键和结构化 Trace；模型总结失败时保留可信查询 rows 与引用并降级输出，避免无证据因果归因和恢复重放副作用。
-- 建立样本级评测记录路由、工具、知识/数据证据、审核与 P50/P95；原经营 Agent 的 12 条远程 Qwen + 公网 VPS development 已保存 11/12 逐题契约通过结果，新企析 24 条评测须以重新部署后的实际报告为准。
+- 建立样本级评测记录路由、工具、知识/数据证据、审核与 P50/P95；原经营 Agent 的 12 条远程 Qwen + 公网 VPS development 已保存 11/12 逐题契约通过结果，知枢 Nexus 24 条评测须以重新部署后的实际报告为准。
 
 ## BOSS 在线项目描述短版
 
-独立实现企业专业智能助理“企析”，使用 FastAPI、LangGraph、PostgreSQL 与 React/TypeScript 构建通用、企业知识、经营数据及协作四类执行模式；通过 MCP 接入时间、天气、搜索、网页摘要和汇率工具，并复用可审计 Text-to-SQL 与独立 RAG Evidence API。SQL 执行前经过 SQLGlot AST 与业务一致性双层校验，支持审批、幂等、SSE、Trace 和证据不足降级。
+独立实现企业智能 Agent 平台“知枢 Nexus”，使用 FastAPI、LangGraph、PostgreSQL 与 React/TypeScript 构建通用、企业知识、经营数据及协作四类执行模式；通过 MCP 接入时间、天气、搜索、网页摘要和汇率工具，并复用可审计 Text-to-SQL 与独立 RAG Evidence API。SQL 执行前经过 SQLGlot AST 与业务一致性双层校验，支持审批、幂等、SSE、Trace 和证据不足降级。
 
 ## 指标证据表
 
 | 可用表述 | 原始证据 | 必须附带的边界 |
 |---|---|---|
-| 11/12 逐题通过 | `evaluation/reports/agent-live-development-20260813T220105Z.json` | 升级前经营 Agent live development，不能冒充新企析评测 |
+| 11/12 逐题通过 | `evaluation/reports/agent-live-development-20260813T220105Z.json` | 升级前经营 Agent live development，不能冒充知枢 Nexus 新评测 |
 | 路由/工具/证据/拒答/预算均 100% | 同一报告 `metrics` 与 12 条 `records` | 仅覆盖当前 12 条合成业务题 |
 | 8/8 业务题无失败 | 同一报告，5 succeeded + 3 degraded | degraded 包含可信结果保留，不等于全部完整回答 |
 | P95 29.535 秒 | 同一报告 `latency_seconds` | 12 条混合样本，串行、单 VPS、远程模型 |
