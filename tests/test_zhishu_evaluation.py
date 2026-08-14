@@ -6,15 +6,15 @@ from retail_analytics_agent.agent_models import (
     KnowledgeEvidenceView,
     ToolCallRecord,
 )
-from retail_analytics_agent.qixi_evaluation import (
-    QixiEvaluationCase,
-    evaluate_qixi_cases,
-    load_qixi_cases,
+from retail_analytics_agent.zhishu_evaluation import (
+    ZhishuEvaluationCase,
+    evaluate_zhishu_cases,
+    load_zhishu_cases,
 )
 
 
 def test_loads_jsonl_and_records_mode_tool_evidence_and_review() -> None:
-    cases = load_qixi_cases(
+    cases = load_zhishu_cases(
         [
             '{"case_id":"k1","question":"报销制度",'
             '"expected_mode":"knowledge","expected_tools":["knowledge.search"],'
@@ -22,7 +22,7 @@ def test_loads_jsonl_and_records_mode_tool_evidence_and_review() -> None:
         ]
     )
 
-    def execute(case: QixiEvaluationCase) -> AgentResponse:
+    def execute(case: ZhishuEvaluationCase) -> AgentResponse:
         return AgentResponse(
             request_id=case.case_id,
             conversation_id="eval",
@@ -49,7 +49,7 @@ def test_loads_jsonl_and_records_mode_tool_evidence_and_review() -> None:
             review=AgentReview(passed=True),
         )
 
-    report = evaluate_qixi_cases(cases, execute, dataset="unit.jsonl")
+    report = evaluate_zhishu_cases(cases, execute, dataset="unit.jsonl")
 
     assert report.total == 1
     assert report.executed == 1
@@ -60,14 +60,14 @@ def test_loads_jsonl_and_records_mode_tool_evidence_and_review() -> None:
 
 
 def test_execution_failure_remains_in_denominator() -> None:
-    case = QixiEvaluationCase(
+    case = ZhishuEvaluationCase(
         case_id="failure",
         question="天气",
         expected_mode=AgentMode.GENERAL,
         expected_tools=("weather.current",),
     )
 
-    report = evaluate_qixi_cases(
+    report = evaluate_zhishu_cases(
         [case],
         lambda _case: (_ for _ in ()).throw(TimeoutError()),
         dataset="unit.jsonl",

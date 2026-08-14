@@ -268,7 +268,7 @@ class CommonTools:
                 url,
                 follow_redirects=False,
                 timeout=self.timeout_seconds,
-                headers={"User-Agent": "QixiAgent/1.0"},
+                headers={"User-Agent": "ZhishuNexus/1.0"},
             )
             response.raise_for_status()
             if len(response.content) > self.max_response_bytes:

@@ -72,10 +72,6 @@ from retail_analytics_agent.models import (
 )
 from retail_analytics_agent.observability import configure_logging
 from retail_analytics_agent.public_errors import public_error_message
-from retail_analytics_agent.qixi_service import (
-    QixiAgentService,
-    StructuredEvidenceAnswerer,
-)
 from retail_analytics_agent.queries import (
     get_channel_sales_summary,
     get_order_status_summary,
@@ -93,6 +89,10 @@ from retail_analytics_agent.workspace_history import (
     PostgresWorkspaceHistoryStore,
     WorkspaceConversationPayload,
     WorkspaceHistoryStore,
+)
+from retail_analytics_agent.zhishu_service import (
+    StructuredEvidenceAnswerer,
+    ZhishuAgentService,
 )
 
 logger = logging.getLogger(__name__)
@@ -626,7 +626,7 @@ def delete_workspace_conversation(
 def get_agent_service(
     runner: Annotated[AnalysisRunner, Depends(get_analysis_runner)],
     settings: Annotated[Settings, Depends(get_settings)],
-) -> Iterator[QixiAgentService]:
+) -> Iterator[ZhishuAgentService]:
     knowledge = None
     client = None
     model_client = None
@@ -682,7 +682,7 @@ def get_agent_service(
             mcp_client=mcp_client,
         )
         model = StructuredChatClient(model_client, settings.model_provider)
-        yield QixiAgentService(
+        yield ZhishuAgentService(
             data_agent=data_agent,
             supervisor=Supervisor(),
             general_agent=GeneralAgent(
@@ -711,7 +711,7 @@ def get_agent_service(
 def run_agent(
     agent_request: AgentRequest,
     http_request: Request,
-    service: Annotated[QixiAgentService, Depends(get_agent_service)],
+    service: Annotated[ZhishuAgentService, Depends(get_agent_service)],
     access_context: Annotated[AccessContext, Depends(get_access_context)],
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> AgentResponse:
@@ -746,7 +746,7 @@ def run_agent(
 def run_internal_agent(
     payload: InternalAgentRequest,
     request: Request,
-    service: Annotated[QixiAgentService, Depends(get_agent_service)],
+    service: Annotated[ZhishuAgentService, Depends(get_agent_service)],
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> InternalAgentResult:
     configured = settings.internal_service_token
@@ -807,7 +807,7 @@ def run_internal_agent(
 async def stream_agent(
     agent_request: AgentRequest,
     http_request: Request,
-    service: Annotated[QixiAgentService, Depends(get_agent_service)],
+    service: Annotated[ZhishuAgentService, Depends(get_agent_service)],
     access_context: Annotated[AccessContext, Depends(get_access_context)],
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> StreamingResponse:

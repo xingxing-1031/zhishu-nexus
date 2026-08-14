@@ -71,10 +71,43 @@ KNOWLEDGE_TERMS = {
     "procedure",
 }
 
+FOLLOW_UP_TERMS = {
+    "继续",
+    "再",
+    "上面",
+    "刚才",
+    "这个",
+    "那个",
+    "换成",
+    "改成",
+    "改为",
+    "拆一下",
+    "展开",
+    "为什么",
+    "然后呢",
+    "接着",
+}
+
 
 def _contains(question: str, terms: set[str]) -> bool:
     normalized = question.casefold()
     return any(term.casefold() in normalized for term in terms)
+
+
+def _mode_from_history(
+    history: Sequence[dict[str, str]],
+) -> AgentMode | None:
+    for item in reversed(history):
+        content = item.get("content", "")
+        has_data = _contains(content, DATA_TERMS)
+        has_knowledge = _contains(content, KNOWLEDGE_TERMS)
+        if has_data and has_knowledge:
+            return AgentMode.COLLABORATION
+        if has_data:
+            return AgentMode.DATA
+        if has_knowledge:
+            return AgentMode.KNOWLEDGE
+    return None
 
 
 def _steps(mode: AgentMode, question: str) -> tuple[AgentStep, ...]:
@@ -129,8 +162,9 @@ class Supervisor:
         self,
         question: str,
         history: Sequence[dict[str, str]] = (),
+        *,
+        previous_mode: AgentMode | None = None,
     ) -> AgentPlan:
-        del history
         has_data = _contains(question, DATA_TERMS)
         has_knowledge = _contains(question, KNOWLEDGE_TERMS)
         if has_data and has_knowledge:
@@ -139,6 +173,8 @@ class Supervisor:
             mode = AgentMode.DATA
         elif has_knowledge:
             mode = AgentMode.KNOWLEDGE
+        elif _contains(question, FOLLOW_UP_TERMS):
+            mode = previous_mode or _mode_from_history(history) or AgentMode.GENERAL
         else:
             mode = AgentMode.GENERAL
         return AgentPlan(

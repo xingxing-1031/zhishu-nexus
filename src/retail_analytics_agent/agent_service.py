@@ -70,16 +70,19 @@ class EnterpriseAgentService:
         self,
         request: AgentRequest,
         access_context: AccessContext,
+        *,
+        persist_context: bool = True,
     ) -> AgentResponse:
         if request.user_id != access_context.user_id:
             raise PermissionError("agent request belongs to another user")
-        self.context_builder.append_turn(
-            request.conversation_id,
-            request.user_id,
-            request_id=f"{request.request_id}:user",
-            role="user",
-            content=request.question,
-        )
+        if persist_context:
+            self.context_builder.append_turn(
+                request.conversation_id,
+                request.user_id,
+                request_id=f"{request.request_id}:user",
+                role="user",
+                content=request.question,
+            )
         try:
             stored = self.context_builder.store.get(
                 request.conversation_id,
@@ -269,15 +272,16 @@ class EnterpriseAgentService:
             if limitations or analysis.status is AnalysisResultStatus.DEGRADED
             else AgentTaskStatus.SUCCEEDED
         )
-        self.context_builder.append_turn(
-            request.conversation_id,
-            request.user_id,
-            request_id=f"{request.request_id}:assistant",
-            role="assistant",
-            content=report.executive_summary,
-            evidence_ids=(*report.data_evidence, *report.document_evidence),
-            confirmed_constraints=(f"last_skill={plan.skill_id.value}",),
-        )
+        if persist_context:
+            self.context_builder.append_turn(
+                request.conversation_id,
+                request.user_id,
+                request_id=f"{request.request_id}:assistant",
+                role="assistant",
+                content=report.executive_summary,
+                evidence_ids=(*report.data_evidence, *report.document_evidence),
+                confirmed_constraints=(f"last_skill={plan.skill_id.value}",),
+            )
         return AgentResponse(
             request_id=request.request_id,
             conversation_id=request.conversation_id,

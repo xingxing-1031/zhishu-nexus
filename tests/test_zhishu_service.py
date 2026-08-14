@@ -12,8 +12,11 @@ from retail_analytics_agent.context_store import InMemoryConversationStore
 from retail_analytics_agent.general_agent import GeneralAgentResult
 from retail_analytics_agent.knowledge_adapter import KnowledgeEvidence
 from retail_analytics_agent.models import AccessContext, AccessRole
-from retail_analytics_agent.qixi_service import QixiAgentService, _data_only_question
 from retail_analytics_agent.supervisor import Supervisor
+from retail_analytics_agent.zhishu_service import (
+    ZhishuAgentService,
+    _data_only_question,
+)
 
 
 def _request(question: str, request_id: str = "r1") -> AgentRequest:
@@ -65,7 +68,8 @@ class FakeData:
         self.context_builder = ContextBuilder(InMemoryConversationStore())
         self.calls = []
 
-    def run(self, request, _access):
+    def run(self, request, _access, *, persist_context=True):
+        assert persist_context is False
         self.calls.append(request)
         return __import__("retail_analytics_agent.agent_models", fromlist=["AgentResponse"]).AgentResponse(
             request_id=request.request_id,
@@ -82,7 +86,7 @@ class FakeData:
 
 
 def _service(data=None):
-    return QixiAgentService(
+    return ZhishuAgentService(
         data_agent=data or _context_service(),
         supervisor=Supervisor(),
         general_agent=FakeGeneral(),
@@ -119,3 +123,39 @@ def test_collaboration_extracts_data_subquestion_before_sql_planning() -> None:
         "统计最近30天退款金额。"
     )
     assert _data_only_question("结合退款数据和售后制度给出复盘") == "退款数据。"
+
+
+def test_general_request_persists_original_question_and_final_answer_once() -> None:
+    service = _service()
+
+    service.run(
+        _request("你是谁？"),
+        AccessContext(user_id="u1", role=AccessRole.ANALYST),
+    )
+
+    record = service.data_agent.context_builder.store.get("c1", "u1")
+    assert record is not None
+    assert [(turn.role, turn.content) for turn in record.turns] == [
+        ("user", "你是谁？"),
+        ("assistant", "普通回答"),
+    ]
+    assert "last_agent_mode=general" in record.confirmed_constraints
+
+
+def test_collaboration_persists_original_question_and_final_synthesis_once() -> None:
+    data = FakeData()
+    service = _service(data)
+    question = "结合退款数据和售后制度给出复盘"
+
+    service.run(
+        _request(question),
+        AccessContext(user_id="u1", role=AccessRole.ANALYST),
+    )
+
+    record = data.context_builder.store.get("c1", "u1")
+    assert record is not None
+    assert [(turn.role, turn.content) for turn in record.turns] == [
+        ("user", question),
+        ("assistant", "基于已验证证据的结论。"),
+    ]
+    assert "last_agent_mode=collaboration" in record.confirmed_constraints

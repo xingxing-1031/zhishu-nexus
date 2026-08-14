@@ -7,8 +7,10 @@ from retail_analytics_agent.general_agent import GeneralAgent
 class FakeModel:
     def __init__(self, *responses: dict):
         self.responses = list(responses)
+        self.calls: list[dict] = []
 
-    def complete_json(self, **_kwargs) -> str:
+    def complete_json(self, **kwargs) -> str:
+        self.calls.append(kwargs)
         return json.dumps(self.responses.pop(0), ensure_ascii=False)
 
 
@@ -72,11 +74,17 @@ def test_general_agent_rejects_unknown_tool_without_calling_mcp() -> None:
 
 
 def test_general_agent_can_answer_without_a_tool() -> None:
+    model = FakeModel({"action": "answer", "answer": "我是知枢 AI。"})
     result = GeneralAgent(
-        model=FakeModel({"action": "answer", "answer": "MCP is a tool protocol"}),
+        model=model,
         mcp_client=FakeMcp(),
-    ).answer("What is MCP?", [], "r3", "c3", "analyst")
+    ).answer("你是谁？", [], "r3", "c3", "analyst")
 
-    assert result.answer == "MCP is a tool protocol"
+    assert result.answer == "我是知枢 AI。"
     assert result.tool_calls == ()
     assert result.status is AgentTaskStatus.SUCCEEDED
+    prompt = model.calls[0]["system_prompt"]
+    assert "知枢 AI" in prompt
+    assert "不可信" in prompt
+    assert "企析" not in prompt
+    assert "不要声称整个平台无法访问企业知识或经营数据" in prompt

@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from retail_analytics_agent.agent_models import AgentMode, AgentResponse
 
 
-class QixiEvaluationCase(BaseModel):
+class ZhishuEvaluationCase(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     case_id: str = Field(min_length=1, max_length=100)
@@ -19,7 +19,7 @@ class QixiEvaluationCase(BaseModel):
     expect_data_evidence: bool = False
 
 
-class QixiEvaluationRecord(BaseModel):
+class ZhishuEvaluationRecord(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     case_id: str
@@ -38,11 +38,11 @@ class QixiEvaluationRecord(BaseModel):
     error_type: str | None = None
 
 
-class QixiEvaluationReport(BaseModel):
+class ZhishuEvaluationReport(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     dataset: str
-    cases: tuple[QixiEvaluationRecord, ...]
+    cases: tuple[ZhishuEvaluationRecord, ...]
     total: int
     executed: int
     mode_accuracy: float
@@ -53,21 +53,21 @@ class QixiEvaluationReport(BaseModel):
     p95_latency_ms: int
 
 
-def load_qixi_cases(lines: Iterable[str]) -> list[QixiEvaluationCase]:
+def load_zhishu_cases(lines: Iterable[str]) -> list[ZhishuEvaluationCase]:
     return [
-        QixiEvaluationCase.model_validate_json(line)
+        ZhishuEvaluationCase.model_validate_json(line)
         for line in lines
         if line.strip()
     ]
 
 
-def evaluate_qixi_cases(
-    cases: Iterable[QixiEvaluationCase],
-    execute: Callable[[QixiEvaluationCase], AgentResponse],
+def evaluate_zhishu_cases(
+    cases: Iterable[ZhishuEvaluationCase],
+    execute: Callable[[ZhishuEvaluationCase], AgentResponse],
     *,
     dataset: str,
-) -> QixiEvaluationReport:
-    records: list[QixiEvaluationRecord] = []
+) -> ZhishuEvaluationReport:
+    records: list[ZhishuEvaluationRecord] = []
     for case in cases:
         started = monotonic()
         try:
@@ -81,7 +81,7 @@ def evaluate_qixi_cases(
                 and (not case.expect_data_evidence or data_present)
             )
             records.append(
-                QixiEvaluationRecord(
+                ZhishuEvaluationRecord(
                     case_id=case.case_id,
                     expected_mode=case.expected_mode,
                     actual_mode=response.agent_mode,
@@ -99,7 +99,7 @@ def evaluate_qixi_cases(
             )
         except Exception as exc:
             records.append(
-                QixiEvaluationRecord(
+                ZhishuEvaluationRecord(
                     case_id=case.case_id,
                     expected_mode=case.expected_mode,
                     expected_tools=case.expected_tools,
@@ -110,7 +110,7 @@ def evaluate_qixi_cases(
     total = len(records)
     executed = sum(item.error_type is None for item in records)
     latencies = sorted(item.latency_ms for item in records)
-    return QixiEvaluationReport(
+    return ZhishuEvaluationReport(
         dataset=dataset,
         cases=tuple(records),
         total=total,
@@ -124,7 +124,7 @@ def evaluate_qixi_cases(
     )
 
 
-def _rate(records: list[QixiEvaluationRecord], field: str) -> float:
+def _rate(records: list[ZhishuEvaluationRecord], field: str) -> float:
     if not records:
         return 0.0
     return round(sum(bool(getattr(item, field)) for item in records) / len(records), 4)

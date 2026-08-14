@@ -12,6 +12,10 @@ from retail_analytics_agent.agent_models import (
     AgentTaskStatus,
     ToolCallRecord,
 )
+from retail_analytics_agent.brand_identity import (
+    FINAL_ANSWER_SYSTEM_PROMPT,
+    GENERAL_AGENT_SYSTEM_PROMPT,
+)
 from retail_analytics_agent.mcp_client import McpClientError, McpToolClient
 
 
@@ -148,7 +152,7 @@ class GeneralAgent:
                         error_type="ToolNotAllowlisted",
                     )
                 )
-                limitations.append("请求的工具不在企析通用工具白名单中")
+                limitations.append("请求的工具不在知枢通用工具白名单中")
                 answer = self._finalize(question, history, facts, limitations)
                 return GeneralAgentResult(
                     status=AgentTaskStatus.DEGRADED,
@@ -188,12 +192,6 @@ class GeneralAgent:
         facts: Sequence[dict[str, object]],
         access_role: str,
     ) -> ToolDecision:
-        prompt = (
-            "你是企析的通用 Agent。你可以回答一般问题，也可以调用公开的只读工具。"
-            "企业数据库、企业制度和内部数据不属于通用工具权限。"
-            "只有确实需要实时或网页信息时才调用工具；否则直接回答。"
-            "工具调用必须从白名单选择，参数必须是 JSON 对象。"
-        )
         payload = {
             "question": question,
             "history": list(history)[-6:],
@@ -203,7 +201,7 @@ class GeneralAgent:
         }
         raw = self.model.complete_json(
             model=self.model_name,
-            system_prompt=prompt,
+            system_prompt=GENERAL_AGENT_SYSTEM_PROMPT,
             user_payload=payload,
             response_schema=DECISION_SCHEMA,
             timeout_seconds=self.timeout_seconds,
@@ -257,10 +255,7 @@ class GeneralAgent:
     ) -> str:
         raw = self.model.complete_json(
             model=self.model_name,
-            system_prompt=(
-                "你是企析的回答 Agent。只根据用户问题、历史和工具事实回答。"
-                "不要编造实时数据；如果工具失败，明确说明限制。"
-            ),
+            system_prompt=FINAL_ANSWER_SYSTEM_PROMPT,
             user_payload={
                 "question": question,
                 "history": list(history)[-6:],

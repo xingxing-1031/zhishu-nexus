@@ -19,7 +19,7 @@ _tools = CommonTools(
     timeout_seconds=float(os.getenv("MCP_HTTP_TIMEOUT_SECONDS", "10")),
     max_response_bytes=int(os.getenv("MCP_MAX_RESPONSE_BYTES", "1000000")),
 )
-mcp = FastMCP("qixi-common-tools")
+mcp = FastMCP("zhishu-common-tools")
 
 
 @mcp.tool()

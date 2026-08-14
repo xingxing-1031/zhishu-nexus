@@ -21,6 +21,7 @@ from retail_analytics_agent.agent_models import (
     ToolCallRecord,
 )
 from retail_analytics_agent.agent_service import EnterpriseAgentService
+from retail_analytics_agent.brand_identity import EVIDENCE_ANSWER_SYSTEM_PROMPT
 from retail_analytics_agent.general_agent import GeneralAgent, GeneralAgentResult
 from retail_analytics_agent.knowledge_adapter import (
     KnowledgeEvidence,
@@ -62,11 +63,7 @@ class StructuredEvidenceAnswerer:
     ) -> str:
         raw = self._model.complete_json(
             model=self._model_name,
-            system_prompt=(
-                "你是企析的企业证据回答 Agent。只能根据给定的企业制度证据和"
-                "已验证经营数据回答，不得补写未提供的制度口径或数据。"
-                "证据不足时明确说明，不要猜测。"
-            ),
+            system_prompt=EVIDENCE_ANSWER_SYSTEM_PROMPT,
             user_payload={
                 "question": question,
                 "history": list(history)[-6:],
@@ -121,13 +118,42 @@ def _context_snapshot(
 
 
 @dataclass
-class QixiAgentService:
+class ZhishuAgentService:
     data_agent: EnterpriseAgentService
     supervisor: Supervisor
     general_agent: GeneralAgent
     knowledge: KnowledgeRetriever | None
     answerer: EvidenceAnswerer
     knowledge_departments: tuple[str, ...] = ()
+
+    def _prepare(
+        self,
+        request: AgentRequest,
+    ) -> tuple[list[dict[str, str]], AgentPlan]:
+        history = _history_from_store(self.data_agent, request)
+        record = self.data_agent.context_builder.store.get(
+            request.conversation_id,
+            request.user_id,
+        )
+        previous_mode = None
+        for constraint in reversed(
+            record.confirmed_constraints if record is not None else ()
+        ):
+            if not constraint.startswith("last_agent_mode="):
+                continue
+            try:
+                previous_mode = AgentMode(
+                    constraint.removeprefix("last_agent_mode=")
+                )
+            except ValueError:
+                previous_mode = None
+            break
+        plan = self.supervisor.plan(
+            request.question,
+            history,
+            previous_mode=previous_mode,
+        )
+        return history, plan
 
     def run(
         self,
@@ -136,8 +162,19 @@ class QixiAgentService:
     ) -> AgentResponse:
         if request.user_id != access_context.user_id:
             raise PermissionError("agent request belongs to another user")
-        history = _history_from_store(self.data_agent, request)
-        plan = self.supervisor.plan(request.question, history)
+        history, plan = self._prepare(request)
+        self._append_user_turn(request)
+        result = self._execute(request, access_context, plan, history)
+        self._append_final_turn(request, result)
+        return result
+
+    def _execute(
+        self,
+        request: AgentRequest,
+        access_context: AccessContext,
+        plan: AgentPlan,
+        history: Sequence[dict[str, str]],
+    ) -> AgentResponse:
         if plan.mode is AgentMode.GENERAL:
             return self._run_general(request, access_context, plan, history)
         if plan.mode is AgentMode.KNOWLEDGE:
@@ -151,7 +188,9 @@ class QixiAgentService:
         request: AgentRequest,
         access_context: AccessContext,
     ):
-        plan = self.supervisor.plan(request.question)
+        if request.user_id != access_context.user_id:
+            raise PermissionError("agent request belongs to another user")
+        history, plan = self._prepare(request)
         yield AgentStreamEvent(
             event="status",
             node="supervisor",
@@ -164,14 +203,16 @@ class QixiAgentService:
                 message=step.task,
             )
         try:
-            result = self.run(request, access_context)
+            self._append_user_turn(request)
+            result = self._execute(request, access_context, plan, history)
+            self._append_final_turn(request, result)
         except Exception as exc:
             yield AgentStreamEvent(event="error", node="review_agent", message=str(exc))
             return
         yield AgentStreamEvent(
             event="result",
             node="review_agent",
-            message="企析任务完成",
+            message="知枢任务完成",
             response=result,
         )
 
@@ -189,7 +230,6 @@ class QixiAgentService:
             request.conversation_id,
             access_context.role.value,
         )
-        self._append_turn(request, result.answer, ())
         review = AgentReview(
             passed=bool(result.answer),
             checks={"general_answer_present": bool(result.answer)},
@@ -234,7 +274,6 @@ class QixiAgentService:
         if not answer:
             status = AgentTaskStatus.REFUSED
             answer = "当前没有足够的企业知识证据支持回答。"
-        self._append_turn(request, answer, tuple(item.source_id for item in evidence_views))
         review = AgentReview(
             passed=bool(evidence_views) and bool(answer),
             checks={"knowledge_evidence_present": bool(evidence_views)},
@@ -262,7 +301,11 @@ class QixiAgentService:
         plan: AgentPlan,
     ) -> AgentResponse:
         data_request = request.model_copy(update={"include_knowledge": False})
-        result = self.data_agent.run(data_request, access_context)
+        result = self.data_agent.run(
+            data_request,
+            access_context,
+            persist_context=False,
+        )
         answer = result.answer or (
             result.report.executive_summary if result.report is not None else ""
         )
@@ -305,6 +348,7 @@ class QixiAgentService:
                 self.data_agent.run,
                 data_request,
                 access_context,
+                persist_context=False,
             )
             evidence, knowledge_call, limitations = knowledge_future.result()
             data_result = data_future.result()
@@ -427,19 +471,42 @@ class QixiAgentService:
         } else AgentTaskStatus.DEGRADED
         return tuple(item.model_copy(update={"status": step_status}) for item in steps)
 
-    def _append_turn(
+    def _append_user_turn(self, request: AgentRequest) -> None:
+        self.data_agent.context_builder.append_turn(
+            request.conversation_id,
+            request.user_id,
+            request_id=f"{request.request_id}:user",
+            role="user",
+            content=request.question,
+        )
+
+    def _append_final_turn(
         self,
         request: AgentRequest,
-        answer: str,
-        evidence_ids: tuple[str, ...],
+        response: AgentResponse,
     ) -> None:
+        answer = response.answer
+        if not answer and response.report is not None:
+            answer = response.report.executive_summary
+        if not answer and response.limitations:
+            answer = response.limitations[0]
+        if not answer:
+            answer = "当前任务未生成可展示的最终结果。"
+        evidence_ids = [item.source_id for item in response.knowledge_evidence]
+        if response.report is not None:
+            evidence_ids.extend(response.report.data_evidence)
+            evidence_ids.extend(response.report.document_evidence)
+        constraints = [f"last_agent_mode={response.agent_mode.value}"]
+        if response.skill_id is not None:
+            constraints.append(f"last_skill={response.skill_id.value}")
         self.data_agent.context_builder.append_turn(
             request.conversation_id,
             request.user_id,
             request_id=f"{request.request_id}:assistant",
             role="assistant",
             content=answer,
-            evidence_ids=evidence_ids,
+            evidence_ids=tuple(dict.fromkeys(evidence_ids)),
+            confirmed_constraints=tuple(constraints),
         )
 
 
