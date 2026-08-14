@@ -26,6 +26,7 @@ from retail_analytics_agent.admin_views import (
     list_metric_definitions,
 )
 from retail_analytics_agent.agent_models import (
+    AgentMode,
     AgentRequest,
     AgentResponse,
     AgentStreamEvent,
@@ -986,6 +987,7 @@ def read_admin_audit_entries(
         Query(min_length=1, max_length=200),
     ] = None,
     status: AdminAuditStatus | None = None,
+    agent_mode: AgentMode | None = None,
     approval_required: bool | None = None,
     days: Annotated[int, Query(ge=1, le=365)] = 30,
     limit: Annotated[int, Query(ge=1, le=500)] = 100,
@@ -995,6 +997,7 @@ def read_admin_audit_entries(
         connection,
         request_id=request_id,
         user_id=user_id,
+        agent_mode=agent_mode,
         status=status,
         approval_required=approval_required,
         days=days,

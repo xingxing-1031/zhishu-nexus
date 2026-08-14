@@ -230,14 +230,18 @@ export interface TraceResponse {
 
 export interface AuditEntry {
   request_id: string;
+  conversation_id?: string | null;
   user_id: string;
   access_role: Role;
+  agent_mode: AgentMode;
   original_question: string;
   status: "running" | "succeeded" | "approval_required" | "rejected" | "degraded" | "failed";
   row_count?: number | null;
   duration_ms?: number | null;
   max_rows?: number | null;
   approval_required: boolean;
+  tool_names: string[];
+  evidence_count: number;
   created_at: string;
   updated_at: string;
 }

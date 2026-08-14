@@ -53,14 +53,18 @@ def test_admin_audit_query_returns_typed_entries() -> None:
     connection.execute.return_value.fetchall.return_value = [
         {
             "request_id": "REQ-001",
+            "conversation_id": "CONV-001",
             "user_id": "USER-001",
             "access_role": "analyst",
+            "agent_mode": "data",
             "original_question": "最近30天各渠道销售额",
             "status": "succeeded",
             "row_count": 4,
             "duration_ms": 1260.5,
             "max_rows": 10,
             "approval_required": False,
+            "tool_names": ["sql.query"],
+            "evidence_count": 2,
             "created_at": now,
             "updated_at": now,
         }
@@ -75,6 +79,9 @@ def test_admin_audit_query_returns_typed_entries() -> None:
 
     assert result[0].original_question == "最近30天各渠道销售额"
     assert result[0].status is AdminAuditStatus.SUCCEEDED
+    assert result[0].agent_mode.value == "data"
+    assert result[0].tool_names == ("sql.query",)
+    assert result[0].evidence_count == 2
     params = connection.execute.call_args.args[1]
     assert params["status"] == "succeeded"
     assert params["days"] == 7
@@ -82,9 +89,12 @@ def test_admin_audit_query_returns_typed_entries() -> None:
 
 
 def test_admin_audit_query_types_nullable_filters_for_postgres() -> None:
+    assert "FROM agent_request_runs AS run" in ADMIN_AUDIT_SELECT_SQL
+    assert "run.auditable = TRUE" in ADMIN_AUDIT_SELECT_SQL
     assert "CAST(%(request_id)s AS text) IS NULL" in ADMIN_AUDIT_SELECT_SQL
     assert "CAST(%(user_id)s AS text) IS NULL" in ADMIN_AUDIT_SELECT_SQL
     assert "CAST(%(status)s AS text) IS NULL" in ADMIN_AUDIT_SELECT_SQL
+    assert "CAST(%(agent_mode)s AS text) IS NULL" in ADMIN_AUDIT_SELECT_SQL
     assert (
         "CAST(%(approval_required)s AS boolean) IS NULL"
         in ADMIN_AUDIT_SELECT_SQL
@@ -121,14 +131,18 @@ def test_admin_audit_endpoint_uses_database_dependency() -> None:
     connection.execute.return_value.fetchall.return_value = [
         {
             "request_id": "REQ-002",
+            "conversation_id": "CONV-002",
             "user_id": "ADMIN-001",
             "access_role": "admin",
+            "agent_mode": "data",
             "original_question": "查看退款原因",
             "status": "approval_required",
             "row_count": None,
             "duration_ms": None,
             "max_rows": 10,
             "approval_required": True,
+            "tool_names": ["sql.query"],
+            "evidence_count": 0,
             "created_at": now,
             "updated_at": now,
         }

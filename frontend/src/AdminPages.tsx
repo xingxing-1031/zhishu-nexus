@@ -14,12 +14,20 @@ const auditStatusLabels: Record<string, string> = {
   failed: "执行失败",
 };
 
+const auditModeLabels = {
+  general: "通用安全事件",
+  knowledge: "企业知识",
+  data: "经营数据",
+  collaboration: "知识与数据协作",
+} as const;
+
 export function AuditPage() {
   const [entries, setEntries] = useState<AuditEntry[] | null>(null);
   const [error, setError] = useState("");
   const [requestId, setRequestId] = useState("");
   const [userId, setUserId] = useState("");
   const [status, setStatus] = useState("");
+  const [agentMode, setAgentMode] = useState("");
   const [approval, setApproval] = useState("");
   const [days, setDays] = useState("30");
 
@@ -30,6 +38,7 @@ export function AuditPage() {
     if (requestId.trim()) query.set("request_id", requestId.trim());
     if (userId.trim()) query.set("user_id", userId.trim());
     if (status) query.set("status", status);
+    if (agentMode) query.set("agent_mode", agentMode);
     if (approval) query.set("approval_required", approval);
     try {
       setEntries(await api.audit(query.toString()));
@@ -57,13 +66,14 @@ export function AuditPage() {
         <label>用户<input value={userId} onChange={(event) => setUserId(event.target.value)} placeholder="全部" /></label>
         <label>时间范围<select value={days} onChange={(event) => setDays(event.target.value)}><option value="7">近7天</option><option value="30">近30天</option><option value="90">近90天</option><option value="365">近一年</option></select></label>
         <label>审计状态<select value={status} onChange={(event) => setStatus(event.target.value)}><option value="">全部</option>{Object.entries(auditStatusLabels).map(([value, text]) => <option value={value} key={value}>{text}</option>)}</select></label>
+        <label>Agent 模式<select value={agentMode} onChange={(event) => setAgentMode(event.target.value)}><option value="">全部</option>{Object.entries(auditModeLabels).map(([value, text]) => <option value={value} key={value}>{text}</option>)}</select></label>
         <label>是否触发审批<select value={approval} onChange={(event) => setApproval(event.target.value)}><option value="">全部</option><option value="true">是</option><option value="false">否</option></select></label>
         <button className="primary-button filter-submit" type="submit"><Search size={15} />查询</button>
       </form>
 
       <section className="admin-table-card">
         {entries === null ? <LoadingBlock text="正在读取审计记录" /> : error ? <div className="result-message danger">{error}</div> : entries.length === 0 ? <EmptyState>当前筛选条件下没有审计记录</EmptyState> : (
-          <div className="table-scroll"><table><thead><tr><th>请求时间</th><th>用户</th><th>原始问题摘要</th><th>状态</th><th>行数</th><th>耗时</th><th>审批</th><th>请求编号</th></tr></thead><tbody>{entries.map((entry) => <tr key={entry.request_id}><td className="mono">{formatDate(entry.created_at)}</td><td>{entry.user_id}</td><td className="question-cell">{entry.original_question}</td><td><StatusPill status={outcomeVisualStatus(entry.status)}>{auditStatusLabels[entry.status]}</StatusPill></td><td className="mono numeric">{entry.row_count ?? "—"}</td><td className="mono numeric">{entry.duration_ms === null || entry.duration_ms === undefined ? "—" : `${Math.round(entry.duration_ms)} ms`}</td><td>{entry.approval_required ? <StatusPill status="warning">已触发</StatusPill> : "否"}</td><td><code>{entry.request_id}</code></td></tr>)}</tbody></table></div>
+          <div className="table-scroll"><table><thead><tr><th>请求时间</th><th>用户</th><th>Agent 模式</th><th>原始问题摘要</th><th>状态</th><th>工具 / 证据</th><th>行数</th><th>耗时</th><th>审批</th><th>请求编号</th></tr></thead><tbody>{entries.map((entry) => <tr key={entry.request_id}><td className="mono">{formatDate(entry.created_at)}</td><td>{entry.user_id}</td><td><StatusPill status="neutral">{auditModeLabels[entry.agent_mode]}</StatusPill></td><td className="question-cell">{entry.original_question}</td><td><StatusPill status={outcomeVisualStatus(entry.status)}>{auditStatusLabels[entry.status]}</StatusPill></td><td className="audit-evidence-cell"><span>{entry.tool_names.length ? entry.tool_names.join("、") : "无工具"}</span><small>{entry.evidence_count} 条证据</small></td><td className="mono numeric">{entry.row_count ?? "—"}</td><td className="mono numeric">{entry.duration_ms === null || entry.duration_ms === undefined ? "—" : `${Math.round(entry.duration_ms)} ms`}</td><td>{entry.approval_required ? <StatusPill status="warning">已触发</StatusPill> : "否"}</td><td><code>{entry.request_id}</code></td></tr>)}</tbody></table></div>
         )}
       </section>
     </main>

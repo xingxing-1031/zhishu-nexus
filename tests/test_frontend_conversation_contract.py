@@ -78,3 +78,22 @@ def test_storage_namespaces_migrate_legacy_values_without_removing_them() -> Non
     assert "readMigratedStorage" in conversations + workspace
     assert "storage.setItem(primaryKey, legacy)" in migration
     assert "removeItem" not in migration
+
+
+def test_admin_audit_exposes_agent_mode_tools_and_evidence() -> None:
+    admin_pages = (FRONTEND / "AdminPages.tsx").read_text(encoding="utf-8")
+    types = (FRONTEND / "types.ts").read_text(encoding="utf-8")
+    styles = (FRONTEND / "styles.css").read_text(encoding="utf-8")
+
+    assert "auditModeLabels" in admin_pages
+    assert "Agent 模式" in admin_pages
+    assert "entry.tool_names" in admin_pages
+    assert "entry.evidence_count" in admin_pages
+    assert "agent_mode: AgentMode" in types
+    assert "tool_names: string[]" in types
+    assert "evidence_count: number" in types
+    assert ".filter-bar select" in styles
+    filter_control_rule = styles.split(".filter-bar select", maxsplit=1)[1].split(
+        "}", maxsplit=1
+    )[0]
+    assert "min-height: 44px" in filter_control_rule
