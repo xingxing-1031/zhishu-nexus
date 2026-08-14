@@ -1,11 +1,13 @@
 from datetime import UTC, datetime
 
 from retail_analytics_agent.agent_models import (
+    AgentMode,
     AgentRequest,
     AgentTaskStatus,
     OperationsReport,
     ReportFinding,
 )
+from retail_analytics_agent.agent_runs import InMemoryAgentRunStore
 from retail_analytics_agent.agent_service import EnterpriseAgentService
 from retail_analytics_agent.context_builder import ContextBuilder
 from retail_analytics_agent.context_store import InMemoryConversationStore
@@ -51,8 +53,17 @@ class FakeKnowledge:
 
 
 class FakeGeneral:
+    def __init__(self):
+        self.calls = 0
+
     def answer(self, *_args, **_kwargs):
+        self.calls += 1
         return GeneralAgentResult(status=AgentTaskStatus.SUCCEEDED, answer="普通回答")
+
+
+class FailingGeneral:
+    def answer(self, *_args, **_kwargs):
+        raise RuntimeError("postgresql://secret@internal:5432/private")
 
 
 class FakeAnswerer:
@@ -85,13 +96,14 @@ class FakeData:
         )
 
 
-def _service(data=None):
+def _service(data=None, *, general=None, run_store=None):
     return ZhishuAgentService(
         data_agent=data or _context_service(),
         supervisor=Supervisor(),
-        general_agent=FakeGeneral(),
+        general_agent=general or FakeGeneral(),
         knowledge=FakeKnowledge(),
         answerer=FakeAnswerer(),
+        run_store=run_store or InMemoryAgentRunStore(),
     )
 
 
@@ -159,3 +171,55 @@ def test_collaboration_persists_original_question_and_final_synthesis_once() -> 
         ("assistant", "基于已验证证据的结论。"),
     ]
     assert "last_agent_mode=collaboration" in record.confirmed_constraints
+
+
+def test_completed_request_is_replayed_without_duplicate_agent_execution() -> None:
+    general = FakeGeneral()
+    service = _service(general=general)
+    request = _request("你是谁？")
+    access = AccessContext(user_id="u1", role=AccessRole.ANALYST)
+
+    first = service.run(request, access)
+    second = service.run(request, access)
+
+    assert second == first
+    assert general.calls == 1
+    record = service.data_agent.context_builder.store.get("c1", "u1")
+    assert record is not None
+    assert len(record.turns) == 2
+
+
+def test_stream_error_does_not_expose_internal_exception_text() -> None:
+    service = _service(general=FailingGeneral())
+
+    events = list(
+        service.stream(
+            _request("你是谁？"),
+            AccessContext(user_id="u1", role=AccessRole.ANALYST),
+        )
+    )
+
+    assert events[-1].event.value == "error"
+    assert "postgresql://" not in events[-1].message
+    stored = service.run_store.get(
+        "r1",
+        AccessContext(user_id="u1", role=AccessRole.ANALYST),
+    )
+    assert stored is not None
+    assert stored.status is AgentTaskStatus.FAILED
+    assert stored.failure_reason == events[-1].message
+
+
+def test_running_request_returns_typed_status_without_reexecution() -> None:
+    store = InMemoryAgentRunStore()
+    request = _request("你是谁？")
+    access = AccessContext(user_id="u1", role=AccessRole.ANALYST)
+    store.claim(request, access, AgentMode.GENERAL, False)
+    general = FakeGeneral()
+    service = _service(general=general, run_store=store)
+
+    response = service.run(request, access)
+
+    assert response.status is AgentTaskStatus.RUNNING
+    assert response.agent_mode is AgentMode.GENERAL
+    assert general.calls == 0

@@ -29,7 +29,9 @@ from retail_analytics_agent.agent_models import (
     AgentRequest,
     AgentResponse,
     AgentStreamEvent,
+    AgentTaskStatus,
 )
+from retail_analytics_agent.agent_runs import DatabaseAgentRunStore
 from retail_analytics_agent.agent_service import EnterpriseAgentService
 from retail_analytics_agent.analysis_service import (
     AnalysisRequestConflictError,
@@ -91,6 +93,7 @@ from retail_analytics_agent.workspace_history import (
     WorkspaceHistoryStore,
 )
 from retail_analytics_agent.zhishu_service import (
+    AgentRunConflictError,
     StructuredEvidenceAnswerer,
     ZhishuAgentService,
 )
@@ -699,6 +702,7 @@ def get_agent_service(
                 timeout_seconds=settings.active_model_timeout_seconds,
             ),
             knowledge_departments=settings.active_knowledge_departments,
+            run_store=DatabaseAgentRunStore(),
         )
     finally:
         if client is not None:
@@ -732,10 +736,29 @@ def run_agent(
     )
     try:
         return service.run(agent_request, access_context)
+    except AgentRunConflictError as exc:
+        raise HTTPException(status_code=409, detail=public_error_message(exc)) from exc
     except PermissionError as exc:
         raise HTTPException(status_code=403, detail="当前身份无权执行该任务。") from exc
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=public_error_message(exc)) from exc
+
+
+@app.get("/agent/runs/{request_id}", response_model=AgentResponse)
+def get_agent_run(
+    request_id: str,
+    service: Annotated[ZhishuAgentService, Depends(get_agent_service)],
+    access_context: Annotated[AccessContext, Depends(get_access_context)],
+) -> AgentResponse:
+    try:
+        response = service.get_status(request_id, access_context)
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail="当前身份无权查看该任务。") from exc
+    if response is None:
+        raise HTTPException(status_code=404, detail="没有找到对应的 Agent 请求。")
+    if response.status is AgentTaskStatus.RUNNING:
+        raise HTTPException(status_code=409, detail="Agent 请求仍在执行中。")
+    return response
 
 
 @app.post(

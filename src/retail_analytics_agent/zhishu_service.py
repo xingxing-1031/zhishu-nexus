@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from time import monotonic
 from typing import Any, Protocol, Sequence
 
@@ -20,6 +20,13 @@ from retail_analytics_agent.agent_models import (
     KnowledgeEvidenceView,
     ToolCallRecord,
 )
+from retail_analytics_agent.agent_runs import (
+    AgentRunClaimStatus,
+    AgentRunRecord,
+    AgentRunStore,
+    InMemoryAgentRunStore,
+    is_auditable_agent_request,
+)
 from retail_analytics_agent.agent_service import EnterpriseAgentService
 from retail_analytics_agent.brand_identity import EVIDENCE_ANSWER_SYSTEM_PROMPT
 from retail_analytics_agent.general_agent import GeneralAgent, GeneralAgentResult
@@ -29,6 +36,7 @@ from retail_analytics_agent.knowledge_adapter import (
     KnowledgeRetriever,
 )
 from retail_analytics_agent.models import AccessContext
+from retail_analytics_agent.public_errors import public_error_message
 from retail_analytics_agent.supervisor import AgentPlan, Supervisor
 
 
@@ -81,6 +89,10 @@ class StructuredEvidenceAnswerer:
         return _Answer.model_validate_json(raw).answer.strip()
 
 
+class AgentRunConflictError(ValueError):
+    """Raised when a request ID is reused with different Agent input."""
+
+
 def _hash_payload(payload: object) -> str:
     encoded = json.dumps(payload, sort_keys=True, ensure_ascii=False, default=str).encode()
     return hashlib.sha256(encoded).hexdigest()
@@ -125,6 +137,7 @@ class ZhishuAgentService:
     knowledge: KnowledgeRetriever | None
     answerer: EvidenceAnswerer
     knowledge_departments: tuple[str, ...] = ()
+    run_store: AgentRunStore = field(default_factory=InMemoryAgentRunStore)
 
     def _prepare(
         self,
@@ -163,10 +176,70 @@ class ZhishuAgentService:
         if request.user_id != access_context.user_id:
             raise PermissionError("agent request belongs to another user")
         history, plan = self._prepare(request)
-        self._append_user_turn(request)
-        result = self._execute(request, access_context, plan, history)
-        self._append_final_turn(request, result)
-        return result
+        return self._run_prepared(request, access_context, plan, history)
+
+    def _run_prepared(
+        self,
+        request: AgentRequest,
+        access_context: AccessContext,
+        plan: AgentPlan,
+        history: Sequence[dict[str, str]],
+    ) -> AgentResponse:
+        started = monotonic()
+        claim = self.run_store.claim(
+            request,
+            access_context,
+            plan.mode,
+            is_auditable_agent_request(request.question, plan.mode),
+        )
+        if claim.status is AgentRunClaimStatus.CONFLICT:
+            raise AgentRunConflictError(
+                "request_id is already bound to different agent input"
+            )
+        if claim.status is AgentRunClaimStatus.EXISTING:
+            if claim.record.response is not None:
+                return claim.record.response
+            return self._status_response(claim.record)
+        try:
+            self._append_user_turn(request)
+            result = self._execute(request, access_context, plan, history)
+            self._append_final_turn(request, result)
+            self.run_store.complete(
+                result,
+                duration_ms=(monotonic() - started) * 1000,
+            )
+            return result
+        except Exception as exc:
+            self.run_store.fail(
+                request.request_id,
+                public_error_message(exc),
+                duration_ms=(monotonic() - started) * 1000,
+            )
+            raise
+
+    def get_status(
+        self,
+        request_id: str,
+        viewer: AccessContext,
+    ) -> AgentResponse | None:
+        record = self.run_store.get(request_id, viewer)
+        if record is None:
+            return None
+        if record.response is not None:
+            return record.response
+        return self._status_response(record)
+
+    @staticmethod
+    def _status_response(record: AgentRunRecord) -> AgentResponse:
+        limitations = (record.failure_reason,) if record.failure_reason else ()
+        return AgentResponse(
+            request_id=record.request_id,
+            conversation_id=record.conversation_id or record.request_id,
+            status=record.status,
+            agent_mode=record.agent_mode,
+            answer=record.failure_reason or "",
+            limitations=limitations,
+        )
 
     def _execute(
         self,
@@ -203,11 +276,18 @@ class ZhishuAgentService:
                 message=step.task,
             )
         try:
-            self._append_user_turn(request)
-            result = self._execute(request, access_context, plan, history)
-            self._append_final_turn(request, result)
+            result = self._run_prepared(
+                request,
+                access_context,
+                plan,
+                history,
+            )
         except Exception as exc:
-            yield AgentStreamEvent(event="error", node="review_agent", message=str(exc))
+            yield AgentStreamEvent(
+                event="error",
+                node="review_agent",
+                message=public_error_message(exc),
+            )
             return
         yield AgentStreamEvent(
             event="result",

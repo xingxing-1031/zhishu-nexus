@@ -7,6 +7,7 @@ from pydantic import SecretStr
 
 from retail_analytics_agent.access_control import get_access_context
 from retail_analytics_agent.agent_models import (
+    AgentMode,
     AgentResponse,
     AgentStreamEvent,
     AgentTaskStatus,
@@ -180,6 +181,17 @@ class FakeAgentService:
             node="report",
             message="经营分析报告生成完成",
             response=self.run(request, access_context),
+        )
+
+    def get_status(self, request_id, access_context):
+        if request_id != "REQ-AGENT-STATUS-001":
+            return None
+        return AgentResponse(
+            request_id=request_id,
+            conversation_id="CONV-AGENT-STATUS-001",
+            status=AgentTaskStatus.SUCCEEDED,
+            agent_mode=AgentMode.GENERAL,
+            answer="我是知枢 AI。",
         )
 
 
@@ -451,6 +463,21 @@ def test_validate_analysis_request_rejects_too_many_rows() -> None:
     assert error["loc"] == ["body", "max_rows"]
     assert error["type"] == "less_than_equal"
 
+
+def test_agent_run_status_returns_owned_completed_response() -> None:
+    service = FakeAgentService()
+    app.dependency_overrides[get_agent_service] = lambda: service
+    app.dependency_overrides[get_access_context] = _access_context
+
+    try:
+        completed = client.get("/agent/runs/REQ-AGENT-STATUS-001")
+        missing = client.get("/agent/runs/REQ-MISSING")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert completed.status_code == 200
+    assert completed.json()["answer"] == "我是知枢 AI。"
+    assert missing.status_code == 404
 
 def test_run_analysis_invokes_complete_workflow_runner() -> None:
     runner = Mock()
