@@ -1,6 +1,5 @@
 import {
   BarChart3,
-  BrainCircuit,
   Check,
   ChevronRight,
   Clock3,
@@ -13,7 +12,7 @@ import {
   TableProperties,
 } from "lucide-react";
 import { FormEvent, lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
-import { api, streamAgent, streamAnalysis } from "./api";
+import { api, streamAgent } from "./api";
 import ConversationPanel from "./ConversationPanel";
 import {
   appendTurn,
@@ -45,7 +44,6 @@ import type {
   ApprovalRequired,
   Overview,
   SessionInfo,
-  StreamEvent,
   TraceEvent,
 } from "./types";
 
@@ -68,15 +66,13 @@ const stageAliases: Record<string, string> = {
 };
 
 const examples = [
-  ["渠道经营", "统计最近30天各销售渠道的销售额，按销售额从高到低排序，返回10条。"],
-  ["商品表现", "最近30天各商品销量从高到低排列，返回10条。"],
-  ["售后风险", "最近30天各退款状态的退款金额是多少？"],
-  ["趋势分析", "最近30天按日期统计销售额变化趋势。"],
+  ["当前时间", "现在北京时间几点？"],
+  ["企业制度", "公司的差旅报销制度是什么？"],
+  ["经营分析", "统计最近30天各销售渠道的销售额，按销售额从高到低排序。"],
+  ["协作复盘", "结合退款数据和售后制度，分析最近30天的售后风险。"],
 ];
 
 type StageState = "idle" | "running" | "success" | "warning" | "danger" | "skipped";
-type WorkspaceMode = "query" | "agent";
-
 export default function Workspace({
   session,
   overview,
@@ -87,11 +83,10 @@ export default function Workspace({
   ready: boolean;
 }) {
   const [question, setQuestion] = useState(examples[0][1]);
-  const [mode, setMode] = useState<WorkspaceMode>("agent");
   const [maxRows, setMaxRows] = useState(Math.min(10, session.max_rows));
   const [requestId, setRequestId] = useState("");
   const [running, setRunning] = useState(false);
-  const [message, setMessage] = useState("选择一个经营场景，或输入你的业务问题");
+  const [message, setMessage] = useState("你可以询问企业知识、经营数据或一般问题");
   const [outcome, setOutcome] = useState<AnalysisOutcome | null>(null);
   const [agentResponse, setAgentResponse] = useState<AgentResponse | null>(null);
   const [failure, setFailure] = useState("");
@@ -135,12 +130,6 @@ export default function Workspace({
     setStageState(next);
   }
 
-  function markStage(node: string, state: StageState = "success") {
-    const normalized = stageAliases[node] ?? node;
-    if (!stages.some(([name]) => name === normalized)) return;
-    updateStages({ ...stageStateRef.current, [normalized]: state });
-  }
-
   function terminalStages(traceNodes: string[], terminalNode?: string, terminalState: StageState = "danger") {
     const next = Object.fromEntries(stages.map(([name]) => [name, "skipped"])) as Record<string, StageState>;
     traceNodes.forEach((node) => {
@@ -154,32 +143,6 @@ export default function Workspace({
     updateStages(next);
   }
 
-  function receive(event: StreamEvent) {
-    setMessage(localizeUserMessage(event.message));
-    if (event.event === "status" && event.node) markStage(event.node, "success");
-    if (event.event === "result" && event.response) {
-      outcomeRef.current = event.response;
-      setOutcome(event.response);
-      terminalStages(event.response.trace);
-    } else if (event.event === "assistant_message" && event.assistant) {
-      outcomeRef.current = event.assistant;
-      setOutcome(event.assistant);
-      terminalStages(event.assistant.trace);
-    } else if (event.event === "approval_required" && event.approval) {
-      outcomeRef.current = event.approval;
-      setOutcome(event.approval);
-      setApproval(event.approval);
-      terminalStages(event.approval.trace, "request_approval", "warning");
-    } else if (event.event === "rejected" && event.rejection) {
-      outcomeRef.current = event.rejection;
-      setOutcome(event.rejection);
-      terminalStages(event.rejection.trace, event.node ?? "scope");
-    } else if (event.event === "error") {
-      setFailure(event.message);
-      if (event.node) markStage(event.node, "danger");
-    }
-  }
-
   async function run(event: FormEvent) {
     event.preventDefault();
     await executeQuestion(question);
@@ -189,6 +152,13 @@ export default function Workspace({
     setMessage(event.message);
     if (event.event === "result" && event.response) {
       setAgentResponse(event.response);
+      if (event.response.analysis) {
+        setOutcome(event.response.analysis);
+        outcomeRef.current = event.response.analysis;
+        if (event.response.analysis.status === "pending") {
+          setApproval(event.response.analysis);
+        }
+      }
     }
     if (event.event === "error") setFailure(event.message);
   }
@@ -207,28 +177,16 @@ export default function Workspace({
     setMessage("分析请求已发送");
     setRequestId(nextRequestId);
     try {
-      if (mode === "agent") {
-        await streamAgent(
-          {
-            request_id: nextRequestId,
-            conversation_id: activeConversationId,
-            user_id: session.user_id,
-            question: submittedQuestion,
-            max_rows: clampRows(maxRows, session.max_rows),
-          },
-          receiveAgent,
-        );
-      } else {
-        await streamAnalysis(
-          {
-            request_id: nextRequestId,
-            user_id: session.user_id,
-            question: submittedQuestion,
-            max_rows: clampRows(maxRows, session.max_rows),
-          },
-          receive,
-        );
-      }
+      await streamAgent(
+        {
+          request_id: nextRequestId,
+          conversation_id: activeConversationId,
+          user_id: session.user_id,
+          question: submittedQuestion,
+          max_rows: clampRows(maxRows, session.max_rows),
+        },
+        receiveAgent,
+      );
     } catch (reason) {
       runFailure = reason instanceof Error ? localizeUserMessage(reason.message) : "分析请求失败，请稍后重试。";
       setFailure(runFailure);
@@ -354,19 +312,15 @@ export default function Workspace({
             onSelectTurn={restoreTurn}
           />
           <aside className="query-panel">
-          <div className="mode-switch" role="tablist" aria-label="分析模式">
-            <button type="button" className={mode === "agent" ? "active" : ""} onClick={() => { setMode("agent"); resetRun(); }}><BrainCircuit size={15} /> Agent 复盘</button>
-            <button type="button" className={mode === "query" ? "active" : ""} onClick={() => { setMode("query"); resetRun(); }}><Database size={15} /> 受控查询</button>
-          </div>
-          <h2>{mode === "agent" ? "经营复盘" : "提问分析"}</h2>
-          <p className="panel-intro">{mode === "agent" ? "由 Skill 规划任务，联合数据库与企业制度证据。" : "直接运行只读、可审计的结构化数据查询。"}</p>
+          <h2>问企析</h2>
+          <p className="panel-intro">企业知识、经营分析和公开信息由系统自动选择所需能力。</p>
           <form onSubmit={run}>
-            <label htmlFor="question">业务问题</label>
+            <label htmlFor="question">你的问题</label>
             <textarea
               id="question"
               value={question}
               onChange={(event) => setQuestion(event.target.value)}
-              placeholder="请输入你的业务问题，例如：最近30天各渠道销售额排名"
+              placeholder="例如：结合最近30天退款数据和售后制度给出复盘"
               rows={5}
               maxLength={800}
               required
@@ -414,7 +368,7 @@ export default function Workspace({
         </div>
 
         <section className="analysis-content">
-          {mode === "agent" && <AgentPanel response={agentResponse} running={running} />}
+          <AgentPanel response={agentResponse} running={running} />
           <section className="workflow-card" aria-labelledby="workflow-heading">
             <div className="section-title-row">
               <div>
@@ -623,29 +577,35 @@ function makeRequestId() {
 function AgentPanel({ response, running }: { response: AgentResponse | null; running: boolean }) {
   const plan = response?.task_plan;
   const report = response?.report;
+  const agentSteps = response?.agent_steps ?? [];
+  const knowledgeEvidence = response?.knowledge_evidence ?? [];
+  const dataEvidence = report?.data_evidence ?? [];
   return (
     <section className="agent-card" aria-labelledby="agent-heading">
       <div className="section-title-row">
         <div>
-          <h2 id="agent-heading">Agent 执行面板</h2>
-          <p>{running ? "正在按计划收集数据与制度证据" : "保留可解释的任务边界、工具调用和证据链"}</p>
+          <h2 id="agent-heading">企析执行记录</h2>
+          <p>{running ? "正在选择所需能力并执行任务" : "路由、工具、证据和审核结果均可查看"}</p>
         </div>
         {response && <StatusPill status={response.status === "succeeded" ? "success" : response.status === "degraded" ? "warning" : "danger"}>{agentStatusLabel(response.status)}</StatusPill>}
       </div>
-      {!response ? <EmptyState>提交一个复盘问题后，这里会显示 Agent 的执行状态</EmptyState> : (
+      {!response ? <EmptyState>向企析提问后，这里会显示实际执行路径</EmptyState> : (
         <>
           <div className="agent-summary-grid">
-            <div><span>Skill</span><strong>{skillLabel(response.skill_id)}</strong></div>
+            <div><span>执行模式</span><strong>{agentModeLabel(response.agent_mode)}</strong></div>
             <div><span>上下文</span><strong className="mono">{response.context?.token_estimate ?? 0} / {response.context?.token_budget ?? 0} tokens</strong></div>
             <div><span>工具调用</span><strong className="mono">{response.tool_calls.length} 次</strong></div>
-            <div><span>证据</span><strong className="mono">{(report?.data_evidence.length ?? 0) + (report?.document_evidence.length ?? 0)} 条</strong></div>
+            <div><span>已验证证据</span><strong className="mono">{dataEvidence.length + knowledgeEvidence.length} 条</strong></div>
           </div>
-          {plan && <div className="agent-section"><div className="agent-section-title"><ListChecks size={15} />任务计划</div><ol className="agent-task-list">{plan.subtasks.map((task) => <li key={task.id}><span className={`task-dot ${task.status}`} /> <span>{task.description}</span><code>{task.required_tools.join(" · ")}</code></li>)}</ol></div>}
+          {response.answer && <div className={`agent-answer ${response.status === "degraded" ? "warning" : ""}`}><p>{response.answer}</p></div>}
+          {agentSteps.length > 0 ? <div className="agent-section"><div className="agent-section-title"><ListChecks size={15} />执行计划</div><ol className="agent-task-list">{agentSteps.map((step, index) => <li key={`${step.agent}-${index}`}><span className={`task-dot ${step.status}`} /><span>{step.task}</span><code>{agentLabel(step.agent)}</code></li>)}</ol></div> : plan && <div className="agent-section"><div className="agent-section-title"><ListChecks size={15} />任务计划</div><ol className="agent-task-list">{plan.subtasks.map((task) => <li key={task.id}><span className={`task-dot ${task.status}`} /><span>{task.description}</span><code>{task.required_tools.join(" · ")}</code></li>)}</ol></div>}
           <div className="agent-columns">
-            <div className="agent-section"><div className="agent-section-title"><Clock3 size={15} />工具时间线</div><ul className="agent-tool-list">{response.tool_calls.map((call, index) => <li key={`${call.tool_name}-${index}`}><strong>{call.tool_name}</strong><span>{call.status}</span><code>{call.duration_ms} ms</code></li>)}</ul></div>
-            <div className="agent-section"><div className="agent-section-title"><FileSearch size={15} />证据账本</div><ul className="plain-list">{(report?.data_evidence ?? []).map((item) => <li key={item}>数据 · {item}</li>)}{(report?.document_evidence ?? []).map((item) => <li key={item}>制度 · {item}</li>)}{!report?.data_evidence.length && !report?.document_evidence.length && <li>当前没有可引用证据</li>}</ul></div>
+            <div className="agent-section"><div className="agent-section-title"><Clock3 size={15} />工具时间线</div>{response.tool_calls.length ? <ul className="agent-tool-list">{response.tool_calls.map((call, index) => <li key={`${call.tool_name}-${index}`}><strong>{toolLabel(call.tool_name)}</strong><span>{call.status === "succeeded" ? "成功" : call.status}</span><code>{call.duration_ms} ms</code></li>)}</ul> : <EmptyState>本次回答不需要调用工具</EmptyState>}</div>
+            <div className="agent-section"><div className="agent-section-title"><FileSearch size={15} />证据账本</div><ul className="plain-list">{dataEvidence.map((item) => <li key={item}>数据 · {item}</li>)}{knowledgeEvidence.map((item) => <li key={item.source_id}>制度 · {item.title} v{item.version}</li>)}{dataEvidence.length === 0 && knowledgeEvidence.length === 0 && <li>本次回答不依赖企业证据</li>}</ul></div>
           </div>
+          {knowledgeEvidence.length > 0 && <div className="agent-section"><div className="agent-section-title"><FileSearch size={15} />知识引用</div><div className="knowledge-evidence-list">{knowledgeEvidence.map((item) => <blockquote key={item.source_id}><strong>{item.title} · v{item.version}</strong><p>{item.quote}</p><span>相关度 {(item.score * 100).toFixed(0)}%{item.effective_from ? ` · 生效 ${item.effective_from.slice(0, 10)}` : ""}</span></blockquote>)}</div></div>}
           {report && <div className={`agent-report ${response.status === "degraded" ? "warning" : ""}`}><div className="agent-section-title"><FileOutput size={15} />复盘报告</div><p>{report.executive_summary}</p><ul className="plain-list">{report.findings.map((finding, index) => <li key={`${finding.statement}-${index}`}>{finding.statement}</li>)}</ul>{response.exported_report && <details><summary>查看 Markdown 导出</summary><pre>{response.exported_report}</pre></details>}</div>}
+          {response.review && <div className={`agent-review ${response.review.passed ? "passed" : "warning"}`}><Check size={15} /><span>{response.review.passed ? "证据与执行边界审核通过" : "审核发现证据或执行链不完整"}</span></div>}
           {response.limitations.length > 0 && <div className="agent-limitations"><ShieldAlert size={15} /><span>{response.limitations.join("；")}</span></div>}
         </>
       )}
@@ -653,8 +613,16 @@ function AgentPanel({ response, running }: { response: AgentResponse | null; run
   );
 }
 
-function skillLabel(skill?: AgentResponse["skill_id"] | null) {
-  return ({ refund_diagnosis: "退款异常诊断", channel_comparison: "渠道对比", product_analysis: "商品分析", weekly_report: "经营周报" } as Record<string, string>)[skill ?? ""] ?? "等待路由";
+function agentModeLabel(mode?: AgentResponse["agent_mode"] | null) {
+  return ({ general: "通用对话", knowledge: "企业知识", data: "经营数据", collaboration: "知识与数据协作" } as Record<string, string>)[mode ?? ""] ?? "正在路由";
+}
+
+function agentLabel(agent: string) {
+  return ({ general_agent: "通用 Agent", knowledge_agent: "知识 Agent", data_agent: "数据 Agent", synthesis_agent: "综合 Agent", review_agent: "审核 Agent" } as Record<string, string>)[agent] ?? agent;
+}
+
+function toolLabel(tool: string) {
+  return ({ "time.now": "时间查询", "weather.current": "天气查询", "web.search": "网页搜索", "web.fetch_summary": "网页摘要", "exchange.rate": "汇率查询", "knowledge.search": "知识检索" } as Record<string, string>)[tool] ?? tool;
 }
 
 function agentStatusLabel(status: AgentResponse["status"]) {

@@ -1,0 +1,24 @@
+{"case_id":"general-01","question":"你好，请介绍一下你自己","expected_mode":"general"}
+{"case_id":"general-02","question":"解释一下 Python 的生成器","expected_mode":"general"}
+{"case_id":"time-01","question":"现在北京时间几点？","expected_mode":"general","expected_tools":["time.now"]}
+{"case_id":"time-02","question":"纽约现在几点？","expected_mode":"general","expected_tools":["time.now"]}
+{"case_id":"weather-01","question":"重庆现在天气怎么样？","expected_mode":"general","expected_tools":["weather.current"]}
+{"case_id":"weather-02","question":"上海今天气温多少？","expected_mode":"general","expected_tools":["weather.current"]}
+{"case_id":"exchange-01","question":"100 美元现在约等于多少人民币？","expected_mode":"general","expected_tools":["exchange.rate"]}
+{"case_id":"exchange-02","question":"查询欧元兑人民币的最新汇率","expected_mode":"general","expected_tools":["exchange.rate"]}
+{"case_id":"search-01","question":"搜索最近的大模型 Agent 新闻","expected_mode":"general","expected_tools":["web.search"]}
+{"case_id":"search-02","question":"查一下最近一周的人工智能行业新闻","expected_mode":"general","expected_tools":["web.search"]}
+{"case_id":"knowledge-01","question":"公司的差旅报销制度是什么？","expected_mode":"knowledge","expected_tools":["knowledge.search"],"expect_knowledge_evidence":true}
+{"case_id":"knowledge-02","question":"员工请假流程怎么走？","expected_mode":"knowledge","expected_tools":["knowledge.search"],"expect_knowledge_evidence":true}
+{"case_id":"knowledge-03","question":"供应商付款需要哪些审批？","expected_mode":"knowledge","expected_tools":["knowledge.search"],"expect_knowledge_evidence":true}
+{"case_id":"knowledge-04","question":"发票报销有哪些规定？","expected_mode":"knowledge","expected_tools":["knowledge.search"],"expect_knowledge_evidence":true}
+{"case_id":"data-01","question":"统计最近30天各渠道销售额","expected_mode":"data","expect_data_evidence":true}
+{"case_id":"data-02","question":"最近30天退款率是多少？","expected_mode":"data","expect_data_evidence":true}
+{"case_id":"data-03","question":"按商品统计最近30天销量排名","expected_mode":"data","expect_data_evidence":true}
+{"case_id":"data-04","question":"最近30天订单量趋势如何？","expected_mode":"data","expect_data_evidence":true}
+{"case_id":"collaboration-01","question":"结合退款数据和售后制度给出复盘","expected_mode":"collaboration","expected_tools":["knowledge.search"],"expect_knowledge_evidence":true,"expect_data_evidence":true}
+{"case_id":"collaboration-02","question":"根据最近30天销售数据和公司经营周报规范生成复盘","expected_mode":"collaboration","expected_tools":["knowledge.search"],"expect_knowledge_evidence":true,"expect_data_evidence":true}
+{"case_id":"collaboration-03","question":"结合渠道退款率和售后规定判断风险","expected_mode":"collaboration","expected_tools":["knowledge.search"],"expect_knowledge_evidence":true,"expect_data_evidence":true}
+{"case_id":"collaboration-04","question":"按照供应商制度分析相关采购订单情况","expected_mode":"collaboration","expected_tools":["knowledge.search"],"expect_knowledge_evidence":true,"expect_data_evidence":true}
+{"case_id":"boundary-01","question":"帮我分析这段文字的写作风格","expected_mode":"general"}
+{"case_id":"boundary-02","question":"公司这个词在法律语境里是什么意思","expected_mode":"general"}

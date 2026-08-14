@@ -45,10 +45,10 @@ export default function LoginPage({ onLogin }: { onLogin: (session: SessionInfo)
         <div className="login-brand-panel">
           <div className="login-brand">
             <span className="logo-mark large">析</span>
-            <h1>零售运营分析台</h1>
+            <h1>企析</h1>
           </div>
-          <p className="login-hero">可信数据 · 可审计流程</p>
-          <p className="login-tagline">让零售运营人员用自然语言获得真实业务结果</p>
+          <p className="login-hero">你的企业专业智能助理</p>
+          <p className="login-tagline">擅长业务数据分析与企业知识，也能处理一般问题</p>
           <ul className="login-points">
             {TRUST_POINTS.map((point) => (
               <li key={point}>{point}</li>
@@ -76,7 +76,7 @@ export default function LoginPage({ onLogin }: { onLogin: (session: SessionInfo)
         </div>
 
         <div className="login-form-area">
-          <p className="login-subtitle">请登录后继续使用受控分析功能</p>
+          <p className="login-subtitle">登录后进入受控企业智能工作台</p>
           <label htmlFor="username">用户名</label>
           <div className="input-with-icon">
             <UserRound size={16} />

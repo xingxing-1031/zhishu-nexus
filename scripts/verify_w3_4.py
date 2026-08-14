@@ -2,11 +2,11 @@ from uuid import uuid4
 
 from retail_analytics_agent.checkpointing import open_postgres_checkpointer
 from retail_analytics_agent.models import (
-    ApprovalStatus,
     AnalysisPlan,
     AnalysisRequest,
-    RetrievalEvidence,
+    ApprovalStatus,
     QueryRisk,
+    RetrievalEvidence,
 )
 from retail_analytics_agent.sql_safety import prepare_safe_sql
 from retail_analytics_agent.workflow import (

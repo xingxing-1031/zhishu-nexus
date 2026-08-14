@@ -21,8 +21,8 @@ from retail_analytics_agent.models import (
     AnalysisRequest,
     AnalysisResultStatus,
 )
-from retail_analytics_agent.resilience import RetryPolicy
 from retail_analytics_agent.query_service import SafeQueryResult
+from retail_analytics_agent.resilience import RetryPolicy
 from retail_analytics_agent.tracing import (
     DatabaseExecutionTraceStore,
     TraceStatus,

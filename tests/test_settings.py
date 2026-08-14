@@ -33,6 +33,10 @@ def test_settings_builds_postgres_connection_kwargs() -> None:
     assert settings.public_demo_mode is False
     assert settings.public_demo_rate_limit_per_minute == 6
     assert settings.public_demo_max_rows == 20
+    assert settings.mcp_common_enabled is True
+    assert settings.mcp_common_timeout_seconds == 15
+    assert settings.mcp_http_timeout_seconds == 10
+    assert settings.mcp_max_response_bytes == 1_000_000
 
 
 def test_settings_prefers_managed_database_url_without_exposing_secret() -> None:

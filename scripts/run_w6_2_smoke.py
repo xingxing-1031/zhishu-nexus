@@ -17,7 +17,6 @@ from retail_analytics_agent.evaluation_runtime import (
 )
 from retail_analytics_agent.settings import get_settings
 
-
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEVELOPMENT_SUITE = PROJECT_ROOT / "evaluation" / "business_development.json"
 

@@ -3,8 +3,8 @@ from uuid import uuid4
 
 import httpx
 
-from retail_analytics_agent.audit import DatabaseAuditSink
 from retail_analytics_agent.approval import DatabaseApprovalAuditSink
+from retail_analytics_agent.audit import DatabaseAuditSink
 from retail_analytics_agent.database import connect_to_database
 from retail_analytics_agent.model_adapters import (
     OllamaAnalysisPlanner,
@@ -22,7 +22,6 @@ from retail_analytics_agent.workflow_tools import (
     SafeSQLExecutionTool,
     SQLGlotValidationTool,
 )
-
 
 QUESTION = "最近30天各渠道销售额是多少？"
 EXPECTED_SOURCES = {

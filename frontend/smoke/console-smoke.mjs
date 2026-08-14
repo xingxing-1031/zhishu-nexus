@@ -14,7 +14,7 @@ async function get(path) {
 }
 
 const home = await get("/");
-for (const marker of ["零售运营分析台", "/static/assets/"]) {
+for (const marker of ["企析 · 企业专业智能助理", "/static/assets/"]) {
   if (!home.body.includes(marker)) throw new Error(`homepage is missing marker: ${marker}`);
 }
 

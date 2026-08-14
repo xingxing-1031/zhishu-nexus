@@ -22,7 +22,6 @@ from retail_analytics_agent.metric_retrieval_evaluation import (
 )
 from retail_analytics_agent.vector_metric_retrieval import VectorMetricRetriever
 
-
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 def main() -> None:
     parser = ArgumentParser()

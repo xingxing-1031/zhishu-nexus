@@ -15,7 +15,6 @@ from retail_analytics_agent.evaluation_snapshot import (
 )
 from retail_analytics_agent.settings import get_settings
 
-
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 EVALUATION_ROOT = PROJECT_ROOT / "evaluation"
 SUITE_PATHS = (

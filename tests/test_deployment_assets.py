@@ -69,6 +69,20 @@ def test_vps_compose_requires_server_secrets_and_configurable_access_mode() -> N
     assert "SITE_ADDRESS:?set SITE_ADDRESS" in compose
 
 
+def test_common_mcp_limits_are_documented_and_wired_to_vps() -> None:
+    compose = (PROJECT_ROOT / "compose.vps.yaml").read_text(encoding="utf-8")
+    env_example = (PROJECT_ROOT / ".env.vps.example").read_text(encoding="utf-8")
+
+    for name in (
+        "MCP_COMMON_ENABLED",
+        "MCP_COMMON_TIMEOUT_SECONDS",
+        "MCP_HTTP_TIMEOUT_SECONDS",
+        "MCP_MAX_RESPONSE_BYTES",
+    ):
+        assert name in compose
+        assert name in env_example
+
+
 def test_vps_release_generates_demo_auth_secrets_on_the_server() -> None:
     script = (PROJECT_ROOT / "ops" / "vps_release.sh").read_text(encoding="utf-8")
 

@@ -12,7 +12,6 @@ from retail_analytics_agent.evaluation_runtime import (
 from retail_analytics_agent.final_acceptance import run_final_acceptance
 from retail_analytics_agent.settings import get_settings
 
-
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 HOLDOUT_SUITE = PROJECT_ROOT / "evaluation" / "business_holdout.json"
 DEFAULT_OUTPUT = PROJECT_ROOT / "evaluation" / "reports" / "final_holdout.json"

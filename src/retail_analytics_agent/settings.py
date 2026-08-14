@@ -56,6 +56,10 @@ class Settings(BaseSettings):
     agent_max_steps: int = Field(default=8, ge=1, le=30)
     mcp_export_enabled: bool = True
     mcp_export_timeout_seconds: float = Field(default=15, gt=0, le=60)
+    mcp_common_enabled: bool = True
+    mcp_common_timeout_seconds: float = Field(default=15, gt=0, le=60)
+    mcp_http_timeout_seconds: float = Field(default=10, gt=0, le=60)
+    mcp_max_response_bytes: int = Field(default=1_000_000, ge=10_000, le=10_000_000)
 
     model_config = SettingsConfigDict(
         env_file=".env",

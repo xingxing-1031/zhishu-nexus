@@ -51,6 +51,7 @@ from retail_analytics_agent.database import (
     connect_to_database,
     get_database_connection,
 )
+from retail_analytics_agent.general_agent import GeneralAgent
 from retail_analytics_agent.knowledge_adapter import HttpKnowledgeAdapter
 from retail_analytics_agent.mcp_client import McpToolClient
 from retail_analytics_agent.model_adapters import ModelInvocationError
@@ -71,6 +72,10 @@ from retail_analytics_agent.models import (
 )
 from retail_analytics_agent.observability import configure_logging
 from retail_analytics_agent.public_errors import public_error_message
+from retail_analytics_agent.qixi_service import (
+    QixiAgentService,
+    StructuredEvidenceAnswerer,
+)
 from retail_analytics_agent.queries import (
     get_channel_sales_summary,
     get_order_status_summary,
@@ -80,6 +85,8 @@ from retail_analytics_agent.queries import (
 from retail_analytics_agent.rate_limit import SlidingWindowRateLimiter
 from retail_analytics_agent.settings import Settings, get_settings
 from retail_analytics_agent.skills import default_skill_registry
+from retail_analytics_agent.structured_chat import StructuredChatClient
+from retail_analytics_agent.supervisor import Supervisor
 from retail_analytics_agent.task_planner import TaskPlanner
 from retail_analytics_agent.tracing import ExecutionTraceResponse
 
@@ -92,6 +99,15 @@ def _mcp_server_path() -> Path | None:
         Path(__file__).resolve().parents[2] / "mcp_server" / "operations_export_server.py",
         Path.cwd() / "mcp_server" / "operations_export_server.py",
         Path("/app/mcp_server/operations_export_server.py"),
+    )
+    return next((path for path in candidates if path.is_file()), None)
+
+
+def _common_mcp_server_path() -> Path | None:
+    candidates = (
+        Path(__file__).resolve().parents[2] / "mcp_server" / "common_tools_server.py",
+        Path.cwd() / "mcp_server" / "common_tools_server.py",
+        Path("/app/mcp_server/common_tools_server.py"),
     )
     return next((path for path in candidates if path.is_file()), None)
 
@@ -554,10 +570,12 @@ def stream_analysis(
 def get_agent_service(
     runner: Annotated[AnalysisRunner, Depends(get_analysis_runner)],
     settings: Annotated[Settings, Depends(get_settings)],
-) -> Iterator[EnterpriseAgentService]:
+) -> Iterator[QixiAgentService]:
     knowledge = None
     client = None
+    model_client = None
     mcp_client = None
+    common_mcp_client = None
     if settings.knowledge_service_url:
         client = httpx.Client(timeout=settings.model_timeout_seconds or 30)
         assert settings.knowledge_service_token is not None
@@ -577,8 +595,23 @@ def get_agent_service(
                 args=(str(mcp_server),),
                 timeout_seconds=settings.mcp_export_timeout_seconds,
             )
+    if settings.mcp_common_enabled:
+        common_server = _common_mcp_server_path()
+        if common_server is None:
+            logger.warning("Common MCP server file is unavailable; common tools disabled")
+        else:
+            common_mcp_client = McpToolClient(
+                command=sys.executable,
+                args=(str(common_server),),
+                timeout_seconds=settings.mcp_common_timeout_seconds,
+            )
+    model_client = httpx.Client(
+        base_url=settings.active_model_base_url,
+        headers=settings.model_client_headers,
+        timeout=settings.active_model_timeout_seconds,
+    )
     try:
-        yield EnterpriseAgentService(
+        data_agent = EnterpriseAgentService(
             analysis_runner=runner,
             context_builder=ContextBuilder(
                 PostgresConversationStore(connect_to_database)
@@ -592,16 +625,37 @@ def get_agent_service(
             max_context_token_budget=settings.agent_context_token_budget,
             mcp_client=mcp_client,
         )
+        model = StructuredChatClient(model_client, settings.model_provider)
+        yield QixiAgentService(
+            data_agent=data_agent,
+            supervisor=Supervisor(),
+            general_agent=GeneralAgent(
+                model=model,
+                mcp_client=common_mcp_client,
+                model_name=settings.active_model_name,
+                timeout_seconds=settings.active_model_timeout_seconds,
+                max_tool_calls=min(settings.agent_max_steps, 3),
+            ),
+            knowledge=knowledge,
+            answerer=StructuredEvidenceAnswerer(
+                model,
+                model_name=settings.active_model_name,
+                timeout_seconds=settings.active_model_timeout_seconds,
+            ),
+            knowledge_departments=settings.active_knowledge_departments,
+        )
     finally:
         if client is not None:
             client.close()
+        if model_client is not None:
+            model_client.close()
 
 
 @app.post("/agent/run", response_model=AgentResponse)
 def run_agent(
     agent_request: AgentRequest,
     http_request: Request,
-    service: Annotated[EnterpriseAgentService, Depends(get_agent_service)],
+    service: Annotated[QixiAgentService, Depends(get_agent_service)],
     access_context: Annotated[AccessContext, Depends(get_access_context)],
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> AgentResponse:
@@ -636,7 +690,7 @@ def run_agent(
 def run_internal_agent(
     payload: InternalAgentRequest,
     request: Request,
-    service: Annotated[EnterpriseAgentService, Depends(get_agent_service)],
+    service: Annotated[QixiAgentService, Depends(get_agent_service)],
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> InternalAgentResult:
     configured = settings.internal_service_token
@@ -650,7 +704,8 @@ def run_internal_agent(
         if payload.role in {"department_admin", "knowledge_admin", "admin"}
         else AccessRole.ANALYST
     )
-    response = service.run(
+    data_service = getattr(service, "data_agent", service)
+    response = data_service.run(
         AgentRequest(
             request_id=payload.request_id,
             conversation_id=payload.session_id or payload.request_id,
@@ -696,7 +751,7 @@ def run_internal_agent(
 async def stream_agent(
     agent_request: AgentRequest,
     http_request: Request,
-    service: Annotated[EnterpriseAgentService, Depends(get_agent_service)],
+    service: Annotated[QixiAgentService, Depends(get_agent_service)],
     access_context: Annotated[AccessContext, Depends(get_access_context)],
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> StreamingResponse:

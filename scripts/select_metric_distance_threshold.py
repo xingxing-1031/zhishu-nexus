@@ -13,7 +13,6 @@ from retail_analytics_agent.metric_retrieval_evaluation import (
 )
 from retail_analytics_agent.vector_metric_retrieval import VectorMetricRetriever
 
-
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 VALIDATION_PATH = PROJECT_ROOT / "evaluation" / "metric_query_validation.json"
 REPORT_PATH = (

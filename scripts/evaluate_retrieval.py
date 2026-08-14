@@ -7,7 +7,6 @@ from retail_analytics_agent.retrieval_evaluation import (
 )
 from retail_analytics_agent.workflow_tools import CatalogRetrievalTool
 
-
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 GOLD_SUITE_PATH = PROJECT_ROOT / "evaluation" / "retrieval_gold.json"
 REPORT_PATH = PROJECT_ROOT / "evaluation" / "reports" / "catalog_baseline.json"

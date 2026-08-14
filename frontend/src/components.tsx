@@ -36,12 +36,12 @@ export function Header({
       <aside className="app-sidebar" aria-label="主导航">
         <button className="sidebar-brand" type="button" onClick={() => onPage("workspace")}>
           <span className="logo-mark">析</span>
-          <span><strong>零售运营</strong><small>分析工作台</small></span>
+          <span><strong>企析</strong><small>企业专业智能助理</small></span>
         </button>
         <div className="sidebar-context"><span className="sidebar-context-dot" />{session.public_demo_mode ? "公网演示环境" : "受控访问环境"}</div>
         <nav className="sidebar-nav" aria-label="主要页面">
           <NavButton active={page === "workspace"} onClick={() => onPage("workspace")} icon={<Activity />}>
-            分析工作台
+            智能工作台
           </NavButton>
           {isAdmin && <NavButton active={page === "audit"} onClick={() => onPage("audit")} icon={<ClipboardList />}>
             审计记录
@@ -55,8 +55,8 @@ export function Header({
         </div>
       </aside>
       <header className="app-header">
-        <div className="mobile-brand"><span className="logo-mark">析</span><strong>零售运营分析</strong></div>
-        <div className="header-title"><span>{page === "workspace" ? "分析工作台" : page === "audit" ? "审计记录" : "指标口径"}</span><small>零售运营数据分析</small></div>
+        <div className="mobile-brand"><span className="logo-mark">析</span><strong>企析</strong></div>
+        <div className="header-title"><span>{page === "workspace" ? "智能工作台" : page === "audit" ? "审计记录" : "指标口径"}</span><small>企业知识与经营分析</small></div>
         <div className="header-status">
           <span className={`service-dot ${online ? "online" : "offline"}`} />
           <span>{online ? "服务在线" : "服务未就绪"}</span>
@@ -119,7 +119,7 @@ export function TrustCard({ publicDemo }: { publicDemo: boolean }) {
         <ShieldCheck size={16} />
         <strong>可信说明</strong>
       </div>
-      <p>{publicDemo ? "公开演示提供分析员与管理员两种受控身份；查询、审批和审计均由服务端校验。" : "只读 · 可审计 · 业务口径受约束 · 查询经过安全与一致性校验"}</p>
+      <p>{publicDemo ? "公开演示提供两种受控身份；知识、查询、审批和审计均由服务端校验。" : "只读 · 可审计 · 企业证据可引用 · 查询经过安全与一致性校验"}</p>
     </div>
   );
 }

@@ -247,7 +247,7 @@ def test_demo_homepage_and_static_assets_are_available() -> None:
 
     assert page.status_code == 200
     assert page.headers["content-type"].startswith("text/html")
-    assert "零售运营分析台" in page.text
+    assert "企析 · 企业专业智能助理" in page.text
     assert '<div id="root"></div>' in page.text
     stylesheet_path = re.search(r'href="([^"]+\.css)"', page.text)
     script_path = re.search(r'src="([^"]+\.js)"', page.text)
@@ -259,7 +259,7 @@ def test_demo_homepage_and_static_assets_are_available() -> None:
     assert "--brand" in stylesheet.text
     assert ".demo-path-rail" not in stylesheet.text
     assert script.status_code == 200
-    assert "/analysis/stream" in script.text
+    assert "/agent/stream" in script.text
     assert "/admin/metrics" in script.text
 
 

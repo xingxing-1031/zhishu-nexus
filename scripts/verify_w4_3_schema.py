@@ -1,6 +1,5 @@
 from retail_analytics_agent.database import connect_to_database
 
-
 SCHEMA_VERIFICATION_SQL = """
 SELECT
     format_type(attribute.atttypid, attribute.atttypmod) AS vector_type,

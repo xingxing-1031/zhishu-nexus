@@ -106,6 +106,29 @@ export type AgentTaskStatus =
   | "refused"
   | "failed";
 
+export type AgentMode = "general" | "knowledge" | "data" | "collaboration";
+
+export interface AgentStep {
+  agent: string;
+  task: string;
+  status: AgentTaskStatus;
+}
+
+export interface AgentReview {
+  passed: boolean;
+  checks: Record<string, boolean>;
+  limitations: string[];
+}
+
+export interface KnowledgeEvidenceView {
+  source_id: string;
+  title: string;
+  version: string;
+  quote: string;
+  score: number;
+  effective_from?: string | null;
+}
+
 export interface AgentSubtask {
   id: string;
   description: string;
@@ -172,6 +195,12 @@ export interface AgentResponse {
   exported_report?: string | null;
   tool_calls: AgentToolCall[];
   limitations: string[];
+  agent_mode?: AgentMode | null;
+  agents?: string[];
+  agent_steps?: AgentStep[];
+  answer?: string;
+  knowledge_evidence?: KnowledgeEvidenceView[];
+  review?: AgentReview | null;
 }
 
 export interface AgentStreamEvent {

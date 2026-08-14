@@ -24,7 +24,6 @@ from retail_analytics_agent.models import (
     SortDirection,
 )
 
-
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 REFERENCE_TIME = "2026-08-16T12:00:00+08:00"
 TIMEZONE = "Asia/Shanghai"

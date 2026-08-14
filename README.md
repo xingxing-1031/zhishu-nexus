@@ -1,13 +1,14 @@
-# Retail Analytics Agent
+# 企析｜企业专业智能助理
 
-面向零售运营的可审计数据分析 Agent，目标是让不熟悉 SQL 的运营人员能够使用自然语言分析订单、商品、渠道和退款数据，同时保留可检查的 SQL、执行过程和数据依据。
+企析是一个面向企业知识与经营分析的完整 Agent 工作系统。它通过 Supervisor 自动选择通用对话、企业知识、经营数据或跨域协作路径；特化能力是可审计的零售经营分析，但普通问题、时间、天气、汇率和公开网页信息也可以通过受治理的 MCP 工具处理。
+
+企业知识来自独立项目 `enterprise-knowledge-rag` 的受认证 Evidence API。依赖方向始终是“企析 -> RAG”，项目二不会反向调用本项目。
 
 ## 当前状态
 
-- 当前计划任务：项目一 v0.1、W7 演示加固和 Agent Runtime 升级均已完成，进入实习投递与面试复盘阶段
-- 公网演示：`http://106.52.176.63/` 已部署固定分析员/管理员演示账号、130 条可复现订单和浏览器本地会话
-- 已实现：本地 `qwen3:4b` 与远程 Qwen 端到端分析、4 个业务 Skill、服务端会话上下文、Tool Registry、项目二 RAG Evidence API、MCP Markdown 导出、演示级权限与人工审批、有限重试、请求幂等、可信结果降级和结构化执行 Trace
-- 自动化验证：项目一 `494` 条测试全部通过，项目二 `211` 条通过、`1` 条跳过，Ruff 与前端 TypeScript/Vite production build 通过；确定性 Agent development 评测 5 条规则样本的 Skill 路由、拒答、工具白名单和最低证据完整性均为 `1.0`
+- 公网演示：`http://106.52.176.63/`；重新发布完成前可能仍显示上一版本界面
+- 已实现：四类 Supervisor 路由、通用 Agent、五类只读 MCP 工具、服务端上下文、Text-to-SQL 数据 Agent、项目二 RAG Evidence API、跨域协作与审核、SSE、人工审批、请求幂等、可信降级和结构化 Trace
+- 新增 24 条企析 development 契约与公网评测脚本，覆盖四种模式、五类工具和知识/数据证据；只有生成实际报告后才在简历引用新结果
 - 线上评测：远程 `qwen-plus` + 公网 VPS + PostgreSQL + 项目二 RAG + MCP 的 12 条 live development 中逐题通过 `11/12`，Skill 路由、工具选择、证据要求、拒答和上下文预算均为 `100%`，P50/P95 为 `16.181s / 29.535s`
 - 当前边界：域名 HTTPS 受 ICP 备案状态限制；服务端跨设备会话、独立异地备份、分布式限流和高可用不在当前单 VPS 求职演示范围内
 
@@ -101,19 +102,16 @@
 
 详细实验条件、结果和边界见 [W6-2 development 受控评测报告](docs/EVALUATION_REPORT.md)与 [Frozen Holdout 最终验收](docs/FINAL_ACCEPTANCE.md)。
 
-## 项目范围
-
-### Agent Runtime 主链路
+## 企析主链路
 
 ```text
 用户问题
--> Skill Router
--> TaskPlan（有界子任务与完成条件）
--> Context Builder（会话、约束、证据、Token 预算）
--> Tool Registry（Schema、角色、风险、超时、幂等、Trace）
--> SQL/RAG 联合取证
--> Report Composer
--> MCP Markdown 导出
+-> Supervisor
+   -> General Agent -> 时间/天气/搜索/网页摘要/汇率 MCP
+   -> Knowledge Agent -> 项目二 /internal/evidence
+   -> Data Agent -> Skill -> Text-to-SQL -> 双层校验 -> PostgreSQL
+   -> Collaboration -> Knowledge + Data -> Synthesis -> Review
+-> SSE / 工具时间线 / 知识引用 / 数据证据 / 图表 / 审计
 ```
 
 主演示问题：`最近 30 天指定区域的退款率为什么变化？结合渠道、商品和企业售后制度给出证据充分的经营复盘报告。`

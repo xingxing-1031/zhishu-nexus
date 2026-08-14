@@ -8,7 +8,6 @@ from retail_analytics_agent.embeddings import (
 from retail_analytics_agent.knowledge_chunks import DEFAULT_KNOWLEDGE_CORPUS
 from retail_analytics_agent.knowledge_store import upsert_embedded_corpus
 
-
 OLLAMA_BASE_URL = "http://127.0.0.1:11434"
 EMBEDDING_MODEL = "bge-m3"
 

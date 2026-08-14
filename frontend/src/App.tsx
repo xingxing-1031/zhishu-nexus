@@ -67,7 +67,7 @@ export default function App() {
   }
 
   if (loading) {
-    return <div className="app-loading"><span className="logo-mark large">析</span><LoadingBlock text="正在连接零售数据服务" /></div>;
+    return <div className="app-loading"><span className="logo-mark large">析</span><LoadingBlock text="正在连接企析服务" /></div>;
   }
   if (needsLogin || session === null) {
     return <LoginPage onLogin={(activeSession) => { setSession(activeSession); setNeedsLogin(false); void bootstrap(); }} />;
