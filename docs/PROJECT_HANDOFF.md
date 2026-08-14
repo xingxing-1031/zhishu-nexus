@@ -50,6 +50,9 @@
 - 390px 移动视口检查未出现横向溢出。
 - 对话历史已改为服务器快照优先，删除记录不会在其他设备上复活；页面每 5 秒轮询账号会话列表，手机端删除按钮始终可见。
 - 对话同步修复提交：`02cf014`、`9fa7998`。
+- Agent 身份与上下文修复提交：`da9ed4a`；运行时服务、评测、MCP 和 User-Agent 统一为 `Zhishu/zhishu`，顶层服务只保存一次原始问题和一次最终回答。
+- Agent 请求恢复提交：`2e7f350`；`agent_request_runs` 提供持久化 claim、相同请求回放、冲突拒绝、脱敏失败状态和所有者/admin 查询。
+- 企业审计与前端恢复提交：`b007438`、`83872fa`；管理员只看 `auditable=true` 的企业请求，横向“知枢”标识和 SSE 状态恢复已完成。
 
 ## 3. 项目定位
 
@@ -106,6 +109,7 @@
 | 业务校验 | `sql_consistency.py` | 公式、固定筛选、Evidence、JOIN 和维度一致性 |
 | 查询执行 | `query_service.py`、`workflow_tools.py` | 只读事务、超时、连接池、结果行数和审计 |
 | 状态与追踪 | `checkpointing.py`、`tracing.py`、`audit.py` | Checkpoint、Execution Trace、查询与审批审计 |
+| Agent 请求登记 | `agent_runs.py`、`zhishu_service.py` | 顶层幂等、结果快照、断线恢复、企业审计边界和上下文唯一写入 |
 | 独立评测 | `business_evaluation.py`、`evaluation_*` | Gold、分阶段评分、方案对比和报告保存 |
 | 前端 | `frontend/src/` | 中文交互、SSE 进度、图表、表格、证据和管理页 |
 
@@ -114,6 +118,13 @@
 - `AnalysisState`：单次工作流节点间共享状态。
 - PostgreSQL Checkpoint：完整节点边界的可恢复快照。
 - Execution Trace / Audit：Trace 解释系统如何运行；Audit 记录谁在何时做了什么。
+
+Agent 审计边界：
+
+- 所有顶层请求都进入 `agent_request_runs`，用于幂等与状态恢复。
+- 只有企业知识、经营数据、知识与数据协作，以及数据库/内部制度/权限/敏感信息相关的拒绝或失败设置 `auditable=true`。
+- 普通闲聊、时间、天气、汇率和纯公开网页工具不进入管理员业务审计。
+- Agent 审计只保存问题、模式、工具名、证据数量、状态和脱敏响应快照；完整 SQL、行数和审批细节继续留在查询审计与审批表中。
 
 ## 6. 数据模型与业务语义
 
@@ -246,6 +257,7 @@ GET  /admin/metrics
 - 指数退避、随机抖动和总时间预算。
 - 确定性错误不重试。
 - API 请求指纹和 `request_id` 幂等；同 ID 不同输入返回冲突。
+- 顶层 Agent 请求先登记再执行；相同请求完成后直接回放结果，执行中返回 `running`，前端 SSE 未收到终态时通过 `/agent/runs/{request_id}` 恢复一次。
 - 审批、审计和请求登记具有独立幂等边界。
 - 模型总结失败时保留已验证 rows 和图表数据，返回降级说明。
 - 数据库执行失败不能伪装成降级成功。
@@ -360,22 +372,18 @@ npm run build
 
 已知本机情况：
 
-- 旧 `.venv` 曾引用不存在的 Python 3.12 路径，导致本机无法启动 pytest；需要重建虚拟环境。
-- 旧编辑器/WorkBuddy 进程曾占用 `tsconfig.app.tsbuildinfo` 和静态资源目录，导致本地增量构建出现 `EPERM`。
-- 通过无增量 TypeScript 检查和隔离输出目录完成过生产构建验证。
-- 当前提交在干净 GitHub Actions 环境中的 CI 和 Docker/VPS 构建已经成功，因此上述本机锁文件不是代码构建失败。
+- 当前 `.venv` 可运行 Python 3.12、pytest 和 Ruff；前端生产构建与存储迁移 smoke 可直接运行。
+- 未启动本地 PostgreSQL 时，页面静态布局可以加载，但 `/ready`、会话同步和业务数据接口会显示未就绪；这不是前端故障。
 - ECharts 懒加载 chunk 约 520 KB，构建有 chunk size warning；当前不阻塞演示，后续只有在真实首屏性能数据表明必要时再拆分。
 
 ## 15. 已知不一致和待核对问题
 
 以下问题应由新对话先确认，不要静默忽略：
 
-1. `README.md` 仍写着 W7-4 公开演示准备中，实际新版公网已经部署，应更新当前状态。
-2. `pyproject.toml` 的 dev 依赖仍包含 `httpx2>=2,<3`。这看起来是误写或幽灵依赖，应确认后删除，并在干净环境重新运行测试。
-3. README 中旧测试数量和文档中的 `408 passed` 是历史验收记录；新的简历数字必须以当前 CI 或重新执行的测试结果为准。
-4. Frozen holdout 已经消费且核心通过率只有 35%，不能通过针对具体失败题调参后继续称其为未见测试。
-5. 公网演示仍是共享分析员身份，不是正式账号系统。
-6. 域名 HTTPS 受备案阻塞，不是 Caddy 或 DNS 代码故障。
+1. Frozen holdout 已经消费且核心通过率只有 35%，不能通过针对具体失败题调参后继续称其为未见测试。
+2. 公网演示仍是共享分析员身份，不是正式账号系统。
+3. 域名 HTTPS 受备案阻塞，不是 Caddy 或 DNS 代码故障。
+4. ECharts 懒加载块仍有约 520 KB 的构建提示，尚无真实性能数据证明需要继续拆包。
 
 ## 16. 推荐下一步顺序
 
