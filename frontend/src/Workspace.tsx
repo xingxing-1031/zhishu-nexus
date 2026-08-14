@@ -24,6 +24,7 @@ import type {
   SessionInfo,
   TraceEvent,
 } from "./types";
+import { useConversationSync } from "./useConversationSync";
 import ApprovalSheet from "./workspace/ApprovalSheet";
 import ChatThread from "./workspace/ChatThread";
 import ConversationRail from "./workspace/ConversationRail";
@@ -86,6 +87,11 @@ export default function Workspace({
   const outcomeRef = useRef<AnalysisOutcome | null>(null);
   const responseRef = useRef<AgentResponse | null>(null);
   const stageStateRef = useRef<StoredStageState>({});
+  const { syncState, deleteRemote } = useConversationSync(
+    session.user_id,
+    conversations,
+    setConversations,
+  );
 
   const activeConversation = conversations.find((item) => item.id === activeConversationId) ?? conversations[0];
   const visibleLiveTurn = liveConversationId === activeConversationId ? liveTurn : null;
@@ -99,6 +105,11 @@ export default function Workspace({
   useEffect(() => {
     saveConversations(session.user_id, conversations);
   }, [conversations, session.user_id]);
+
+  useEffect(() => {
+    if (conversations.some((item) => item.id === activeConversationId)) return;
+    if (conversations[0]) setActiveConversationId(conversations[0].id);
+  }, [activeConversationId, conversations]);
 
   useEffect(() => {
     const latest = activeConversation.turns.at(-1);
@@ -255,7 +266,7 @@ export default function Workspace({
   }
 
   function deleteConversation(id: string) {
-    if (!window.confirm("删除这个浏览器中的对话记录？服务端审计记录不会被删除。")) return;
+    if (!window.confirm("删除这条对话记录？服务端审计记录不会被删除。")) return;
     setConversations((current) => {
       const remaining = current.filter((conversation) => conversation.id !== id);
       if (remaining.length > 0) {
@@ -266,6 +277,7 @@ export default function Workspace({
       setActiveConversationId(replacement.id);
       return [replacement];
     });
+    void deleteRemote(id);
   }
 
   function followUp(result: AnalysisResult) {
@@ -283,6 +295,7 @@ export default function Workspace({
           <ConversationRail
             session={session}
             online={online && ready}
+            syncState={syncState}
             conversations={conversations}
             activeId={activeConversationId}
             open={railOpen}

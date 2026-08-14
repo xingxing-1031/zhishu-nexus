@@ -8,6 +8,7 @@ import type {
   StreamEvent,
   TraceResponse,
 } from "./types";
+import type { Conversation } from "./conversations";
 
 export class ApiError extends Error {
   constructor(message: string, public readonly status: number) {
@@ -41,6 +42,29 @@ export const api = {
     getJson<TraceResponse>(`/analysis/${encodeURIComponent(requestId)}/trace`),
   metrics: () => getJson<MetricDefinition[]>("/admin/metrics"),
   audit: (query: string) => getJson<AuditEntry[]>(`/admin/audit?${query}`),
+  conversations: {
+    list: () => getJson<Conversation[]>("/agent/conversations"),
+    async save(conversation: Conversation): Promise<Conversation> {
+      const response = await fetch(
+        `/agent/conversations/${encodeURIComponent(conversation.id)}`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          credentials: "same-origin",
+          body: JSON.stringify(conversation),
+        },
+      );
+      if (!response.ok) return parseError(response);
+      return response.json() as Promise<Conversation>;
+    },
+    async delete(conversationId: string): Promise<void> {
+      const response = await fetch(
+        `/agent/conversations/${encodeURIComponent(conversationId)}`,
+        { method: "DELETE", credentials: "same-origin" },
+      );
+      if (!response.ok && response.status !== 204) return parseError(response);
+    },
+  },
   async login(username: string, password: string): Promise<SessionInfo> {
     const response = await fetch("/auth/login", {
       method: "POST",

@@ -9,10 +9,12 @@ import {
 import { auditSummary, type Conversation } from "../conversations";
 import { roleLabel, type Page } from "../components";
 import type { SessionInfo } from "../types";
+import type { ConversationSyncState } from "../useConversationSync";
 
 export default function ConversationRail({
   session,
   online,
+  syncState,
   conversations,
   activeId,
   open,
@@ -25,6 +27,7 @@ export default function ConversationRail({
 }: {
   session: SessionInfo;
   online: boolean;
+  syncState: ConversationSyncState;
   conversations: Conversation[];
   activeId: string;
   open: boolean;
@@ -56,7 +59,7 @@ export default function ConversationRail({
           新建对话
         </button>
 
-        <div className="rail-section-heading"><span>最近对话</span><small>保存在当前浏览器</small></div>
+        <div className="rail-section-heading"><span>最近对话</span><small>{syncLabel(syncState)}</small></div>
         <div className="rail-conversation-list">
           {conversations.map((conversation) => (
             <div className={`rail-conversation ${conversation.id === activeId ? "active" : ""}`} key={conversation.id}>
@@ -94,4 +97,10 @@ export default function ConversationRail({
       </aside>
     </>
   );
+}
+
+function syncLabel(state: ConversationSyncState) {
+  if (state === "syncing") return "正在同步";
+  if (state === "synced") return "已同步到账号";
+  return "仅保存在本机";
 }
