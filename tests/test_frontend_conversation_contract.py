@@ -97,3 +97,29 @@ def test_admin_audit_exposes_agent_mode_tools_and_evidence() -> None:
         "}", maxsplit=1
     )[0]
     assert "min-height: 44px" in filter_control_rule
+
+
+def test_brand_mark_uses_horizontal_two_character_layout() -> None:
+    styles = (FRONTEND / "styles.css").read_text(encoding="utf-8")
+
+    brand_rule = styles.split(".brand-mark {", maxsplit=1)[1].split(
+        "}", maxsplit=1
+    )[0]
+    assert "grid-template-columns: 1fr 1fr" in brand_rule
+    assert "grid-template-rows: 1fr 1fr" not in brand_rule
+
+
+def test_workspace_persists_stream_error_and_attempts_status_recovery() -> None:
+    workspace = (FRONTEND / "Workspace.tsx").read_text(encoding="utf-8")
+    api = (FRONTEND / "api.ts").read_text(encoding="utf-8")
+
+    assert "failureRef" in workspace
+    assert "api.agentRun(requestId)" in workspace
+    assert "failure: failureRef.current" in workspace
+    assert "agentRun:" in api
+
+
+def test_mobile_workspace_starts_with_inspector_closed() -> None:
+    workspace = (FRONTEND / "Workspace.tsx").read_text(encoding="utf-8")
+
+    assert 'globalThis.matchMedia?.("(min-width: 1181px)").matches' in workspace

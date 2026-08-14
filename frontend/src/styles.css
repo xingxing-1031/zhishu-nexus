@@ -52,8 +52,8 @@ p { line-height: 1.65; }
 code, pre, .mono, .numeric { font-family: "JetBrains Mono", "Cascadia Code", Consolas, monospace; font-variant-numeric: tabular-nums; }
 .skip-link { position: fixed; top: 8px; left: 8px; z-index: 1000; transform: translateY(-150%); padding: 8px 12px; border-radius: var(--radius); color: #fff; background: var(--brand); }
 .skip-link:focus { transform: translateY(0); }
-.brand-mark { width: 32px; height: 32px; display: inline-grid; grid-template-rows: 1fr 1fr; place-items: center; flex: 0 0 auto; overflow: hidden; padding: 4px 0; border: 1px solid rgba(255, 255, 255, .32); border-radius: 7px; color: #fff; background: linear-gradient(145deg, #19b9aa 0%, #087f78 66%, #2563eb 150%); box-shadow: 0 6px 15px rgba(12, 168, 155, .22), inset 0 1px 0 rgba(255, 255, 255, .32); font-size: 9px; font-weight: 750; line-height: .9; }
-.brand-mark.large { width: 40px; height: 40px; padding: 5px 0; font-size: 11px; }
+.brand-mark { width: 42px; height: 30px; display: inline-grid; grid-template-columns: 1fr 1fr; place-items: center; flex: 0 0 auto; overflow: hidden; padding: 0 5px; border: 1px solid rgba(255, 255, 255, .32); border-radius: 7px; color: #fff; background: linear-gradient(145deg, #19b9aa 0%, #087f78 66%, #2563eb 150%); box-shadow: 0 6px 15px rgba(12, 168, 155, .22), inset 0 1px 0 rgba(255, 255, 255, .32); font-size: 10px; font-weight: 750; line-height: 1; }
+.brand-mark.large { width: 52px; height: 38px; padding: 0 6px; font-size: 12px; }
 .brand-mark > span { display: block; }
 .brand-lockup { min-width: 0; display: inline-flex; align-items: center; gap: 10px; }
 .brand-lockup > span:last-child { min-width: 0; display: grid; gap: 1px; }
@@ -129,7 +129,7 @@ code, pre, .mono, .numeric { font-family: "JetBrains Mono", "Cascadia Code", Con
 .user-message { max-width: min(680px, 86%); justify-self: end; display: grid; gap: 6px; }
 .user-message p { padding: 11px 14px; border: 1px solid #cbe8e4; border-radius: 8px 8px 2px 8px; color: #164b47; background: #e9f8f6; box-shadow: 0 3px 10px rgba(12, 168, 155, .07); font-size: 15px; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
 .user-message time { justify-self: end; color: var(--muted); font-size: 12px; }
-.assistant-message { min-width: 0; display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 12px; }
+.assistant-message { min-width: 0; display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 12px; }
 .assistant-identity { display: contents; }
 .assistant-mark { box-shadow: 0 5px 14px rgba(12, 168, 155, .2), inset 0 1px 0 rgba(255, 255, 255, .28); }
 .assistant-identity > div { display: none; }
@@ -184,7 +184,7 @@ code, pre, .mono, .numeric { font-family: "JetBrains Mono", "Cascadia Code", Con
 
 /* Empty workspace */
 .chat-empty-state { width: min(760px, calc(100% - 40px)); min-height: 100%; display: flex; flex-direction: column; justify-content: center; margin: 0 auto; padding: 50px 0 80px; }
-.empty-brand-mark { width: 42px; height: 42px; margin-bottom: 18px; border-radius: 8px; font-size: 11px; }
+.empty-brand-mark { width: 52px; height: 38px; margin-bottom: 18px; border-radius: 8px; font-size: 12px; }
 .chat-empty-state h1 { font-size: 26px; line-height: 34px; }
 .chat-empty-state > p { max-width: 580px; margin-top: 8px; color: var(--secondary); font-size: 15px; }
 .suggestion-list { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin-top: 28px; }
@@ -389,7 +389,7 @@ input, select { min-height: 42px; padding: 0 10px; border: 1px solid var(--borde
   .workspace-topbar { padding: 0 10px; }.workspace-title small { display: none; }
   .message-list { width: calc(100% - 20px); padding: 18px 0 26px; }.message-turn { gap: 18px; padding: 14px 0 26px; }
   .user-message { max-width: 92%; }.user-message p { font-size: 15px; }
-  .assistant-message { grid-template-columns: 30px minmax(0, 1fr); gap: 9px; }.assistant-mark { width: 30px; height: 30px; }
+  .assistant-message { grid-template-columns: 40px minmax(0, 1fr); gap: 9px; }.assistant-mark { width: 40px; height: 30px; }
   .agent-progress { grid-template-columns: 18px minmax(0, 1fr); }.agent-progress-action { display: none; }
   .answer-prose { padding-top: 14px; }.inline-analysis { margin-top: 16px; }.inline-chart-panel { min-height: 240px; padding: 4px; }.chart-canvas { height: 240px; }
   .response-actions { gap: 5px; }.response-actions button { min-height: 44px; }

@@ -1,5 +1,6 @@
 import type {
   AnalysisOutcome,
+  AgentResponse,
   AgentStreamEvent,
   AuditEntry,
   MetricDefinition,
@@ -41,6 +42,8 @@ export const api = {
   overview: () => getJson<Overview>("/demo/overview"),
   trace: (requestId: string) =>
     getJson<TraceResponse>(`/analysis/${encodeURIComponent(requestId)}/trace`),
+  agentRun: (requestId: string) =>
+    getJson<AgentResponse>(`/agent/runs/${encodeURIComponent(requestId)}`),
   metrics: () => getJson<MetricDefinition[]>("/admin/metrics"),
   audit: (query: string) => getJson<AuditEntry[]>(`/admin/audit?${query}`),
   conversations: {

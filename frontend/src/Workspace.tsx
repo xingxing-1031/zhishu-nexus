@@ -87,13 +87,16 @@ export default function Workspace({
   const [approval, setApproval] = useState<ApprovalRequired | null>(null);
   const [approvalOpen, setApprovalOpen] = useState(false);
   const [railOpen, setRailOpen] = useState(false);
-  const [inspectorOpen, setInspectorOpen] = useState(true);
+  const [inspectorOpen, setInspectorOpen] = useState(
+    () => globalThis.matchMedia?.("(min-width: 1181px)").matches ?? true,
+  );
   const [inspectorTab, setInspectorTab] = useState<InspectorTab>("sources");
   const [selectedRequestId, setSelectedRequestId] = useState<string | null>(null);
   const [trace, setTrace] = useState<TraceEvent[] | null>(null);
   const [traceError, setTraceError] = useState("");
   const outcomeRef = useRef<AnalysisOutcome | null>(null);
   const responseRef = useRef<AgentResponse | null>(null);
+  const failureRef = useRef("");
   const stageStateRef = useRef<StoredStageState>({});
   const { syncState, deleteRemote } = useConversationSync(
     session.user_id,
@@ -140,10 +143,9 @@ export default function Workspace({
     const requestId = makeRequestId();
     const startedAt = performance.now();
     const startedAtIso = new Date().toISOString();
-    let runFailure = "";
-
     outcomeRef.current = null;
     responseRef.current = null;
+    failureRef.current = "";
     stageStateRef.current = {};
     setApproval(null);
     setApprovalOpen(false);
@@ -179,9 +181,28 @@ export default function Workspace({
         receiveAgent,
       );
     } catch (reason) {
-      runFailure = reason instanceof Error ? localizeUserMessage(reason.message) : "分析请求失败，请稍后重试。";
-      setLiveTurn((current) => current ? { ...current, failure: runFailure, statusMessage: "请求未能完成" } : current);
+      failureRef.current = reason instanceof Error ? localizeUserMessage(reason.message) : "分析请求失败，请稍后重试。";
+      setLiveTurn((current) => current ? { ...current, failure: failureRef.current, statusMessage: "请求未能完成" } : current);
     } finally {
+      if (!responseRef.current) {
+        try {
+          const recovered = await api.agentRun(requestId);
+          responseRef.current = recovered;
+          outcomeRef.current = recovered.analysis ?? null;
+          if (recovered.status === "failed") {
+            failureRef.current = recovered.answer
+              || recovered.limitations[0]
+              || failureRef.current
+              || "任务未能完成，请稍后重试。";
+          }
+        } catch (reason) {
+          if (!failureRef.current) {
+            failureRef.current = reason instanceof Error
+              ? localizeUserMessage(reason.message)
+              : "未收到任务最终结果，请稍后刷新会话。";
+          }
+        }
+      }
       setRunning(false);
       const storedTurn = createStoredTurn({
         requestId,
@@ -189,7 +210,7 @@ export default function Workspace({
         durationMs: Math.round(performance.now() - startedAt),
         outcome: outcomeRef.current,
         response: responseRef.current,
-        failure: runFailure,
+        failure: failureRef.current,
         stageState: stageStateRef.current,
       });
       setConversations((current) => current.map((conversation) => (
@@ -220,6 +241,7 @@ export default function Workspace({
       }
     }
     if (event.event === "error") {
+      failureRef.current = event.message;
       setLiveTurn((current) => current ? { ...current, failure: event.message, statusMessage: "请求未能完成" } : current);
     }
   }
