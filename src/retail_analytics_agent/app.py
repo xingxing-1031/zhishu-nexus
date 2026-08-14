@@ -89,6 +89,11 @@ from retail_analytics_agent.structured_chat import StructuredChatClient
 from retail_analytics_agent.supervisor import Supervisor
 from retail_analytics_agent.task_planner import TaskPlanner
 from retail_analytics_agent.tracing import ExecutionTraceResponse
+from retail_analytics_agent.workspace_history import (
+    PostgresWorkspaceHistoryStore,
+    WorkspaceConversationPayload,
+    WorkspaceHistoryStore,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -565,6 +570,57 @@ def stream_analysis(
             "X-Accel-Buffering": "no",
         },
     )
+
+
+def get_workspace_history_store() -> WorkspaceHistoryStore:
+    return PostgresWorkspaceHistoryStore(connect_to_database)
+
+
+@app.get(
+    "/agent/conversations",
+    response_model=list[WorkspaceConversationPayload],
+)
+def list_workspace_conversations(
+    access_context: Annotated[AccessContext, Depends(get_access_context)],
+    store: Annotated[
+        WorkspaceHistoryStore,
+        Depends(get_workspace_history_store),
+    ],
+) -> tuple[WorkspaceConversationPayload, ...]:
+    return store.list_for_user(access_context.user_id)
+
+
+@app.put(
+    "/agent/conversations/{conversation_id}",
+    response_model=WorkspaceConversationPayload,
+)
+def save_workspace_conversation(
+    conversation_id: str,
+    payload: WorkspaceConversationPayload,
+    access_context: Annotated[AccessContext, Depends(get_access_context)],
+    store: Annotated[
+        WorkspaceHistoryStore,
+        Depends(get_workspace_history_store),
+    ],
+) -> WorkspaceConversationPayload:
+    if payload.id != conversation_id:
+        raise HTTPException(status_code=422, detail="会话 ID 与请求路径不一致。")
+    return store.put(access_context.user_id, payload)
+
+
+@app.delete(
+    "/agent/conversations/{conversation_id}",
+    status_code=204,
+)
+def delete_workspace_conversation(
+    conversation_id: str,
+    access_context: Annotated[AccessContext, Depends(get_access_context)],
+    store: Annotated[
+        WorkspaceHistoryStore,
+        Depends(get_workspace_history_store),
+    ],
+) -> None:
+    store.delete(access_context.user_id, conversation_id)
 
 
 def get_agent_service(

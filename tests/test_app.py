@@ -20,6 +20,7 @@ from retail_analytics_agent.app import (
     analysis_rate_limiter,
     app,
     get_agent_service,
+    get_workspace_history_store,
 )
 from retail_analytics_agent.database import get_database_connection
 from retail_analytics_agent.model_adapters import ModelInvocationError
@@ -43,6 +44,7 @@ from retail_analytics_agent.tracing import (
     execution_trace_context,
     record_execution_trace,
 )
+from retail_analytics_agent.workspace_history import InMemoryWorkspaceHistoryStore
 
 client = TestClient(app)
 
@@ -69,6 +71,81 @@ def _agent_settings() -> Settings:
         public_demo_mode=False,
         _env_file=None,
     )
+
+
+def _workspace_payload(conversation_id: str = "CONV-SYNC-001") -> dict:
+    return {
+        "id": conversation_id,
+        "title": "北京时间",
+        "createdAt": "2026-08-14T12:00:00Z",
+        "updatedAt": "2026-08-14T12:01:00Z",
+        "turns": [
+            {
+                "id": "TURN-SYNC-001",
+                "requestId": "REQ-SYNC-001",
+                "question": "现在几点？",
+                "createdAt": "2026-08-14T12:01:00Z",
+                "durationMs": 300,
+                "status": "answered",
+                "summary": "现在北京时间是 20:01。",
+                "outcome": None,
+                "response": None,
+                "chartSpec": None,
+                "rows": [],
+                "stageState": {},
+                "followUpContext": None,
+            }
+        ],
+    }
+
+
+def test_workspace_conversation_api_syncs_only_current_identity() -> None:
+    store = InMemoryWorkspaceHistoryStore()
+    app.dependency_overrides[get_workspace_history_store] = lambda: store
+    app.dependency_overrides[get_access_context] = _access_context
+
+    try:
+        saved = client.put(
+            "/agent/conversations/CONV-SYNC-001",
+            json=_workspace_payload(),
+        )
+        analyst_list = client.get("/agent/conversations")
+        app.dependency_overrides[get_access_context] = _admin_access_context
+        admin_list = client.get("/agent/conversations")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert saved.status_code == 200
+    assert analyst_list.json()[0]["turns"][0]["summary"] == (
+        "现在北京时间是 20:01。"
+    )
+    assert admin_list.json() == []
+
+
+def test_workspace_conversation_api_validates_path_and_deletes_idempotently() -> None:
+    store = InMemoryWorkspaceHistoryStore()
+    app.dependency_overrides[get_workspace_history_store] = lambda: store
+    app.dependency_overrides[get_access_context] = _access_context
+
+    try:
+        mismatch = client.put(
+            "/agent/conversations/CONV-OTHER",
+            json=_workspace_payload(),
+        )
+        client.put(
+            "/agent/conversations/CONV-SYNC-001",
+            json=_workspace_payload(),
+        )
+        deleted = client.delete("/agent/conversations/CONV-SYNC-001")
+        deleted_again = client.delete("/agent/conversations/CONV-SYNC-001")
+        remaining = client.get("/agent/conversations")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert mismatch.status_code == 422
+    assert deleted.status_code == 204
+    assert deleted_again.status_code == 204
+    assert remaining.json() == []
 
 
 class FakeAgentService:
