@@ -8,8 +8,8 @@ import {
 } from "react";
 import { api } from "./api";
 import {
-  mergeConversations,
   normalizeConversations,
+  reconcileConversations,
   type Conversation,
 } from "./conversations";
 
@@ -39,12 +39,7 @@ export function useConversationSync(
       await retryDeletes();
       const remote = normalizeConversations(await api.conversations.list())
         .filter((conversation) => !pendingDeletesRef.current.has(conversation.id));
-      setConversations((current) => {
-        const meaningfulLocal = current.filter(
-          (conversation) => conversation.turns.length > 0 || remote.length === 0,
-        );
-        return mergeConversations(meaningfulLocal, remote);
-      });
+      setConversations((current) => reconcileConversations(current, remote));
       hydratedRef.current = true;
       setSyncState("synced");
     } catch {
@@ -104,6 +99,13 @@ export function useConversationSync(
       window.removeEventListener("online", refreshWhenActive);
       document.removeEventListener("visibilitychange", refreshWhenActive);
     };
+  }, [refresh]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === "visible") void refresh();
+    }, 10_000);
+    return () => window.clearInterval(timer);
   }, [refresh]);
 
   return { syncState, refresh, deleteRemote };

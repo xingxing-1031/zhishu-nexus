@@ -98,6 +98,22 @@ export function mergeConversations(
   return normalizeConversations([...byId.values()]);
 }
 
+/**
+ * Reconcile a successful account snapshot. Non-empty local records are only
+ * an offline fallback; once the account API responds, a missing record means
+ * it was deleted or is no longer part of this account's history.
+ */
+export function reconcileConversations(
+  localConversations: Conversation[],
+  remoteConversations: Conversation[],
+): Conversation[] {
+  const remote = normalizeConversations(remoteConversations);
+  const localDraft = normalizeConversations(localConversations)
+    .find((conversation) => conversation.turns.length === 0);
+  const next = localDraft ? [...remote, localDraft] : remote;
+  return next.length > 0 ? normalizeConversations(next) : [newConversation()];
+}
+
 export function saveConversations(userId: string, conversations: Conversation[]) {
   try {
     const bounded = conversations

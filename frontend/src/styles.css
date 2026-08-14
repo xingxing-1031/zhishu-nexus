@@ -87,8 +87,7 @@ code, pre, .mono, .numeric { font-family: "JetBrains Mono", "Cascadia Code", Con
 .rail-conversation > button { border: 0; color: var(--secondary); background: transparent; }
 .rail-conversation > button:first-child { min-width: 0; display: grid; gap: 3px; padding: 9px 8px; text-align: left; }
 .rail-conversation > button:first-child:hover { color: var(--text); }
-.rail-conversation > button:last-child { width: 44px; height: 44px; display: grid; place-items: center; padding: 0; border-radius: var(--radius); color: var(--muted); opacity: 0; }
-.rail-conversation:hover > button:last-child, .rail-conversation:focus-within > button:last-child { opacity: 1; }
+.rail-conversation > button:last-child { width: 44px; height: 44px; display: grid; place-items: center; padding: 0; border-radius: var(--radius); color: var(--muted); }
 .rail-conversation > button:last-child:hover { color: var(--danger); background: var(--danger-soft); }
 .rail-conversation strong { overflow: hidden; font-size: 13px; font-weight: 550; text-overflow: ellipsis; white-space: nowrap; }
 .rail-conversation span { color: var(--muted); font-size: 12px; }
@@ -381,6 +380,8 @@ input, select { min-height: 42px; padding: 0 10px; border: 1px solid var(--borde
   .workspace-root { min-height: 0; }
   .enterprise-workspace, .conversation-workspace, .conversation-stage { min-height: 0; }
   .conversation-workspace { grid-template-rows: 56px minmax(0, 1fr) max-content; }
+  .rail-conversation { grid-template-columns: minmax(0, 1fr) 48px; }
+  .rail-conversation > button:first-child { padding: 10px 8px; }
   .workspace-topbar { padding: 0 10px; }.workspace-title small { display: none; }
   .message-list { width: calc(100% - 20px); padding: 18px 0 26px; }.message-turn { gap: 18px; padding: 14px 0 26px; }
   .user-message { max-width: 92%; }.user-message p { font-size: 15px; }
