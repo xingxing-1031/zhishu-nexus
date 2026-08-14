@@ -34,3 +34,10 @@ def test_sql_files_are_sorted_and_missing_directory_is_rejected(tmp_path: Path) 
     with pytest.raises(MigrationError, match="does not exist"):
         _sql_files(tmp_path / "missing")
 
+
+def test_repository_migrations_include_agent_run_registry() -> None:
+    root = Path(__file__).resolve().parents[1]
+
+    files = _sql_files(root / "db" / "migrations")
+
+    assert files[-1].name == "010_agent_request_runs.sql"

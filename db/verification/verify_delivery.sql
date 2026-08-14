@@ -22,7 +22,8 @@ BEGIN
         'knowledge_chunks',
         'query_approval_logs',
         'analysis_request_registry',
-        'analysis_trace_events'
+        'analysis_trace_events',
+        'agent_request_runs'
     ]) AS required_relation
     WHERE to_regclass('public.' || required_relation) IS NULL;
 
@@ -65,6 +66,23 @@ BEGIN
           AND is_nullable = 'NO'
     ) THEN
         RAISE EXCEPTION 'idempotent audit event keys are missing';
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'agent_request_runs'
+          AND column_name = 'request_fingerprint'
+          AND is_nullable = 'NO'
+    ) OR NOT EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'agent_request_runs'
+          AND column_name = 'response_payload'
+    ) THEN
+        RAISE EXCEPTION 'agent request recovery columns are missing';
     END IF;
 END
 $$;
