@@ -35,7 +35,7 @@ export default function AssistantResponse({
   const response = view.response;
   const outcome = response?.analysis ?? view.outcome;
   const analysis = isAnalysisResult(outcome) ? outcome : null;
-  const answer = response?.answer || analysis?.answer || outcomeAnswer(outcome);
+  const answer = response?.answer || analysis?.answer || outcomeAnswer(outcome) || view.fallbackAnswer;
   const knowledgeCount = response?.knowledge_evidence?.length ?? 0;
   const dataCount = response?.report?.data_evidence.length ?? analysis?.evidence_source_ids.length ?? 0;
   const limitations = response?.limitations ?? [];

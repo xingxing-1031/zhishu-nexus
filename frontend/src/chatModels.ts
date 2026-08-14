@@ -24,6 +24,7 @@ export interface AssistantView {
   durationMs: number | null;
   running: boolean;
   status: ConversationTurn["status"] | null;
+  fallbackAnswer: string;
 }
 
 export function assistantFromTurn(turn: ConversationTurn): AssistantView {
@@ -37,6 +38,7 @@ export function assistantFromTurn(turn: ConversationTurn): AssistantView {
     durationMs: turn.durationMs,
     running: false,
     status: turn.status,
+    fallbackAnswer: turn.summary,
   };
 }
 
@@ -51,5 +53,6 @@ export function assistantFromLiveTurn(turn: LiveTurn): AssistantView {
     durationMs: null,
     running: !turn.failure && turn.response === null,
     status: turn.failure ? "failed" : turn.outcome?.status ?? null,
+    fallbackAnswer: "",
   };
 }

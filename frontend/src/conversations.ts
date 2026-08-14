@@ -71,22 +71,31 @@ export function loadConversations(userId: string): Conversation[] {
   try {
     const raw = globalThis.localStorage?.getItem(storageKey(userId));
     if (!raw) return [];
-    const parsed = JSON.parse(raw) as unknown;
-    if (!Array.isArray(parsed)) return [];
-    return parsed
-      .filter(isConversation)
-      .map((conversation) => ({
-        ...conversation,
-        turns: conversation.turns.slice(-MAX_TURNS).map((turn) => ({
-          ...turn,
-          response: turn.response ?? null,
-        })),
-      }))
-      .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
-      .slice(0, MAX_CONVERSATIONS);
+    return normalizeConversations(JSON.parse(raw) as unknown);
   } catch {
     return [];
   }
+}
+
+export function normalizeConversations(value: unknown): Conversation[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map(normalizeConversation)
+    .filter((conversation): conversation is Conversation => conversation !== null)
+    .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
+    .slice(0, MAX_CONVERSATIONS);
+}
+
+export function mergeConversations(
+  localConversations: Conversation[],
+  remoteConversations: Conversation[],
+): Conversation[] {
+  const byId = new Map(localConversations.map((conversation) => [conversation.id, conversation]));
+  remoteConversations.forEach((remote) => {
+    const local = byId.get(remote.id);
+    byId.set(remote.id, !local || remote.updatedAt >= local.updatedAt ? remote : local);
+  });
+  return normalizeConversations([...byId.values()]);
 }
 
 export function saveConversations(userId: string, conversations: Conversation[]) {
@@ -229,14 +238,66 @@ function summarizeTitle(question: string) {
   return clean.length > 22 ? `${clean.slice(0, 22)}…` : clean || "新对话";
 }
 
-function isConversation(value: unknown): value is Conversation {
-  if (!value || typeof value !== "object") return false;
-  const candidate = value as Partial<Conversation>;
-  return typeof candidate.id === "string"
-    && typeof candidate.title === "string"
-    && typeof candidate.createdAt === "string"
-    && typeof candidate.updatedAt === "string"
-    && Array.isArray(candidate.turns);
+function normalizeConversation(value: unknown): Conversation | null {
+  if (!isObject(value)) return null;
+  if (!isText(value.id) || !isText(value.title) || !isText(value.createdAt) || !isText(value.updatedAt)) return null;
+  const turns = Array.isArray(value.turns)
+    ? value.turns.map(normalizeTurn).filter((turn): turn is ConversationTurn => turn !== null).slice(-MAX_TURNS)
+    : [];
+  return {
+    id: value.id,
+    title: value.title,
+    createdAt: value.createdAt,
+    updatedAt: value.updatedAt,
+    turns,
+  };
+}
+
+function normalizeTurn(value: unknown): ConversationTurn | null {
+  if (!isObject(value)) return null;
+  if (!isText(value.id) || !isText(value.requestId) || !isText(value.question) || !isText(value.createdAt)) return null;
+  const response = isObject(value.response) ? value.response as unknown as AgentResponse : null;
+  const outcome = isObject(value.outcome) ? value.outcome as unknown as AnalysisOutcome : null;
+  const summary = isText(value.summary)
+    ? value.summary
+    : response?.answer || (isAnalysisResult(outcome) ? outcome.answer : "历史回答已恢复");
+  return {
+    id: value.id,
+    requestId: value.requestId,
+    question: value.question,
+    createdAt: value.createdAt,
+    durationMs: typeof value.durationMs === "number" && Number.isFinite(value.durationMs) ? value.durationMs : 0,
+    status: isTurnStatus(value.status) ? value.status : "failed",
+    summary,
+    outcome,
+    response,
+    chartSpec: isObject(value.chartSpec) ? value.chartSpec as unknown as ChartSpec : null,
+    rows: Array.isArray(value.rows)
+      ? value.rows.filter(isObject).slice(0, 20)
+      : [],
+    stageState: isObject(value.stageState) ? value.stageState as StoredStageState : {},
+    followUpContext: isObject(value.followUpContext) ? value.followUpContext as unknown as FollowUpContext : null,
+  };
+}
+
+function isObject(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function isText(value: unknown): value is string {
+  return typeof value === "string" && value.length > 0;
+}
+
+function isTurnStatus(value: unknown): value is ConversationTurn["status"] {
+  return typeof value === "string" && [
+    "succeeded",
+    "degraded",
+    "answered",
+    "needs_clarification",
+    "pending",
+    "rejected",
+    "failed",
+  ].includes(value);
 }
 
 function isAnalysisResult(outcome: AnalysisOutcome | null): outcome is AnalysisResult {
