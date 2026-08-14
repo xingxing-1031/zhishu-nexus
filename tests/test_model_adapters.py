@@ -143,13 +143,13 @@ def test_ollama_planner_returns_validated_analysis_plan() -> None:
                         "metric": "refund_amount",
                         "display_name": "退款金额",
                         "aliases": ["退款金额"],
-                        "supported_dimensions": ["refund_status", "day"],
+                        "supported_dimensions": ["channel", "refund_status", "day"],
                     },
                         {
                             "metric": "refund_count",
                             "display_name": "退款笔数",
                             "aliases": ["退款笔数", "退款单数"],
-                            "supported_dimensions": ["refund_status", "day"],
+                            "supported_dimensions": ["channel", "refund_status", "day"],
                         },
                         {
                             "metric": "refund_rate",

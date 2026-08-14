@@ -40,8 +40,8 @@
 - **显示名称：** 退款金额
 - **业务含义：** 退款记录中的退款金额总和，默认不排除某个退款状态。
 - **公式：** `SUM(refunds.refund_amount)`
-- **来源表：** `refunds`
-- **支持维度：** `refund_status`、`day`
+- **来源表：** `refunds`（按渠道时关联 `orders`）
+- **支持维度：** `channel`、`refund_status`、`day`（通过 `orders.order_id = refunds.order_id` 关联渠道）
 - **来源编号：** `metric.refund_amount.v1`
 
 ## `refund_count.v1`
@@ -49,8 +49,8 @@
 - **显示名称：** 退款笔数
 - **业务含义：** 退款记录的去重退款编号数量。
 - **公式：** `COUNT(DISTINCT refunds.refund_id)`
-- **来源表：** `refunds`
-- **支持维度：** `refund_status`、`day`
+- **来源表：** `refunds`（按渠道时关联 `orders`）
+- **支持维度：** `channel`、`refund_status`、`day`（通过 `orders.order_id = refunds.order_id` 关联渠道）
 - **来源编号：** `metric.refund_count.v1`
 
 ## `average_order_value.v1`

@@ -159,6 +159,23 @@ def test_catalog_retrieval_returns_only_refund_status_evidence() -> None:
     ]
 
 
+def test_catalog_retrieval_returns_channel_refund_evidence() -> None:
+    plan = AnalysisPlan(
+        analysis_goal="按渠道统计退款金额",
+        metrics=["refund_amount"],
+        dimensions=["channel"],
+    )
+
+    evidence = CatalogRetrievalTool().retrieve(plan)
+
+    assert [item.source_id for item in evidence] == [
+        "metric.refund_amount.v1",
+        "schema.orders",
+        "schema.refunds",
+        "schema.join.orders.refunds",
+    ]
+
+
 def test_catalog_retrieval_deduplicates_shared_schema_evidence() -> None:
     plan = AnalysisPlan(
         analysis_goal="按渠道统计销售额和销量",

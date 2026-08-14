@@ -293,8 +293,13 @@ DEFAULT_METRIC_CATALOG = MetricCatalog(
             description="退款记录中的退款金额总和，不默认排除任何退款状态",
             formula="SUM(refunds.refund_amount)",
             source_tables=("refunds",),
-            source_columns=("refunds.refund_amount", "refunds.status"),
+            source_columns=(
+                "orders.channel",
+                "refunds.refund_amount",
+                "refunds.status",
+            ),
             supported_dimensions=(
+                AnalysisDimension.CHANNEL,
                 AnalysisDimension.REFUND_STATUS,
                 AnalysisDimension.DAY,
             ),
@@ -307,8 +312,13 @@ DEFAULT_METRIC_CATALOG = MetricCatalog(
             description="退款记录的去重退款编号数量",
             formula="COUNT(DISTINCT refunds.refund_id)",
             source_tables=("refunds",),
-            source_columns=("refunds.refund_id", "refunds.status"),
+            source_columns=(
+                "orders.channel",
+                "refunds.refund_id",
+                "refunds.status",
+            ),
             supported_dimensions=(
+                AnalysisDimension.CHANNEL,
                 AnalysisDimension.REFUND_STATUS,
                 AnalysisDimension.DAY,
             ),
