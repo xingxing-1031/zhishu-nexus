@@ -19,6 +19,13 @@ class SkillId(StrEnum):
     WEEKLY_REPORT = "weekly_report"
 
 
+class AgentMode(StrEnum):
+    GENERAL = "general"
+    KNOWLEDGE = "knowledge"
+    DATA = "data"
+    COLLABORATION = "collaboration"
+
+
 class ToolRisk(StrEnum):
     LOW = "low"
     MEDIUM = "medium"
@@ -32,6 +39,27 @@ class AgentTaskStatus(StrEnum):
     DEGRADED = "degraded"
     REFUSED = "refused"
     FAILED = "failed"
+
+
+class AgentStep(AgentStrictModel):
+    agent: str = Field(min_length=1, max_length=80)
+    task: str = Field(min_length=1, max_length=500)
+    status: AgentTaskStatus = AgentTaskStatus.PENDING
+
+
+class AgentReview(AgentStrictModel):
+    passed: bool
+    checks: dict[str, bool] = Field(default_factory=dict)
+    limitations: tuple[str, ...] = Field(default=(), max_length=20)
+
+
+class KnowledgeEvidenceView(AgentStrictModel):
+    source_id: str = Field(min_length=1, max_length=256)
+    title: str = Field(min_length=1, max_length=500)
+    version: str = Field(min_length=1, max_length=80)
+    quote: str = Field(min_length=1, max_length=2000)
+    score: float = Field(ge=0, le=1)
+    effective_from: str | None = Field(default=None, max_length=80)
 
 
 class Subtask(AgentStrictModel):
@@ -127,6 +155,15 @@ class AgentResponse(AgentStrictModel):
     exported_report: str | None = Field(default=None, max_length=50000)
     tool_calls: tuple[ToolCallRecord, ...] = Field(default=(), max_length=50)
     limitations: tuple[str, ...] = Field(default=(), max_length=20)
+    agent_mode: AgentMode | None = None
+    agents: tuple[str, ...] = Field(default=(), max_length=8)
+    agent_steps: tuple[AgentStep, ...] = Field(default=(), max_length=8)
+    answer: str = Field(default="", max_length=12000)
+    knowledge_evidence: tuple[KnowledgeEvidenceView, ...] = Field(
+        default=(),
+        max_length=20,
+    )
+    review: AgentReview | None = None
 
 
 class AgentEventType(StrEnum):
