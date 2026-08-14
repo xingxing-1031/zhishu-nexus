@@ -1,4 +1,5 @@
 import { Info, Menu, PanelRightClose, PanelRightOpen } from "lucide-react";
+import { BRAND } from "../brand";
 import type { Overview } from "../types";
 
 export default function WorkspaceHeader({
@@ -18,8 +19,8 @@ export default function WorkspaceHeader({
         <Menu size={19} />
       </button>
       <div className="workspace-title">
-        <span>智能工作台</span>
-        <small>对话、数据和企业知识在同一任务中协作</small>
+        <span>{BRAND.workspaceName}</span>
+        <small>知识、数据与工具在同一任务中协作</small>
       </div>
       {overview && (
         <div className="workspace-overview" title="演示数据概况">
