@@ -47,6 +47,17 @@ def test_image_contains_database_migrations_for_release_command() -> None:
     assert "COPY db ./db" in dockerfile
 
 
+def test_fresh_demo_database_initializes_every_migration() -> None:
+    compose = (PROJECT_ROOT / "compose.yaml").read_text(encoding="utf-8")
+    migration_names = sorted(
+        path.name for path in (PROJECT_ROOT / "db" / "migrations").glob("*.sql")
+    )
+
+    assert migration_names
+    for migration_name in migration_names:
+        assert f"./db/migrations/{migration_name}:" in compose
+
+
 def test_vps_image_caches_dependencies_before_copying_application_source() -> None:
     dockerfile = (PROJECT_ROOT / "Dockerfile").read_text(encoding="utf-8")
     compose = (PROJECT_ROOT / "compose.vps.yaml").read_text(encoding="utf-8")
