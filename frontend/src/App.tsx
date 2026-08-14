@@ -73,10 +73,22 @@ export default function App() {
     return <LoginPage onLogin={(activeSession) => { setSession(activeSession); setNeedsLogin(false); void bootstrap(); }} />;
   }
 
+  if (page === "workspace") {
+    return (
+      <Workspace
+        session={session}
+        overview={overview}
+        ready={ready}
+        online={online}
+        onPage={navigate}
+        onLogout={() => void logout()}
+      />
+    );
+  }
+
   return (
-    <div className="app-shell">
+    <div className="app-shell admin-shell-mode">
       <Header session={session} online={online && ready} page={page} onPage={navigate} onLogout={() => void logout()} />
-      {page === "workspace" && <Workspace session={session} overview={overview} ready={ready} />}
       {page === "audit" && session.role === "admin" && <AuditPage />}
       {page === "metrics" && session.role === "admin" && <MetricsPage />}
     </div>

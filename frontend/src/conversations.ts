@@ -1,4 +1,4 @@
-import type { AnalysisOutcome, AnalysisResult, ChartSpec } from "./types";
+import type { AgentResponse, AnalysisOutcome, AnalysisResult, ChartSpec } from "./types";
 
 export const MAX_CONVERSATIONS = 8;
 export const MAX_TURNS = 8;
@@ -23,6 +23,7 @@ export interface ConversationTurn {
   status: "succeeded" | "degraded" | "answered" | "needs_clarification" | "pending" | "rejected" | "failed";
   summary: string;
   outcome: AnalysisOutcome | null;
+  response: AgentResponse | null;
   chartSpec: ChartSpec | null;
   rows: Array<Record<string, unknown>>;
   stageState: StoredStageState;
@@ -74,7 +75,13 @@ export function loadConversations(userId: string): Conversation[] {
     if (!Array.isArray(parsed)) return [];
     return parsed
       .filter(isConversation)
-      .map((conversation) => ({ ...conversation, turns: conversation.turns.slice(-MAX_TURNS) }))
+      .map((conversation) => ({
+        ...conversation,
+        turns: conversation.turns.slice(-MAX_TURNS).map((turn) => ({
+          ...turn,
+          response: turn.response ?? null,
+        })),
+      }))
       .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
       .slice(0, MAX_CONVERSATIONS);
   } catch {
@@ -127,13 +134,14 @@ export function createStoredTurn(args: {
   question: string;
   durationMs: number;
   outcome: AnalysisOutcome | null;
+  response: AgentResponse | null;
   failure: string;
   stageState: StoredStageState;
 }): ConversationTurn {
   const { outcome } = args;
   const result = isAnalysisResult(outcome) ? outcome : null;
   const safeToPersistRows = Boolean(result?.plan);
-  const status = args.failure ? "failed" : outcome?.status ?? "failed";
+  const status = turnStatus(args.failure, outcome, args.response);
   return {
     id: makeId("TURN"),
     requestId: args.requestId,
@@ -141,8 +149,9 @@ export function createStoredTurn(args: {
     createdAt: new Date().toISOString(),
     durationMs: args.durationMs,
     status,
-    summary: args.failure || outcomeSummary(outcome),
+    summary: args.failure || outcomeSummary(outcome, args.response),
     outcome: sanitizeOutcome(outcome),
+    response: sanitizeAgentResponse(args.response),
     chartSpec: safeToPersistRows ? result?.chart_spec ?? null : null,
     rows: safeToPersistRows ? result?.rows.slice(0, 20) ?? [] : [],
     stageState: args.stageState,
@@ -181,12 +190,38 @@ function buildFollowUpContext(result: AnalysisResult): FollowUpContext {
   };
 }
 
-function outcomeSummary(outcome: AnalysisOutcome | null): string {
-  if (!outcome) return "请求未完成";
+function outcomeSummary(outcome: AnalysisOutcome | null, response: AgentResponse | null): string {
+  if (!outcome) return response?.answer || response?.report?.executive_summary || "请求未完成";
   if (isAnalysisResult(outcome)) return outcome.answer;
   if (outcome.status === "pending") return "高风险查询正在等待管理员审批";
   if (outcome.status === "rejected") return outcome.reason ?? "请求已被拒绝";
   return outcome.answer;
+}
+
+function turnStatus(
+  failure: string,
+  outcome: AnalysisOutcome | null,
+  response: AgentResponse | null,
+): ConversationTurn["status"] {
+  if (failure) return "failed";
+  if (outcome) return outcome.status;
+  if (response?.status === "degraded") return "degraded";
+  if (response?.status === "refused") return "rejected";
+  if (response?.status === "failed") return "failed";
+  if (response?.status === "pending") return "pending";
+  if (response?.status === "succeeded") return "answered";
+  return "failed";
+}
+
+function sanitizeAgentResponse(response: AgentResponse | null): AgentResponse | null {
+  if (!response) return null;
+  return {
+    ...response,
+    analysis: sanitizeOutcome(response.analysis ?? null),
+    exported_report: null,
+    knowledge_evidence: response.knowledge_evidence?.slice(0, 8),
+    tool_calls: response.tool_calls.slice(0, 12),
+  };
 }
 
 function summarizeTitle(question: string) {

@@ -22,7 +22,7 @@ const scriptPath = home.body.match(/src="([^"]+\.js)"/)?.[1];
 if (!scriptPath) throw new Error("homepage does not reference a JavaScript bundle");
 const script = await get(scriptPath);
 if (script.body.includes("demo-path-rail")) throw new Error("bundle still contains the removed guided demo rail");
-for (const marker of ["历史对话", "analyst-demo", "admin-demo", "基于此结果继续"]) {
+for (const marker of ["最近对话", "智能工作台", "任务详情", "基于结果追问", "analyst-demo", "admin-demo"]) {
   if (!script.body.includes(marker)) throw new Error(`bundle is missing workspace marker: ${marker}`);
 }
 
