@@ -12,7 +12,7 @@ from retail_analytics_agent.context_store import InMemoryConversationStore
 from retail_analytics_agent.general_agent import GeneralAgentResult
 from retail_analytics_agent.knowledge_adapter import KnowledgeEvidence
 from retail_analytics_agent.models import AccessContext, AccessRole
-from retail_analytics_agent.qixi_service import QixiAgentService
+from retail_analytics_agent.qixi_service import QixiAgentService, _data_only_question
 from retail_analytics_agent.supervisor import Supervisor
 
 
@@ -112,3 +112,10 @@ def test_collaboration_disables_rag_inside_data_agent() -> None:
     assert result.agent_mode.value == "collaboration"
     assert result.review is not None and result.review.passed
     assert data.calls[0].include_knowledge is False
+
+
+def test_collaboration_extracts_data_subquestion_before_sql_planning() -> None:
+    assert _data_only_question("统计最近30天退款金额，并结合售后制度判断风险") == (
+        "统计最近30天退款金额。"
+    )
+    assert _data_only_question("结合退款数据和售后制度给出复盘") == "退款数据。"

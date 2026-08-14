@@ -289,7 +289,12 @@ class QixiAgentService:
         plan: AgentPlan,
         history: Sequence[dict[str, str]],
     ) -> AgentResponse:
-        data_request = request.model_copy(update={"include_knowledge": False})
+        data_request = request.model_copy(
+            update={
+                "include_knowledge": False,
+                "question": _data_only_question(request.question),
+            }
+        )
         with ThreadPoolExecutor(max_workers=2) as executor:
             knowledge_future = executor.submit(
                 self._retrieve_knowledge,
@@ -436,3 +441,17 @@ class QixiAgentService:
             content=answer,
             evidence_ids=evidence_ids,
         )
+
+
+def _data_only_question(question: str) -> str:
+    """Keep policy language out of the SQL planner for cross-domain tasks."""
+    markers = ("并结合", "同时结合", "结合", "并参考", "同时参考")
+    for marker in markers:
+        prefix, separator, _suffix = question.partition(marker)
+        if separator and prefix.strip():
+            return f"{prefix.strip(' ，,。；;')}。"
+    for marker in ("和售后制度", "和公司制度", "和制度"):
+        prefix, separator, _suffix = question.partition(marker)
+        if separator and prefix.strip():
+            return f"{prefix.replace('结合', '').strip(' ，,。；;')}。"
+    return question
