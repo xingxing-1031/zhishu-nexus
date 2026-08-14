@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef } from "react";
 import { ArrowUpRight, Database, FileSearch, Globe2, Sparkles } from "lucide-react";
 import { assistantFromLiveTurn, assistantFromTurn, type InspectorTab, type LiveTurn } from "../chatModels";
 import type { Conversation } from "../conversations";
@@ -36,10 +36,21 @@ export default function ChatThread({
   const containerRef = useRef<HTMLDivElement>(null);
   const shouldStickRef = useRef(true);
 
+  useLayoutEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    shouldStickRef.current = true;
+    container.scrollTop = container.scrollHeight;
+  }, [conversation.id]);
+
   useEffect(() => {
     if (!shouldStickRef.current) return;
     const container = containerRef.current;
-    if (container) container.scrollTo({ top: container.scrollHeight, behavior: liveTurn ? "smooth" : "auto" });
+    if (!container) return;
+    const frame = window.requestAnimationFrame(() => {
+      container.scrollTo({ top: container.scrollHeight, behavior: liveTurn ? "smooth" : "auto" });
+    });
+    return () => window.cancelAnimationFrame(frame);
   }, [conversation.turns, liveTurn]);
 
   function trackScroll() {
@@ -49,7 +60,7 @@ export default function ChatThread({
   }
 
   return (
-    <div className="chat-thread" ref={containerRef} onScroll={trackScroll}>
+    <div className="chat-thread" ref={containerRef} onScroll={trackScroll} tabIndex={0} aria-label="对话内容">
       {conversation.turns.length === 0 && liveTurn === null ? (
         <section className="chat-empty-state">
           <span className="empty-brand-mark">析</span>

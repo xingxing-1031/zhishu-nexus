@@ -63,7 +63,7 @@ export default function ConversationRail({
         <div className="rail-conversation-list">
           {conversations.map((conversation) => (
             <div className={`rail-conversation ${conversation.id === activeId ? "active" : ""}`} key={conversation.id}>
-              <button type="button" onClick={() => { onSelect(conversation.id); onClose(); }}>
+              <button type="button" onClick={(event) => { event.currentTarget.blur(); onSelect(conversation.id); onClose(); }}>
                 <strong>{conversation.title}</strong>
                 <span>{conversation.turns.length} 轮 · {new Date(conversation.updatedAt).toLocaleDateString("zh-CN")}</span>
               </button>

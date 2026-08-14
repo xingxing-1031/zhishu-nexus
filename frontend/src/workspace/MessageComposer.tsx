@@ -1,5 +1,5 @@
 import { CornerDownLeft, SendHorizontal, Settings2, X } from "lucide-react";
-import { FormEvent, KeyboardEvent } from "react";
+import { FormEvent, KeyboardEvent, useEffect, useRef } from "react";
 import type { FollowUpContext } from "../conversations";
 import type { ResultDisplayMode } from "../types";
 
@@ -34,6 +34,17 @@ export default function MessageComposer({
   onCancelFollowUp: () => void;
   onSubmit: () => void;
 }) {
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    textarea.style.height = "0px";
+    const nextHeight = Math.min(128, Math.max(42, textarea.scrollHeight));
+    textarea.style.height = `${nextHeight}px`;
+    textarea.style.overflowY = textarea.scrollHeight > 128 ? "auto" : "hidden";
+  }, [question]);
+
   function submit(event: FormEvent) {
     event.preventDefault();
     onSubmit();
@@ -53,6 +64,7 @@ export default function MessageComposer({
           <div className="composer-context"><span>正在基于上一轮已验证结果追问</span><button type="button" onClick={onCancelFollowUp} aria-label="取消结果追问"><X size={14} /></button></div>
         )}
         <textarea
+          ref={textareaRef}
           value={question}
           onChange={(event) => onQuestion(event.target.value)}
           onKeyDown={keyDown}
