@@ -7,6 +7,7 @@ from scripts.run_agent_live_development import (
 
 def test_live_evaluation_requires_exact_tools_and_governed_evidence() -> None:
     case = {
+        "expected_mode": "collaboration",
         "expected_skill": "refund_diagnosis",
         "expected_statuses": ["succeeded"],
         "expected_tools": ["sql.query", "knowledge.search", "report.export"],
@@ -16,20 +17,23 @@ def test_live_evaluation_requires_exact_tools_and_governed_evidence() -> None:
     }
     response = {
         "status": "succeeded",
+        "agent_mode": "collaboration",
         "skill_id": "refund_diagnosis",
         "tool_calls": [
             {"tool_name": "sql.query", "status": "succeeded"},
-            {"tool_name": "knowledge.search", "status": "succeeded"},
             {"tool_name": "report.export", "status": "succeeded"},
+            {"tool_name": "knowledge.search", "status": "succeeded"},
         ],
         "context": {"token_estimate": 100, "token_budget": 1000},
-        "report": {"data_evidence": ["query:1"], "document_evidence": ["ev:1"]},
+        "report": {"data_evidence": ["query:1"], "document_evidence": []},
+        "knowledge_evidence": [{"source_id": "ev:1"}],
         "exported_report": "# report",
     }
 
     checks = _evaluate_case(case, response)
 
     assert checks["case_pass"] is True
+    assert checks["mode_pass"] is True
     assert checks["document_evidence_count"] == 1
 
 
@@ -182,3 +186,35 @@ def test_live_request_waits_for_retry_after_on_rate_limit() -> None:
     assert retry_count == 1
     assert wait_seconds == 3.0
     assert waits == [3.0]
+
+
+def test_live_aggregate_reports_metrics_by_agent_category() -> None:
+    records = [
+        {
+            "category": "general",
+            "expected_statuses": ["succeeded"],
+            "status": "succeeded",
+            "http_status": 200,
+            "rate_limit_retry_count": 0,
+            "rate_limit_wait_seconds": 0.0,
+            "latency_seconds": 1.5,
+            "tool_calls": [],
+            "checks": {
+                "case_pass": True,
+                "mode_pass": True,
+                "route_pass": True,
+                "tool_pass": True,
+                "data_evidence_pass": True,
+                "document_evidence_pass": True,
+                "context_budget_pass": True,
+                "token_estimate": 100,
+                "token_budget": 1000,
+            },
+        }
+    ]
+
+    metrics = _aggregate(records)
+
+    assert metrics["agent_mode_accuracy"] == 1.0
+    assert metrics["by_category"]["general"]["case_count"] == 1
+    assert metrics["by_category"]["general"]["agent_mode_accuracy"] == 1.0

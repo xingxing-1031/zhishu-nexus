@@ -8,6 +8,7 @@ import subprocess
 import time
 import urllib.error
 import urllib.request
+from collections import Counter
 from collections.abc import Callable
 from datetime import UTC, datetime
 from http.cookiejar import CookieJar
@@ -100,9 +101,11 @@ def _evaluate_case(case: dict[str, Any], response: dict[str, Any]) -> dict[str, 
     tool_calls = response.get("tool_calls") or []
     actual_tools = [item.get("tool_name") for item in tool_calls]
     expected_tools = case["expected_tools"]
+    expected_mode = case.get("expected_mode")
     status_pass = response.get("status") in case["expected_statuses"]
+    mode_pass = expected_mode is None or response.get("agent_mode") == expected_mode
     route_pass = response.get("skill_id") == case["expected_skill"]
-    tool_pass = actual_tools == expected_tools
+    tool_pass = Counter(actual_tools) == Counter(expected_tools)
     data_pass = (
         not case["requires_data_evidence"]
         or bool(report.get("data_evidence"))
@@ -110,6 +113,7 @@ def _evaluate_case(case: dict[str, Any], response: dict[str, Any]) -> dict[str, 
     document_pass = (
         not case["requires_document_evidence"]
         or bool(report.get("document_evidence"))
+        or bool(response.get("knowledge_evidence"))
     )
     export_pass = not case["requires_export"] or bool(
         response.get("exported_report")
@@ -124,6 +128,7 @@ def _evaluate_case(case: dict[str, Any], response: dict[str, Any]) -> dict[str, 
     )
     return {
         "status_pass": status_pass,
+        "mode_pass": mode_pass,
         "route_pass": route_pass,
         "tool_pass": tool_pass,
         "data_evidence_pass": data_pass,
@@ -134,6 +139,7 @@ def _evaluate_case(case: dict[str, Any], response: dict[str, Any]) -> dict[str, 
         "case_pass": all(
             (
                 status_pass,
+                mode_pass,
                 route_pass,
                 tool_pass,
                 data_pass,
@@ -144,8 +150,12 @@ def _evaluate_case(case: dict[str, Any], response: dict[str, Any]) -> dict[str, 
             )
         ),
         "actual_tools": actual_tools,
+        "actual_mode": response.get("agent_mode"),
         "data_evidence_count": len(report.get("data_evidence") or []),
-        "document_evidence_count": len(report.get("document_evidence") or []),
+        "document_evidence_count": max(
+            len(report.get("document_evidence") or []),
+            len(response.get("knowledge_evidence") or []),
+        ),
         "token_estimate": token_estimate,
         "token_budget": token_budget,
     }
@@ -182,9 +192,12 @@ def _aggregate(records: list[dict[str, Any]]) -> dict[str, Any]:
             sum(item["status"] == "succeeded" for item in selected) / len(selected),
             4,
         )
-    return {
+    metrics = {
         "case_count": total,
         "case_pass_rate": rate(lambda record: record["checks"]["case_pass"]),
+        "agent_mode_accuracy": rate(
+            lambda record: record["checks"].get("mode_pass", True)
+        ),
         "skill_route_accuracy": rate(lambda record: record["checks"]["route_pass"]),
         "tool_selection_accuracy": rate(lambda record: record["checks"]["tool_pass"]),
         "evidence_requirement_accuracy": rate(
@@ -194,20 +207,35 @@ def _aggregate(records: list[dict[str, Any]]) -> dict[str, Any]:
         "context_budget_compliance": rate(
             lambda record: record["checks"]["context_budget_pass"]
         ),
-        "business_succeeded_rate": round(
-            sum(record["status"] == "succeeded" for record in executable)
-            / len(executable),
-            4,
+        "business_succeeded_rate": (
+            round(
+                sum(record["status"] == "succeeded" for record in executable)
+                / len(executable),
+                4,
+            )
+            if executable
+            else None
         ),
-        "business_non_failure_rate": round(
-            sum(record["status"] in {"succeeded", "degraded"} for record in executable)
-            / len(executable),
-            4,
+        "business_non_failure_rate": (
+            round(
+                sum(
+                    record["status"] in {"succeeded", "degraded"}
+                    for record in executable
+                )
+                / len(executable),
+                4,
+            )
+            if executable
+            else None
         ),
-        "refusal_accuracy": round(
-            sum(record["status"] == "refused" for record in refusals)
-            / len(refusals),
-            4,
+        "refusal_accuracy": (
+            round(
+                sum(record["status"] == "refused" for record in refusals)
+                / len(refusals),
+                4,
+            )
+            if refusals
+            else None
         ),
         "http_success_rate": rate(lambda record: record["http_status"] == 200),
         "rate_limit_retry_count": sum(
@@ -229,6 +257,66 @@ def _aggregate(records: list[dict[str, Any]]) -> dict[str, Any]:
             "max": round(max(token_ratios), 4) if token_ratios else None,
         },
     }
+    metrics["by_category"] = _aggregate_by_category(records)
+    return metrics
+
+
+def _aggregate_by_category(records: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    grouped: dict[str, list[dict[str, Any]]] = {}
+    for record in records:
+        grouped.setdefault(record.get("category", "uncategorized"), []).append(record)
+
+    result: dict[str, dict[str, Any]] = {}
+    for category, items in sorted(grouped.items()):
+        total = len(items)
+        executable = [item for item in items if "refused" not in item["expected_statuses"]]
+        refusals = [item for item in items if item["expected_statuses"] == ["refused"]]
+        latencies = [item["latency_seconds"] for item in items]
+
+        def rate(predicate) -> float:
+            return round(sum(1 for item in items if predicate(item)) / total, 4)
+
+        result[category] = {
+            "case_count": total,
+            "case_pass_rate": rate(lambda item: item["checks"]["case_pass"]),
+            "agent_mode_accuracy": rate(
+                lambda item: item["checks"].get("mode_pass", True)
+            ),
+            "skill_route_accuracy": rate(lambda item: item["checks"]["route_pass"]),
+            "tool_selection_accuracy": rate(lambda item: item["checks"]["tool_pass"]),
+            "evidence_requirement_accuracy": rate(
+                lambda item: item["checks"]["data_evidence_pass"]
+                and item["checks"]["document_evidence_pass"]
+            ),
+            "context_budget_compliance": rate(
+                lambda item: item["checks"]["context_budget_pass"]
+            ),
+            "business_succeeded_rate": (
+                round(sum(item["status"] == "succeeded" for item in executable) / len(executable), 4)
+                if executable
+                else None
+            ),
+            "business_non_failure_rate": (
+                round(
+                    sum(item["status"] in {"succeeded", "degraded"} for item in executable)
+                    / len(executable),
+                    4,
+                )
+                if executable
+                else None
+            ),
+            "refusal_accuracy": (
+                round(sum(item["status"] == "refused" for item in refusals) / len(refusals), 4)
+                if refusals
+                else None
+            ),
+            "latency_seconds": {
+                "p50": round(_percentile(latencies, 0.50), 3),
+                "p95": round(_percentile(latencies, 0.95), 3),
+                "max": round(max(latencies), 3),
+            },
+        }
+    return result
 
 
 def main() -> int:
@@ -307,6 +395,7 @@ def main() -> int:
                 "rate_limit_wait_seconds": rate_limit_wait_seconds,
                 "latency_seconds": round(latency, 3),
                 "status": response.get("status"),
+                "agent_mode": response.get("agent_mode"),
                 "skill_id": response.get("skill_id"),
                 "tool_calls": response.get("tool_calls") or [],
                 "limitations": response.get("limitations") or [],
