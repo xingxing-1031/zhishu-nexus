@@ -8,6 +8,7 @@
 
 - 公网演示：`http://106.52.176.63/`，当前已部署“知枢 Nexus”品牌界面
 - 已实现：四类 Supervisor 路由、通用 Agent、五类只读 MCP 工具、服务端上下文、Text-to-SQL 数据 Agent、项目二 RAG Evidence API、跨域协作与审核、SSE、人工审批、顶层请求幂等与断线恢复、可信降级和结构化 Trace
+- 数据接入升级：管理员可以注册符合接入契约的 CSV/Parquet 销售数据；系统会创建隔离 staging schema，生成 SchemaProfile 和 QualityReport，并在字段/指标映射确认后才允许进入 `ready`
 - 新增 60 条知枢 Nexus development 契约与公网评测脚本，覆盖通用对话、企业知识、经营数据、跨域协作和安全边界；报告保留逐题路由、工具、证据、拒答、预算与延迟指标
 - 2026-08-15 扩展评测：60 条公网 development 中逐题契约通过 46/60（76.67%），Agent 模式路由 60/60，安全拒答 8/8，工具选择 59/60，证据要求 50/60，P50/P95 为 9.21s/19.57s；详见 `docs/EVALUATION_PROTOCOL.md`
 - 历史 12 条线上冒烟评测保留在 `evaluation/reports/agent-live-development-20260813T220105Z.json`；当前应以 60 条扩展 development 报告及其分层指标为准
@@ -49,6 +50,14 @@
 - 使用可重复种子脚本导入 6 个商品、10 个订单、13 条订单明细和 6 条退款；重复执行后行数不变。
 - 在真实 PostgreSQL 中执行 11 个业务查询块，并验证订单总金额与明细计算结果一致。
 - 使用数据库验收脚本检查扩展、表、关键数据场景、金额一致性和非法状态拒绝。
+
+### 可迁移销售数据接入
+
+- 使用 `dataset_registry` 保存数据集版本、来源、staging schema、状态和质量报告；`(dataset_id, version)` 唯一，重复注册返回已有版本。
+- CSV 通过受控上传根目录导入；列名统一为小写 snake_case，规范化冲突、路径越界和扩展名不匹配会在执行 SQL 前拒绝。
+- Parquet 使用可选的 `.[data]` 依赖组，不安装时不会影响现有 API 启动。
+- `SchemaProfiler` 只读取 `staging_` schema 的元数据和有界样本，给出金额、时间、分类和标识字段候选，并报告空表、空值、重复标识、负金额和异常时间。
+- 详细接口和状态流转见 [DATASET_ONBOARDING.md](docs/DATASET_ONBOARDING.md)。
 
 ### FastAPI 接口基础
 
@@ -159,7 +168,7 @@ python -m pytest
 
 ```powershell
 if (!(Test-Path .env)) { Copy-Item .env.example .env }
-# 首次使用空数据卷时，Compose 会按文件名顺序自动执行 6 个迁移和种子脚本。
+# 首次使用空数据卷时，Compose 会按文件名顺序自动执行 7 个迁移和种子脚本。
 docker compose up -d --wait
 docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U retail_user -d retail_analytics -f /opt/retail-db/verification/verify_delivery.sql
 docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U retail_user -d retail_analytics -f /opt/retail-db/verification/verify_w2_1.sql

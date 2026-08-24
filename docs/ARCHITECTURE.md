@@ -40,6 +40,16 @@ flowchart LR
     HITL --> AUDIT
     SUMMARY --> API
     API -->|"SSE 状态 / 结果 / 工具与证据"| UI
+
+    subgraph ONBOARDING["管理员销售数据接入"]
+        UPLOAD["注册 CSV / Parquet"] --> REG["dataset_registry"]
+        REG --> STAGING["staging_<dataset>_<version>"]
+        STAGING --> PROFILE["SchemaProfile + QualityReport"]
+        PROFILE --> MAPPING["管理员确认指标/字段映射"]
+        MAPPING --> READY["ready 数据集"]
+    end
+    API --> ONBOARDING
+    READY -.-> PLAN
 ```
 
 ## 组件职责
@@ -54,6 +64,7 @@ flowchart LR
 | 查询执行 | `query_service.py`、`workflow_tools.py` | 只读事务、超时、强制 LIMIT、审计 | 判断用户身份 |
 | 状态与审计 | `checkpointing.py`、`tracing.py`、`audit.py` | 快照恢复、系统 Trace、查询和审批记录 | 替代业务结果 |
 | 评测 | `business_evaluation.py`、`evaluation_*` | 固定 Gold、分阶段评分和受控方案对比 | 修改 Agent 输出使其通过 |
+| 数据接入 | `dataset_registry.py`、`data_import.py`、`schema_profiler.py` | 版本登记、隔离 staging、字段画像和质量门槛 | 自动猜测最终业务口径或绕过 SQL 安全 |
 
 ## 三类状态不要混淆
 
