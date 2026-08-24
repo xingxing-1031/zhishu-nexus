@@ -71,6 +71,12 @@ from retail_analytics_agent.database import (
     connect_to_database,
     get_database_connection,
 )
+from retail_analytics_agent.dataset_mapping import (
+    DatasetMapping,
+    MappingValidationError,
+    propose_mapping,
+    validate_mapping,
+)
 from retail_analytics_agent.dataset_models import (
     DatasetRecord,
     DatasetSourceType,
@@ -249,6 +255,7 @@ class DatasetProfileResponse(BaseModel):
     dataset: DatasetRecord
     import_result: ImportResult
     schema_: SchemaProfile = Field(alias="schema")
+    mapping: DatasetMapping
     quality: QualityReport
 
 
@@ -1150,6 +1157,8 @@ def profile_dataset(
         )
         schema_profile = profiler.inspect(record.schema_name, connection)
         quality = profiler.quality(record.schema_name, connection)
+        mapping = propose_mapping(record.dataset_id, record.version, schema_profile)
+        mapped_record = registry.save_mapping(mapping, confirmed=False)
         final_status = (
             DatasetStatus.NEEDS_MAPPING
             if quality.passed
@@ -1172,11 +1181,40 @@ def profile_dataset(
             logger.exception("failed to mark dataset profiling as failed")
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     return DatasetProfileResponse(
-        dataset=updated,
+        dataset=updated if updated.mapping is not None else mapped_record,
         import_result=import_result,
         schema_=schema_profile,
+        mapping=mapping,
         quality=quality,
     )
+
+
+@app.post(
+    "/admin/datasets/{dataset_id}/mapping",
+    response_model=DatasetRecord,
+)
+def confirm_dataset_mapping(
+    dataset_id: str,
+    mapping: DatasetMapping,
+    access_context: Annotated[AccessContext, Depends(get_access_context)],
+    settings: Annotated[Settings, Depends(get_settings)],
+    registry: Annotated[DatasetRegistry, Depends(get_dataset_registry)],
+    profiler: Annotated[SchemaProfiler, Depends(get_schema_profiler)],
+    connection: Annotated[DatabaseConnection, Depends(get_database_connection)],
+    version: Annotated[int, Query(ge=1)] = 1,
+) -> DatasetRecord:
+    _require_admin_access(access_context, settings)
+    if mapping.dataset_id != dataset_id or mapping.version != version:
+        raise HTTPException(status_code=422, detail="映射与数据集版本不一致。")
+    record = registry.get(dataset_id, version)
+    if record is None:
+        raise HTTPException(status_code=404, detail="数据集版本不存在。")
+    try:
+        profile = profiler.inspect(record.schema_name, connection)
+        validated = validate_mapping(mapping, profile)
+    except MappingValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return registry.save_mapping(validated, confirmed=True)
 
 
 @app.post(
@@ -1197,6 +1235,8 @@ def mark_dataset_ready(
     record = registry.get(dataset_id, version)
     if record is None or record.quality_report is None:
         raise HTTPException(status_code=409, detail="数据集尚未完成质量检查。")
+    if not record.mapping_confirmed:
+        raise HTTPException(status_code=409, detail="请先确认字段和指标映射。")
     quality = QualityReport.model_validate(record.quality_report)
     if not quality.passed:
         raise HTTPException(status_code=409, detail="质量检查未通过，不能标记为可用。")

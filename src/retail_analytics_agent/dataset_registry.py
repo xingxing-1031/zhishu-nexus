@@ -6,6 +6,7 @@ from typing import Callable
 from psycopg.types.json import Jsonb
 
 from retail_analytics_agent.database import DatabaseConnection, connect_to_database
+from retail_analytics_agent.dataset_mapping import DatasetMapping
 from retail_analytics_agent.dataset_models import (
     DatasetRecord,
     DatasetStatus,
@@ -75,6 +76,15 @@ UPDATE_DATASET_STATUS_SQL = """
 UPDATE dataset_registry
 SET status = %(status)s,
     quality_report = COALESCE(%(quality_report)s, quality_report),
+    updated_at = CURRENT_TIMESTAMP
+WHERE dataset_id = %(dataset_id)s AND version = %(version)s
+RETURNING *;
+"""
+
+SAVE_DATASET_MAPPING_SQL = """
+UPDATE dataset_registry
+SET mapping = %(mapping)s,
+    mapping_confirmed = %(mapping_confirmed)s,
     updated_at = CURRENT_TIMESTAMP
 WHERE dataset_id = %(dataset_id)s AND version = %(version)s
 RETURNING *;
@@ -165,6 +175,30 @@ class DatasetRegistry:
                             "report": report_json,
                         },
                     )
+        return _record_from_row(row)
+
+    def save_mapping(
+        self,
+        mapping: DatasetMapping,
+        *,
+        confirmed: bool = False,
+    ) -> DatasetRecord:
+        current = self.get(mapping.dataset_id, mapping.version)
+        if current is None:
+            raise DatasetNotFoundError(f"dataset not found: {mapping.dataset_id}")
+        mapping_payload = mapping.model_copy(update={"confirmed": confirmed})
+        with self.connect() as connection:
+            row = connection.execute(
+                SAVE_DATASET_MAPPING_SQL,
+                {
+                    "dataset_id": mapping.dataset_id,
+                    "version": mapping.version,
+                    "mapping": Jsonb(mapping_payload.model_dump(mode="json")),
+                    "mapping_confirmed": confirmed,
+                },
+            ).fetchone()
+        if row is None:
+            raise DatasetRegistryError("dataset mapping update returned no record")
         return _record_from_row(row)
 
     def list_active(self) -> tuple[DatasetRecord, ...]:

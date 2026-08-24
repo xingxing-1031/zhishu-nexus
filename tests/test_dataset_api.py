@@ -68,6 +68,20 @@ class _FakeRegistry:
         self.records[(updated.dataset_id, updated.version)] = updated
         return updated
 
+    def save_mapping(self, mapping, *, confirmed: bool = False) -> DatasetRecord:
+        current = self.get(mapping.dataset_id, mapping.version)
+        assert current is not None
+        updated = current.model_copy(
+            update={
+                "mapping": mapping.model_copy(
+                    update={"confirmed": confirmed}
+                ).model_dump(mode="json"),
+                "mapping_confirmed": confirmed,
+            }
+        )
+        self.records[(updated.dataset_id, updated.version)] = updated
+        return updated
+
     def list_active(self) -> tuple[DatasetRecord, ...]:
         return tuple(
             record
@@ -225,6 +239,13 @@ def test_ready_requires_mapping_confirmation_and_is_listed(tmp_path: Path) -> No
         version=1,
         status=DatasetStatus.NEEDS_MAPPING,
         quality_report=QualityReport(passed=True, checked_rows=2).model_dump(mode="json"),
+        mapping={
+            "dataset_id": "demo",
+            "version": 1,
+            "fields": [],
+            "confirmed": True,
+        },
+        mapping_confirmed=True,
     )
     registry.create(record)
     app.dependency_overrides[get_settings] = lambda: _settings(tmp_path)
@@ -252,3 +273,41 @@ def test_ready_requires_mapping_confirmation_and_is_listed(tmp_path: Path) -> No
     assert accepted.json()["status"] == "ready"
     assert active.status_code == 200
     assert active.json()[0]["dataset_id"] == "demo"
+
+
+def test_mapping_confirmation_is_stored_before_ready(tmp_path: Path) -> None:
+    registry = _FakeRegistry()
+    registry.create(
+        DatasetRecord(
+            dataset_id="demo",
+            dataset_name="Demo",
+            source_type=DatasetSourceType.CSV,
+            source_ref="demo/v1.csv",
+            schema_name="staging_demo_1",
+            version=1,
+            status=DatasetStatus.NEEDS_MAPPING,
+        )
+    )
+    app.dependency_overrides[get_settings] = lambda: _settings(tmp_path)
+    app.dependency_overrides[get_access_context] = lambda: AccessContext(
+        user_id="admin",
+        role=AccessRole.ADMIN,
+    )
+    app.dependency_overrides[get_dataset_registry] = lambda: registry
+    app.dependency_overrides[get_schema_profiler] = lambda: _FakeProfiler()
+    app.dependency_overrides[get_database_connection] = lambda: MagicMock()
+    try:
+        response = TestClient(app).post(
+            "/admin/datasets/demo/mapping?version=1",
+            json={
+                "dataset_id": "demo",
+                "version": 1,
+                "fields": [],
+                "confirmed": False,
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.json()["mapping_confirmed"] is True

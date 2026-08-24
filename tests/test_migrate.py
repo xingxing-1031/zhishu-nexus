@@ -40,5 +40,5 @@ def test_repository_migrations_include_agent_run_registry() -> None:
 
     files = _sql_files(root / "db" / "migrations")
 
-    assert files[-1].name == "011_dataset_registry.sql"
+    assert files[-1].name == "012_dataset_mapping.sql"
     assert any(path.name == "010_agent_request_runs.sql" for path in files)

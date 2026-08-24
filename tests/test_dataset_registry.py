@@ -5,6 +5,11 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from retail_analytics_agent.dataset_mapping import (
+    DatasetMapping,
+    MappingField,
+    MappingRole,
+)
 from retail_analytics_agent.dataset_models import (
     DatasetRecord,
     DatasetSourceType,
@@ -48,6 +53,8 @@ def _db_row(record: DatasetRecord) -> dict[str, object]:
         "status": record.status.value,
         "row_count": record.row_count,
         "quality_report": record.quality_report,
+        "mapping": record.mapping,
+        "mapping_confirmed": record.mapping_confirmed,
         "created_at": record.created_at,
         "updated_at": record.updated_at,
     }
@@ -76,6 +83,15 @@ def test_registry_migration_defines_dataset_and_quality_tables() -> None:
     assert "CONSTRAINT dataset_status_valid" in sql
     for status in ("uploaded", "profiling", "needs_mapping", "ready", "failed", "archived"):
         assert f"'{status}'" in sql
+
+    mapping_sql = (
+        Path(__file__).resolve().parents[1]
+        / "db"
+        / "migrations"
+        / "012_dataset_mapping.sql"
+    ).read_text(encoding="utf-8")
+    assert "ADD COLUMN mapping JSONB" in mapping_sql
+    assert "mapping_confirmed BOOLEAN NOT NULL DEFAULT FALSE" in mapping_sql
 
 
 def test_create_is_idempotent_for_dataset_and_version() -> None:
@@ -162,3 +178,52 @@ def test_invalid_schema_is_rejected_before_database_execution() -> None:
         )
 
     connection.execute.assert_not_called()
+
+
+def test_save_mapping_persists_confirmation_separately_from_dataset_status() -> None:
+    connection = MagicMock()
+    current = _record()
+    mapped = current.model_copy(
+        update={
+            "mapping": {
+                "dataset_id": "olist",
+                "version": 1,
+                "mapping_version": "v1",
+                "fields": [
+                    {
+                        "role": "amount",
+                        "table": "dataset_rows",
+                        "column": "total_amount",
+                        "confidence": 0.95,
+                        "reasons": [],
+                    }
+                ],
+                "confirmed": True,
+            },
+            "mapping_confirmed": True,
+        }
+    )
+    connection.execute.return_value.fetchone.side_effect = [
+        _db_row(current),
+        _db_row(mapped),
+    ]
+    registry = _registry_with_connection(connection)
+    mapping = DatasetMapping(
+        dataset_id="olist",
+        version=1,
+        fields=(
+            MappingField(
+                role=MappingRole.AMOUNT,
+                table="dataset_rows",
+                column="total_amount",
+                confidence=0.95,
+            ),
+        ),
+    )
+
+    result = registry.save_mapping(mapping, confirmed=True)
+
+    assert result.mapping_confirmed is True
+    params = connection.execute.call_args_list[1].args[1]
+    assert params["mapping_confirmed"] is True
+    assert params["mapping"].obj["confirmed"] is True

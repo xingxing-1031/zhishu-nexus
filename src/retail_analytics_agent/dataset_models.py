@@ -44,6 +44,8 @@ class DatasetRecord(_StrictModel):
     status: DatasetStatus = DatasetStatus.UPLOADED
     row_count: int = Field(default=0, ge=0)
     quality_report: dict[str, Any] | None = None
+    mapping: dict[str, Any] | None = None
+    mapping_confirmed: bool = False
     created_at: datetime | None = None
     updated_at: datetime | None = None
 
