@@ -44,9 +44,11 @@ flowchart LR
     subgraph ONBOARDING["管理员销售数据接入"]
         UPLOAD["注册 CSV / Parquet"] --> REG["dataset_registry"]
         REG --> STAGING["staging_<dataset>_<version>"]
-        STAGING --> PROFILE["SchemaProfile + QualityReport"]
-        PROFILE --> MAPPING["管理员确认指标/字段映射"]
-        MAPPING --> READY["ready 数据集"]
+        STAGING --> PROFILE["SchemaProfile + QualityReport + mapping draft"]
+        PROFILE --> MAPPING["管理员提交映射"]
+        MAPPING --> RECHECK["按当前 Schema 再校验"]
+        RECHECK --> CONFIRMED["mapping_confirmed"]
+        CONFIRMED --> READY["ready 数据集"]
     end
     API --> ONBOARDING
     READY -.-> PLAN

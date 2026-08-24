@@ -46,7 +46,32 @@ POST /admin/datasets/demo_sales/profile?version=1
 
 接口会依次执行 staging 导入、SchemaProfile 探查和 QualityReport 检查。质量不通过时返回报告并把版本标记为 `failed`；通过时标记为 `needs_mapping`，不会自动变成可查询数据集。
 
-### 3. 确认映射并启用
+### 3. 确认字段和指标映射
+
+探查响应会返回确定性生成的映射草稿。管理员可以编辑后提交：
+
+```json
+POST /admin/datasets/demo_sales/mapping?version=1
+{
+  "dataset_id": "demo_sales",
+  "version": 1,
+  "mapping_version": "v1",
+  "fields": [
+    {
+      "role": "amount",
+      "table": "dataset_rows",
+      "column": "total_amount",
+      "confidence": 0.95,
+      "reasons": ["管理员确认销售金额字段"]
+    }
+  ],
+  "confirmed": false
+}
+```
+
+服务端会再次读取当前 SchemaProfile，校验表、字段和基础类型兼容性，随后才保存 `mapping_confirmed=true`。
+
+### 4. 启用数据集
 
 ```json
 POST /admin/datasets/demo_sales/ready?version=1
@@ -55,7 +80,7 @@ POST /admin/datasets/demo_sales/ready?version=1
 }
 ```
 
-只有质量报告通过且 `mapping_confirmed` 为 `true` 才能进入 `ready`。管理员可以通过 `GET /admin/datasets` 查看未归档数据集。
+只有质量报告通过且注册表中存在已校验的确认映射，才能进入 `ready`。管理员可以通过 `GET /admin/datasets` 查看未归档数据集。
 
 ## 本地复现
 

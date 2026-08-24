@@ -57,6 +57,7 @@
 - CSV 通过受控上传根目录导入；列名统一为小写 snake_case，规范化冲突、路径越界和扩展名不匹配会在执行 SQL 前拒绝。
 - Parquet 使用可选的 `.[data]` 依赖组，不安装时不会影响现有 API 启动。
 - `SchemaProfiler` 只读取 `staging_` schema 的元数据和有界样本，给出金额、时间、分类和标识字段候选，并报告空表、空值、重复标识、负金额和异常时间。
+- 探查结果会生成未确认的字段映射草稿；管理员通过 `/admin/datasets/{dataset_id}/mapping` 提交后，服务端按当前 Schema 再校验，`ready` 阶段不接受未经校验的布尔确认。
 - 详细接口和状态流转见 [DATASET_ONBOARDING.md](docs/DATASET_ONBOARDING.md)。
 
 ### FastAPI 接口基础
