@@ -1,4 +1,5 @@
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -60,6 +61,14 @@ class Settings(BaseSettings):
     mcp_common_timeout_seconds: float = Field(default=15, gt=0, le=60)
     mcp_http_timeout_seconds: float = Field(default=10, gt=0, le=60)
     mcp_max_response_bytes: int = Field(default=1_000_000, ge=10_000, le=10_000_000)
+    dataset_upload_root: Path = Field(
+        default_factory=lambda: Path.cwd() / "data" / "uploads"
+    )
+    dataset_max_upload_bytes: int = Field(
+        default=50_000_000,
+        ge=1_024,
+        le=2_000_000_000,
+    )
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -69,6 +78,8 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_remote_model_configuration(self) -> "Settings":
+        if not self.dataset_upload_root.is_absolute():
+            raise ValueError("DATASET_UPLOAD_ROOT must be an absolute path")
         has_database_url = bool(
             self.database_url
             and self.database_url.get_secret_value().strip()

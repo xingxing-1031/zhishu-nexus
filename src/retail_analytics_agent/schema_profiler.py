@@ -270,3 +270,7 @@ def _timestamp_year(value: Any) -> int | None:
         except ValueError:
             return None
     return None
+
+
+def get_schema_profiler() -> SchemaProfiler:
+    return SchemaProfiler()

@@ -1,6 +1,7 @@
 import asyncio
 import hmac
 import logging
+import re
 import sys
 from collections.abc import Iterator
 from contextlib import asynccontextmanager
@@ -12,7 +13,17 @@ from typing import Annotated
 from uuid import uuid4
 
 import httpx
-from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
+from fastapi import (
+    Depends,
+    FastAPI,
+    File,
+    Form,
+    HTTPException,
+    Query,
+    Request,
+    Response,
+    UploadFile,
+)
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -47,12 +58,30 @@ from retail_analytics_agent.auth import (
 )
 from retail_analytics_agent.context_builder import ContextBuilder
 from retail_analytics_agent.context_store import PostgresConversationStore
+from retail_analytics_agent.data_import import (
+    FileDatasetImporter,
+    ImportRequest,
+    ImportResult,
+    get_dataset_importer,
+)
 from retail_analytics_agent.database import (
     DatabaseConnection,
     check_database_readiness,
     close_database_pool,
     connect_to_database,
     get_database_connection,
+)
+from retail_analytics_agent.dataset_models import (
+    DatasetRecord,
+    DatasetSourceType,
+    DatasetStatus,
+    QualityReport,
+    SchemaProfile,
+)
+from retail_analytics_agent.dataset_registry import (
+    DatasetRegistry,
+    DatasetRegistryError,
+    get_dataset_registry,
 )
 from retail_analytics_agent.general_agent import GeneralAgent
 from retail_analytics_agent.knowledge_adapter import HttpKnowledgeAdapter
@@ -82,6 +111,11 @@ from retail_analytics_agent.queries import (
     get_refund_status_summary,
 )
 from retail_analytics_agent.rate_limit import SlidingWindowRateLimiter
+from retail_analytics_agent.schema_profiler import (
+    SchemaProfiler,
+    SchemaProfilerError,
+    get_schema_profiler,
+)
 from retail_analytics_agent.settings import Settings, get_settings
 from retail_analytics_agent.skills import default_skill_registry
 from retail_analytics_agent.structured_chat import StructuredChatClient
@@ -203,6 +237,19 @@ class InternalAgentResult(BaseModel):
     tool_calls: list[dict] = Field(default_factory=list)
     evidence_ids: list[str] = Field(default_factory=list)
     limitations: list[str] = Field(default_factory=list)
+
+
+class DatasetReadyRequest(BaseModel):
+    mapping_confirmed: bool
+
+
+class DatasetProfileResponse(BaseModel):
+    model_config = {"populate_by_name": True}
+
+    dataset: DatasetRecord
+    import_result: ImportResult
+    schema_: SchemaProfile = Field(alias="schema")
+    quality: QualityReport
 
 
 def _enforce_public_demo_request(
@@ -968,6 +1015,210 @@ def read_order_status_summary(
     days: Annotated[int, Query(ge=1, le=365)] = 30,
 ) -> list[OrderStatusSummary]:
     return get_order_status_summary(connection, days=days)
+
+
+_DATASET_ID_PATTERN = re.compile(r"[a-z0-9][a-z0-9_]{0,59}")
+
+
+def _dataset_file_suffix(source_type: DatasetSourceType) -> str:
+    if source_type is DatasetSourceType.CSV:
+        return ".csv"
+    if source_type is DatasetSourceType.PARQUET:
+        return ".parquet"
+    raise HTTPException(
+        status_code=422,
+        detail="文件接入只支持 CSV 或 Parquet。",
+    )
+
+
+def _validate_dataset_id(dataset_id: str) -> None:
+    if _DATASET_ID_PATTERN.fullmatch(dataset_id) is None:
+        raise HTTPException(
+            status_code=422,
+            detail="dataset_id 只能包含小写字母、数字和下划线。",
+        )
+
+
+def _save_dataset_upload(
+    upload: UploadFile,
+    *,
+    settings: Settings,
+    dataset_id: str,
+    version: int,
+    suffix: str,
+) -> str:
+    root = settings.dataset_upload_root.resolve()
+    target_directory = (root / dataset_id).resolve()
+    try:
+        target_directory.relative_to(root)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail="上传路径不安全。") from exc
+    target_directory.mkdir(parents=True, exist_ok=True)
+    target = target_directory / f"v{version}{suffix}"
+    total = 0
+    try:
+        with target.open("wb") as handle:
+            while chunk := upload.file.read(1024 * 1024):
+                total += len(chunk)
+                if total > settings.dataset_max_upload_bytes:
+                    raise HTTPException(
+                        status_code=413,
+                        detail="上传文件超过大小限制。",
+                    )
+                handle.write(chunk)
+    except HTTPException:
+        target.unlink(missing_ok=True)
+        raise
+    return f"{dataset_id}/v{version}{suffix}"
+
+
+@app.post(
+    "/admin/datasets",
+    response_model=DatasetRecord,
+    status_code=201,
+)
+def register_dataset(
+    dataset_id: Annotated[str, Form(min_length=1, max_length=60)],
+    dataset_name: Annotated[str, Form(min_length=1, max_length=200)],
+    version: Annotated[int, Form(ge=1)],
+    source_type: Annotated[DatasetSourceType, Form()],
+    upload: Annotated[UploadFile, File(alias="file")],
+    access_context: Annotated[AccessContext, Depends(get_access_context)],
+    settings: Annotated[Settings, Depends(get_settings)],
+    registry: Annotated[DatasetRegistry, Depends(get_dataset_registry)],
+) -> DatasetRecord:
+    _require_admin_access(access_context, settings)
+    _validate_dataset_id(dataset_id)
+    suffix = _dataset_file_suffix(source_type)
+    filename = upload.filename or ""
+    if Path(filename).suffix.casefold() != suffix:
+        raise HTTPException(
+            status_code=422,
+            detail=f"{source_type.value} 文件必须使用 {suffix} 扩展名。",
+        )
+    existing = registry.get(dataset_id, version)
+    if existing is not None:
+        return existing
+    source_ref = _save_dataset_upload(
+        upload,
+        settings=settings,
+        dataset_id=dataset_id,
+        version=version,
+        suffix=suffix,
+    )
+    record = DatasetRecord(
+        dataset_id=dataset_id,
+        dataset_name=dataset_name,
+        source_type=source_type,
+        source_ref=source_ref,
+        schema_name=f"staging_{dataset_id}_{version}",
+        version=version,
+    )
+    return registry.create(record)
+
+
+@app.post(
+    "/admin/datasets/{dataset_id}/profile",
+    response_model=DatasetProfileResponse,
+)
+def profile_dataset(
+    dataset_id: str,
+    access_context: Annotated[AccessContext, Depends(get_access_context)],
+    settings: Annotated[Settings, Depends(get_settings)],
+    registry: Annotated[DatasetRegistry, Depends(get_dataset_registry)],
+    importer: Annotated[FileDatasetImporter, Depends(get_dataset_importer)],
+    profiler: Annotated[SchemaProfiler, Depends(get_schema_profiler)],
+    connection: Annotated[DatabaseConnection, Depends(get_database_connection)],
+    version: Annotated[int, Query(ge=1)] = 1,
+) -> DatasetProfileResponse:
+    _require_admin_access(access_context, settings)
+    record = registry.get(dataset_id, version)
+    if record is None or record.source_ref is None:
+        raise HTTPException(status_code=404, detail="数据集版本不存在。")
+    try:
+        registry.update_status(dataset_id, DatasetStatus.PROFILING, version=version)
+        source_path = settings.dataset_upload_root / record.source_ref
+        import_result = importer.import_file(
+            ImportRequest(
+                dataset_id=record.dataset_id,
+                version=record.version,
+                source_path=source_path,
+                source_type=record.source_type,
+                target_schema=record.schema_name,
+            ),
+            connection,
+        )
+        schema_profile = profiler.inspect(record.schema_name, connection)
+        quality = profiler.quality(record.schema_name, connection)
+        final_status = (
+            DatasetStatus.NEEDS_MAPPING
+            if quality.passed
+            else DatasetStatus.FAILED
+        )
+        updated = registry.update_status(
+            dataset_id,
+            final_status,
+            version=version,
+            quality_report=quality,
+        )
+    except (ValueError, RuntimeError, SchemaProfilerError) as exc:
+        try:
+            registry.update_status(
+                dataset_id,
+                DatasetStatus.FAILED,
+                version=version,
+            )
+        except DatasetRegistryError:
+            logger.exception("failed to mark dataset profiling as failed")
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return DatasetProfileResponse(
+        dataset=updated,
+        import_result=import_result,
+        schema_=schema_profile,
+        quality=quality,
+    )
+
+
+@app.post(
+    "/admin/datasets/{dataset_id}/ready",
+    response_model=DatasetRecord,
+)
+def mark_dataset_ready(
+    dataset_id: str,
+    payload: DatasetReadyRequest,
+    access_context: Annotated[AccessContext, Depends(get_access_context)],
+    settings: Annotated[Settings, Depends(get_settings)],
+    registry: Annotated[DatasetRegistry, Depends(get_dataset_registry)],
+    version: Annotated[int, Query(ge=1)] = 1,
+) -> DatasetRecord:
+    _require_admin_access(access_context, settings)
+    if not payload.mapping_confirmed:
+        raise HTTPException(status_code=422, detail="请先确认字段指标映射。")
+    record = registry.get(dataset_id, version)
+    if record is None or record.quality_report is None:
+        raise HTTPException(status_code=409, detail="数据集尚未完成质量检查。")
+    quality = QualityReport.model_validate(record.quality_report)
+    if not quality.passed:
+        raise HTTPException(status_code=409, detail="质量检查未通过，不能标记为可用。")
+    try:
+        return registry.update_status(
+            dataset_id,
+            DatasetStatus.READY,
+            version=version,
+            quality_report=quality,
+        )
+    except DatasetRegistryError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.get("/admin/datasets", response_model=tuple[DatasetRecord, ...])
+def list_admin_datasets(
+    access_context: Annotated[AccessContext, Depends(get_access_context)],
+    settings: Annotated[Settings, Depends(get_settings)],
+    registry: Annotated[DatasetRegistry, Depends(get_dataset_registry)],
+) -> tuple[DatasetRecord, ...]:
+    _require_admin_access(access_context, settings)
+    return registry.list_active()
 
 
 @app.get("/admin/audit", response_model=list[AdminAuditEntry])

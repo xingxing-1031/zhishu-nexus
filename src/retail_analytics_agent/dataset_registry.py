@@ -192,3 +192,7 @@ def _record_params(record: DatasetRecord) -> dict[str, object]:
 
 def _record_from_row(row: dict[str, object]) -> DatasetRecord:
     return DatasetRecord.model_validate(dict(row))
+
+
+def get_dataset_registry() -> DatasetRegistry:
+    return DatasetRegistry()

@@ -279,3 +279,9 @@ def _none_for_nan(value: Any) -> Any:
         return None if value != value else value
     except Exception:
         return value
+
+
+def get_dataset_importer() -> FileDatasetImporter:
+    from retail_analytics_agent.settings import get_settings
+
+    return FileDatasetImporter(upload_root=get_settings().dataset_upload_root)
