@@ -1,3 +1,6 @@
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
+from enum import StrEnum
 from typing import Annotated
 
 from fastapi import Depends, HTTPException, Request
@@ -118,3 +121,102 @@ def get_access_context(
         user_id=settings.local_access_user_id,
         role=settings.local_access_role,
     )
+
+
+class AuthorizationAction(StrEnum):
+    DATASET_SELECT = "dataset.select"
+    SCHEMA_READ = "schema.read"
+    SQL_EXECUTE = "sql.execute"
+    RAG_RETRIEVE = "rag.retrieve"
+    EVIDENCE_RETURN = "evidence.return"
+    TRACE_VIEW = "trace.view"
+    APPROVAL_RESUME = "approval.resume"
+
+
+@dataclass(frozen=True)
+class AuthorizationDecision:
+    allowed: bool
+    reason: str
+    action: str
+    resource: str
+    policy_version: str = "1.0"
+
+
+@dataclass(frozen=True)
+class AccessPolicy:
+    """Permission rules attached to a caller; empty whitelist means allow all."""
+
+    authorized_datasets: frozenset[str] = frozenset()
+    expires_at: datetime | None = None
+    policy_version: str = "1.0"
+
+
+def _resource_dataset_id(resource: str) -> str | None:
+    for prefix in ("dataset:", "schema:", "sql:"):
+        if resource.startswith(prefix):
+            return resource[len(prefix):]
+    return None
+
+
+def _resource_owner(resource: str) -> str | None:
+    prefix = "trace:"
+    if not resource.startswith(prefix):
+        return None
+    parts = resource[len(prefix):].split(":", 1)
+    return parts[0] if parts else None
+
+
+def authorize(
+    user: AccessContext,
+    action: str,
+    resource: str,
+    *,
+    policy: AccessPolicy | None = None,
+    purpose: str = "analysis",
+) -> AuthorizationDecision:
+    del purpose
+    if policy is not None and policy.expires_at is not None:
+        if datetime.now(UTC) > policy.expires_at:
+            return AuthorizationDecision(
+                allowed=False,
+                reason="policy expired",
+                action=action,
+                resource=resource,
+                policy_version=policy.policy_version,
+            )
+    if action == AuthorizationAction.APPROVAL_RESUME:
+        allowed = user.role is AccessRole.ADMIN
+        reason = "ok" if allowed else "approval resume requires admin role"
+    elif action == AuthorizationAction.TRACE_VIEW:
+        owner = _resource_owner(resource)
+        allowed = (
+            user.role is AccessRole.ADMIN
+            or (owner is not None and owner == user.user_id)
+        )
+        reason = "ok" if allowed else "trace belongs to another user"
+    elif _resource_dataset_id(resource) is not None:
+        dataset_id = _resource_dataset_id(resource)
+        allowed = (
+            policy is None
+            or not policy.authorized_datasets
+            or dataset_id in policy.authorized_datasets
+        )
+        reason = "ok" if allowed else "dataset not authorized"
+    else:
+        allowed = True
+        reason = "ok"
+    return AuthorizationDecision(
+        allowed=allowed,
+        reason=reason,
+        action=action,
+        resource=resource,
+        policy_version=(policy.policy_version if policy is not None else "1.0"),
+    )
+
+
+@dataclass
+class PermissionAuditLog:
+    entries: list[AuthorizationDecision] = field(default_factory=list)
+
+    def record(self, decision: AuthorizationDecision) -> None:
+        self.entries.append(decision)

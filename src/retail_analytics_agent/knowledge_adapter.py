@@ -44,12 +44,18 @@ class FixtureKnowledgeAdapter:
     evidence: tuple[KnowledgeEvidence, ...]
 
     def retrieve(self, query: KnowledgeQuery) -> tuple[KnowledgeEvidence, ...]:
+        visible = tuple(
+            item for item in self.evidence
+            if not item.permissions
+            or query.role in item.permissions
+            or query.role == "admin"
+        )
         normalized = query.query.casefold()
         candidates = tuple(
-            item for item in self.evidence
+            item for item in visible
             if any(term in f"{item.title} {item.quote}".casefold() for term in normalized.split())
         )
-        return (candidates or self.evidence)[:query.top_k]
+        return (candidates or visible)[:query.top_k]
 
 
 @dataclass(frozen=True)

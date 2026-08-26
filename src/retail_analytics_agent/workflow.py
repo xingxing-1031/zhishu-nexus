@@ -11,12 +11,17 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.types import Command, interrupt
 
 from retail_analytics_agent.access_control import (
+    AccessPolicy,
+    AuthorizationAction,
+    PermissionAuditLog,
+    authorize,
     build_sensitive_read_sql,
     requested_sensitive_columns,
     requests_all_columns,
     requests_role_elevation,
     requests_write_operation,
 )
+from retail_analytics_agent.agent_models import ContextSnapshot
 from retail_analytics_agent.approval import (
     ApprovalAuditRecord,
     ApprovalAuditSink,
@@ -30,11 +35,11 @@ from retail_analytics_agent.audit import (
     QueryAuditRecord,
     QueryAuditStatus,
 )
+from retail_analytics_agent.charting import build_chart_spec
 from retail_analytics_agent.dataset_scope import (
     DatasetScope,
     DatasetScopeRejectionError,
 )
-from retail_analytics_agent.charting import build_chart_spec
 from retail_analytics_agent.fault_injection import inject_fault
 from retail_analytics_agent.metric_domain import MetricDomainGate
 from retail_analytics_agent.model_adapters import (
@@ -60,9 +65,9 @@ from retail_analytics_agent.request_routing import (
     classify_preflight_request,
 )
 from retail_analytics_agent.sql_safety import PreparedSQL, prepare_safe_sql
-
 from retail_analytics_agent.tracing import (
     TraceStatus,
+    classify_error,
     record_execution_trace,
 )
 from retail_analytics_agent.workflow_tools import (
@@ -78,6 +83,20 @@ from retail_analytics_agent.workflow_tools import (
 
 
 class AnalysisState(TypedDict):
+    """Working/Checkpoint boundary for the analysis graph.
+
+    - Recovery identity: request_id, user_id, access_role, question, max_rows,
+      reference_time, dataset_id/version, max_retries, context_snapshot are
+      fixed at entry and restored verbatim from a checkpoint.
+    - Committed results that must survive a restart: plan, dataset_scope/name/
+      schema, retrieved_context, approval_status, reviewed_by, approval_reason,
+      final_answer, chart_spec, result_status, degradation_reason.
+    - Recomputable working values (safe to lose): generated_sql, prepared_sql,
+      sql_valid*, business_sql_valid*, query_risk, query_rows, execution_error,
+      scope_supported, request_route, assistant_message, retry_count, trace.
+    Cross-request memory lives in ConversationRecord (conversation store), not here.
+    """
+
     request_id: str
     user_id: str
     access_role: AccessRole
@@ -115,6 +134,7 @@ class AnalysisState(TypedDict):
     retry_count: int
     max_retries: int
     trace: Annotated[list[str], add]
+    context_snapshot: ContextSnapshot | None
 
 
 AnalysisStateUpdate = dict[str, object]
@@ -224,6 +244,11 @@ def create_initial_state(
         retry_count=0,
         max_retries=max_retries,
         trace=[],
+        context_snapshot=(
+            ContextSnapshot.model_validate(request.context_snapshot)
+            if request.context_snapshot
+            else None
+        ),
     )
 
 
@@ -646,7 +671,12 @@ def create_approval_node(
     return request_approval
 
 
-def create_sql_execution_node(tool: SQLExecutionTool) -> AnalysisNode:
+def create_sql_execution_node(
+    tool: SQLExecutionTool,
+    *,
+    access_policy: AccessPolicy | None = None,
+    permission_audit: PermissionAuditLog | None = None,
+) -> AnalysisNode:
     def execute_sql(state: AnalysisState) -> AnalysisStateUpdate:
         original_sql = state["generated_sql"]
         prepared_sql = state["prepared_sql"]
@@ -656,6 +686,26 @@ def create_sql_execution_node(tool: SQLExecutionTool) -> AnalysisNode:
                 "execution_error": "validated SQL is required",
                 "trace": [EXECUTE_SQL_NODE],
             }
+
+        dataset_id = state.get("dataset_id")
+        if dataset_id:
+            decision = authorize(
+                AccessContext(
+                    user_id=state["user_id"],
+                    role=state["access_role"],
+                ),
+                AuthorizationAction.SQL_EXECUTE,
+                f"dataset:{dataset_id}",
+                policy=access_policy,
+            )
+            if permission_audit is not None:
+                permission_audit.record(decision)
+            if not decision.allowed:
+                return {
+                    "query_rows": [],
+                    "execution_error": decision.reason,
+                    "trace": [EXECUTE_SQL_NODE],
+                }
 
         query_parameters: dict[str, object] = {}
         plan = state["plan"]
@@ -711,13 +761,16 @@ def create_summarize_node(model: ResultSummarizer) -> AnalysisNode:
             raise ValueError("successful query execution is required before summarization")
 
         chart_spec = build_chart_spec(plan, state["query_rows"])
+        summarize_kwargs: dict[str, object] = {
+            "question": state["question"],
+            "plan": plan,
+            "rows": state["query_rows"],
+            "dataset_name": state.get("dataset_name"),
+        }
+        if state.get("context_snapshot") is not None:
+            summarize_kwargs["context_snapshot"] = state["context_snapshot"]
         try:
-            answer = model.summarize(
-                question=state["question"],
-                plan=plan,
-                rows=state["query_rows"],
-                dataset_name=state.get("dataset_name"),
-            )
+            answer = model.summarize(**summarize_kwargs)
         except ModelInvocationError as exc:
             row_count = len(state["query_rows"])
             if row_count == 0:
@@ -780,6 +833,8 @@ def create_workflow_nodes(
     domain_gate: MetricDomainGate | None = None,
     dataset_resolver=None,
     dataset_audit_sink: AuditSink | None = None,
+    access_policy: AccessPolicy | None = None,
+    permission_audit: PermissionAuditLog | None = None,
 ) -> WorkflowNodes:
     return WorkflowNodes(
         plan=create_plan_node(planner),
@@ -788,7 +843,11 @@ def create_workflow_nodes(
         validate_sql=create_sql_validation_node(validation_tool),
         assess_risk=create_query_risk_node(approval_audit_sink),
         request_approval=create_approval_node(approval_audit_sink),
-        execute_sql=create_sql_execution_node(execution_tool),
+        execute_sql=create_sql_execution_node(
+            execution_tool,
+            access_policy=access_policy,
+            permission_audit=permission_audit,
+        ),
         summarize=create_summarize_node(summarizer),
         fail=create_fail_node(),
         validate_business_sql=(
@@ -1016,7 +1075,12 @@ def trace_workflow_node(
     component = f"node.{node_name}"
 
     def traced(state: AnalysisState) -> AnalysisStateUpdate:
-        record_execution_trace(component, TraceStatus.STARTED)
+        record_execution_trace(
+            component,
+            TraceStatus.STARTED,
+            node=node_name,
+            event_type=component,
+        )
         started_at = monotonic()
         try:
             inject_fault(component)
@@ -1027,6 +1091,8 @@ def trace_workflow_node(
                     component,
                     TraceStatus.PENDING,
                     duration_ms=int((monotonic() - started_at) * 1000),
+                    node=node_name,
+                    event_type=component,
                     payload=(
                         {"interrupt": "approval_requested"}
                         if node_name == REQUEST_APPROVAL_NODE
@@ -1038,14 +1104,19 @@ def trace_workflow_node(
                     component,
                     TraceStatus.FAILED,
                     duration_ms=int((monotonic() - started_at) * 1000),
+                    node=node_name,
+                    event_type=component,
                     error_type=type(exc).__name__,
                     error_message=str(exc),
+                    error_category=classify_error(exc),
                 )
             raise
         record_execution_trace(
             component,
             _node_trace_status(node_name, update),
             duration_ms=int((monotonic() - started_at) * 1000),
+            node=node_name,
+            event_type=component,
             payload=_node_evidence(node_name, state, update),
         )
         return update

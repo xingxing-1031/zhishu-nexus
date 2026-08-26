@@ -1,4 +1,4 @@
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
@@ -6,8 +6,18 @@ from typing import Protocol
 import httpx
 from langgraph.types import Command
 
+from retail_analytics_agent.access_control import (
+    AccessPolicy,
+    AuthorizationAction,
+    PermissionAuditLog,
+    authorize,
+)
 from retail_analytics_agent.approval import DatabaseApprovalAuditSink
 from retail_analytics_agent.audit import DatabaseAuditSink
+from retail_analytics_agent.checkpoint_meta import (
+    CheckpointMeta,
+    CheckpointMetaStore,
+)
 from retail_analytics_agent.checkpointing import open_postgres_checkpointer
 from retail_analytics_agent.database import connect_to_database
 from retail_analytics_agent.dataset_registry import DatasetRegistry
@@ -178,12 +188,23 @@ class LangGraphAnalysisRunner:
     fault_injector: FaultInjector | None = None
     workflow_timeout_seconds: float = 120
     reference_time: datetime | None = None
+    access_policy: AccessPolicy | None = None
+    permission_audit: PermissionAuditLog | None = None
+    checkpoint_meta: CheckpointMetaStore | None = None
+    state_version: int = 1
 
     def run(
         self,
         request: AnalysisRequest,
         access_context: AccessContext,
     ) -> AnalysisOutcome:
+        if request.dataset_id:
+            self._authorize_dataset(
+                access_context,
+                AuthorizationAction.DATASET_SELECT,
+                request.dataset_id,
+            )
+        self._guard_checkpoint(request.request_id, access_context.user_id)
         claim = self._claim_request(request, access_context)
         if claim is not None and claim.status is RequestClaimStatus.EXISTING:
             return self._existing_outcome(request.request_id, claim)
@@ -202,6 +223,11 @@ class LangGraphAnalysisRunner:
                     ),
                     create_thread_config(request.request_id),
                 )
+            self._save_checkpoint_meta(
+                request.request_id,
+                access_context.user_id,
+                result,
+            )
             outcome = self._to_outcome(result)
         except Exception as exc:
             self._mark_request(
@@ -225,6 +251,16 @@ class LangGraphAnalysisRunner:
         snapshot = self.graph.get_state(config)
         if not snapshot.values:
             raise ValueError("approval request was not found")
+        requester_id = snapshot.values["user_id"]
+        requester_role = snapshot.values["access_role"]
+        dataset_id = snapshot.values.get("dataset_id")
+        self._guard_checkpoint(request_id, requester_id)
+        self._authorize_dataset(
+            AccessContext(user_id=requester_id, role=requester_role),
+            AuthorizationAction.DATASET_SELECT,
+            dataset_id,
+        )
+        self._authorize_decision(reviewer, AuthorizationAction.APPROVAL_RESUME, f"approval:{request_id}")
         if snapshot.values["approval_status"] != ApprovalStatus.PENDING:
             raise ValueError("approval request is not pending")
         if snapshot.next != ("request_approval",):
@@ -292,6 +328,7 @@ class LangGraphAnalysisRunner:
             if claim is None:
                 raise ValueError("analysis request was not found")
             self._check_viewer(claim, viewer)
+            owner_id = claim.user_id
         else:
             snapshot = self.graph.get_state(create_thread_config(request_id))
             if not snapshot.values:
@@ -301,6 +338,12 @@ class LangGraphAnalysisRunner:
                 and viewer.user_id != snapshot.values["user_id"]
             ):
                 raise PermissionError("analysis request belongs to another user")
+            owner_id = snapshot.values["user_id"]
+        self._authorize_decision(
+            viewer,
+            AuthorizationAction.TRACE_VIEW,
+            f"trace:{owner_id}:{request_id}",
+        )
         events = (
             self.trace_store.list_for_request(request_id)
             if self.trace_store is not None
@@ -316,6 +359,7 @@ class LangGraphAnalysisRunner:
         request: AnalysisRequest,
         access_context: AccessContext,
     ) -> Iterator[AnalysisStreamEvent]:
+        self._guard_checkpoint(request.request_id, access_context.user_id)
         claim = self._claim_request(request, access_context)
         yield AnalysisStreamEvent(
             event="status",
@@ -369,6 +413,11 @@ class LangGraphAnalysisRunner:
 
         if final_state is None:
             raise AnalysisRunError("analysis workflow returned no state")
+        self._save_checkpoint_meta(
+            request.request_id,
+            access_context.user_id,
+            final_state,
+        )
         outcome = self._to_outcome(final_state)
         self._mark_outcome(outcome)
         yield from self._outcome_events(outcome)
@@ -469,6 +518,59 @@ class LangGraphAnalysisRunner:
                 trace=tuple(values["trace"]),
             )
         return self._to_outcome(values)
+
+    def _guard_checkpoint(self, request_id: str, user_id: str) -> None:
+        if self.checkpoint_meta is None:
+            return
+        meta = self.checkpoint_meta.get(request_id)
+        if meta is None:
+            return
+        if meta.user_id != user_id:
+            raise PermissionError("checkpoint belongs to another user")
+        if meta.is_expired():
+            raise RuntimeError("checkpoint has expired")
+        if meta.state_version != self.state_version:
+            raise RuntimeError("checkpoint state version mismatch")
+
+    def _save_checkpoint_meta(self, request_id: str, user_id: str, result) -> None:
+        if self.checkpoint_meta is None:
+            return
+        trace = result.get("trace", ()) if isinstance(result, Mapping) else ()
+        self.checkpoint_meta.save(
+            CheckpointMeta(
+                request_id=request_id,
+                user_id=user_id,
+                state_version=self.state_version,
+                last_completed_node=trace[-1] if trace else None,
+            )
+        )
+
+    def _authorize_dataset(
+        self,
+        user: AccessContext,
+        action: str,
+        dataset_id: str | None,
+    ) -> None:
+        if not dataset_id:
+            return
+        self._authorize_decision(user, action, f"dataset:{dataset_id}")
+
+    def _authorize_decision(
+        self,
+        user: AccessContext,
+        action: str,
+        resource: str,
+    ) -> None:
+        decision = authorize(
+            user,
+            action,
+            resource,
+            policy=self.access_policy,
+        )
+        if self.permission_audit is not None:
+            self.permission_audit.record(decision)
+        if not decision.allowed:
+            raise PermissionError(decision.reason)
 
     @staticmethod
     def _check_viewer(claim: RequestClaim, viewer: AccessContext) -> None:
