@@ -9,6 +9,7 @@ from typing import Any, Callable, Mapping
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from retail_analytics_agent.agent_models import ToolCallRecord, ToolResult, ToolRisk
+from retail_analytics_agent.agent_runtime import record_active_tool_call
 from retail_analytics_agent.models import AccessContext, AccessRole
 
 
@@ -43,6 +44,10 @@ class ToolSpec(BaseModel):
     risk: ToolRisk = ToolRisk.LOW
     timeout_seconds: float = Field(default=30, gt=0, le=900)
     idempotent: bool = True
+    allowed_resources: frozenset[str] = frozenset()
+    retry_policy: str = Field(default="none", pattern="^(none|fixed)$")
+    preconditions: tuple[str, ...] = Field(default=(), max_length=8)
+    postconditions: tuple[str, ...] = Field(default=(), max_length=8)
 
 
 ToolHandler = Callable[[BaseModel, AccessContext], BaseModel | Mapping[str, Any]]
@@ -96,6 +101,21 @@ class ToolRegistry:
             parsed = spec.input_model.model_validate(parsed)
         except ValidationError as exc:
             raise ToolRegistryError(f"invalid input for {name}: {exc}") from exc
+        resource = getattr(parsed, "resource", None)
+        if spec.allowed_resources and resource not in spec.allowed_resources:
+            raise ToolPermissionError(
+                f"resource {resource!r} is not allowed for {name}"
+            )
+        missing_preconditions = [
+            field_name
+            for field_name in spec.preconditions
+            if getattr(parsed, field_name, None) is None
+        ]
+        if missing_preconditions:
+            raise ToolRegistryError(
+                f"precondition not met for {name}: missing "
+                + ", ".join(missing_preconditions)
+            )
         input_hash = hashlib.sha256(
             json.dumps(parsed.model_dump(mode="json"), sort_keys=True, ensure_ascii=False).encode()
         ).hexdigest()
@@ -109,10 +129,17 @@ class ToolRegistry:
             return cached_outcome
 
         started = self.clock()
+        record_active_tool_call()
         try:
             raw = self._handlers[name](parsed, access_context)
             if isinstance(raw, ToolResult):
-                result = raw
+                if spec.output_model is not ToolResult:
+                    output = spec.output_model.model_validate(raw.payload)
+                    result = raw.model_copy(
+                        update={"payload": output.model_dump(mode="json")}
+                    )
+                else:
+                    result = raw
             elif isinstance(raw, BaseModel):
                 output = spec.output_model.model_validate(raw)
                 result = ToolResult(
@@ -156,10 +183,29 @@ class ToolRegistry:
                 duration_ms=duration_ms, error_type="ToolTimeoutError",
             )
             raise ToolTimeoutError(f"tool {name} exceeded timeout")
+        error_type = None
+        if result.status == "succeeded":
+            missing_postconditions = [
+                field_name
+                for field_name in spec.postconditions
+                if field_name not in result.payload
+            ]
+            if missing_postconditions:
+                result = ToolResult(
+                    tool_name=name,
+                    status="failed",
+                    error=(
+                        "postcondition not met: missing "
+                        + ", ".join(missing_postconditions)
+                    ),
+                )
+                error_type = "PostconditionError"
         record = ToolCallRecord(
             request_id=request_id, conversation_id=conversation_id,
-            tool_name=name, input_hash=input_hash, status="succeeded",
+            tool_name=name, input_hash=input_hash,
+            status=("failed" if error_type else "succeeded"),
             duration_ms=duration_ms,
+            error_type=error_type,
         )
         outcome = ToolCallOutcome(result, record)
         if spec.idempotent:

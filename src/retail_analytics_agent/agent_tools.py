@@ -25,6 +25,7 @@ class SQLAnalysisInput(ToolInput):
     max_rows: int = Field(ge=1, le=1000)
     dataset_id: str | None = Field(default=None, max_length=80)
     dataset_version: int | None = Field(default=None, ge=1)
+    context_snapshot: dict[str, object] | None = None
 
 
 class KnowledgeSearchInput(ToolInput):
@@ -56,6 +57,7 @@ def create_agent_tool_registry(
                 max_rows=payload.max_rows,
                 dataset_id=payload.dataset_id,
                 dataset_version=payload.dataset_version,
+                context_snapshot=payload.context_snapshot,
             ),
             access_context,
         )
@@ -84,6 +86,8 @@ def create_agent_tool_registry(
             input_model=SQLAnalysisInput,
             risk=ToolRisk.HIGH,
             timeout_seconds=180,
+            retry_policy="fixed",
+            postconditions=("outcome",),
         ),
         run_sql,
     )
@@ -116,6 +120,8 @@ def create_agent_tool_registry(
                 input_model=KnowledgeSearchInput,
                 risk=ToolRisk.MEDIUM,
                 timeout_seconds=30,
+                retry_policy="none",
+                postconditions=("evidence",),
             ),
             search_knowledge,
         )
@@ -152,6 +158,8 @@ def create_agent_tool_registry(
                 input_model=ReportExportInput,
                 risk=ToolRisk.LOW,
                 timeout_seconds=15,
+                retry_policy="none",
+                postconditions=("markdown",),
             ),
             export_report,
         )

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Mapping
+from typing import Mapping, Sequence
 
 from pydantic import Field
 
@@ -24,6 +24,26 @@ class SkillDefinition(AgentStrictModel):
         max_length=4,
     )
     risk: ToolRisk = ToolRisk.MEDIUM
+    required_evidence: tuple[str, ...] = Field(default=(), max_length=8)
+
+
+@dataclass(frozen=True)
+class CompletionEvaluation:
+    satisfied: bool
+    missing: tuple[str, ...] = ()
+
+
+def evaluate_completion(
+    definition: SkillDefinition,
+    *,
+    evidence_ids: Sequence[str],
+) -> CompletionEvaluation:
+    missing = tuple(
+        item
+        for item in definition.required_evidence
+        if not any(evidence.startswith(item) for evidence in evidence_ids)
+    )
+    return CompletionEvaluation(satisfied=not missing, missing=missing)
 
 
 @dataclass(frozen=True)
