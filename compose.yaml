@@ -21,6 +21,7 @@ services:
       - ./db/migrations/010_agent_request_runs.sql:/docker-entrypoint-initdb.d/010_agent_request_runs.sql:ro
       - ./db/migrations/011_dataset_registry.sql:/docker-entrypoint-initdb.d/011_dataset_registry.sql:ro
       - ./db/migrations/012_dataset_mapping.sql:/docker-entrypoint-initdb.d/012_dataset_mapping.sql:ro
+      - ./db/migrations/013_dataset_metric_versions.sql:/docker-entrypoint-initdb.d/013_dataset_metric_versions.sql:ro
       - ./db/seeds/001_demo_data.sql:/docker-entrypoint-initdb.d/011_demo_data.sql:ro
       - ./db/seeds/002_richer_demo_dataset.sql:/docker-entrypoint-initdb.d/012_richer_demo_dataset.sql:ro
       - ./db/verification:/opt/retail-db/verification:ro

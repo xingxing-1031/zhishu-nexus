@@ -12,6 +12,11 @@ from retail_analytics_agent.dataset_models import (
     DatasetStatus,
     QualityReport,
 )
+from retail_analytics_agent.metric_models import (
+    DatasetMetric,
+    MetricStatus,
+    metric_version_number,
+)
 
 
 class DatasetRegistryError(RuntimeError):
@@ -24,6 +29,10 @@ class DatasetNotFoundError(DatasetRegistryError):
 
 class DatasetStatusTransitionError(DatasetRegistryError):
     """Raised when a dataset status skips a required onboarding step."""
+
+
+class DatasetMetricNotFoundError(DatasetRegistryError):
+    """Raised when a dataset metric version does not exist."""
 
 
 _ALLOWED_TRANSITIONS: dict[DatasetStatus, frozenset[DatasetStatus]] = {
@@ -93,6 +102,47 @@ RETURNING *;
 INSERT_QUALITY_REPORT_SQL = """
 INSERT INTO dataset_quality_reports (dataset_id, version, report)
 VALUES (%(dataset_id)s, %(version)s, %(report)s);
+"""
+
+INSERT_METRIC_SQL = """
+INSERT INTO dataset_metric_versions (
+    dataset_id, dataset_version, metric_id, metric_version,
+    name, definition, aggregation, formula,
+    source_role, source_table, source_column,
+    supported_dimensions, fixed_filters, status,
+    effective_from, confirmed_by, confirmed_at
+)
+VALUES (
+    %(dataset_id)s, %(dataset_version)s, %(metric_id)s, %(metric_version)s,
+    %(name)s, %(definition)s, %(aggregation)s, %(formula)s,
+    %(source_role)s, %(source_table)s, %(source_column)s,
+    %(supported_dimensions)s, %(fixed_filters)s, %(status)s,
+    %(effective_from)s, %(confirmed_by)s, %(confirmed_at)s
+)
+ON CONFLICT (dataset_id, dataset_version, metric_id, metric_version) DO UPDATE SET
+    updated_at = dataset_metric_versions.updated_at
+RETURNING *;
+"""
+
+LIST_METRICS_SQL = """
+SELECT *
+FROM dataset_metric_versions
+WHERE dataset_id = %(dataset_id)s AND dataset_version = %(dataset_version)s
+ORDER BY metric_id, metric_version;
+"""
+
+CONFIRM_METRIC_SQL = """
+UPDATE dataset_metric_versions
+SET status = 'confirmed',
+    confirmed_by = %(confirmed_by)s,
+    confirmed_at = CURRENT_TIMESTAMP,
+    effective_from = COALESCE(effective_from, CURRENT_TIMESTAMP),
+    updated_at = CURRENT_TIMESTAMP
+WHERE dataset_id = %(dataset_id)s
+  AND dataset_version = %(dataset_version)s
+  AND metric_id = %(metric_id)s
+  AND metric_version = %(metric_version)s
+RETURNING *;
 """
 
 
@@ -201,6 +251,60 @@ class DatasetRegistry:
             raise DatasetRegistryError("dataset mapping update returned no record")
         return _record_from_row(row)
 
+    def save_metric(self, metric: DatasetMetric) -> DatasetMetric:
+        with self.connect() as connection:
+            row = connection.execute(
+                INSERT_METRIC_SQL,
+                _metric_params(metric),
+            ).fetchone()
+        if row is None:
+            raise DatasetRegistryError("dataset metric insert returned no record")
+        return _metric_from_row(row)
+
+    def list_metrics(
+        self,
+        dataset_id: str,
+        version: int,
+    ) -> tuple[DatasetMetric, ...]:
+        with self.connect() as connection:
+            rows = connection.execute(
+                LIST_METRICS_SQL,
+                {"dataset_id": dataset_id, "dataset_version": version},
+            ).fetchall()
+        return tuple(_metric_from_row(row) for row in rows)
+
+    def confirm_metric(
+        self,
+        dataset_id: str,
+        version: int,
+        metric_id: str,
+        confirmed_by: str,
+    ) -> DatasetMetric:
+        metrics = self.list_metrics(dataset_id, version)
+        matching = [item for item in metrics if item.metric_id == metric_id]
+        if not matching:
+            raise DatasetMetricNotFoundError(f"metric not found: {metric_id}")
+        latest = max(
+            matching,
+            key=lambda item: metric_version_number(item.metric_version),
+        )
+        if latest.status is MetricStatus.CONFIRMED:
+            return latest
+        with self.connect() as connection:
+            row = connection.execute(
+                CONFIRM_METRIC_SQL,
+                {
+                    "dataset_id": dataset_id,
+                    "dataset_version": version,
+                    "metric_id": metric_id,
+                    "metric_version": latest.metric_version,
+                    "confirmed_by": confirmed_by,
+                },
+            ).fetchone()
+        if row is None:
+            raise DatasetRegistryError("dataset metric confirm returned no record")
+        return _metric_from_row(row)
+
     def list_active(self) -> tuple[DatasetRecord, ...]:
         with self.connect() as connection:
             rows = connection.execute(LIST_ACTIVE_DATASETS_SQL).fetchall()
@@ -226,6 +330,57 @@ def _record_params(record: DatasetRecord) -> dict[str, object]:
 
 def _record_from_row(row: dict[str, object]) -> DatasetRecord:
     return DatasetRecord.model_validate(dict(row))
+
+
+_METRIC_COLUMNS = (
+    "dataset_id",
+    "dataset_version",
+    "metric_id",
+    "metric_version",
+    "name",
+    "definition",
+    "aggregation",
+    "formula",
+    "source_role",
+    "source_table",
+    "source_column",
+    "supported_dimensions",
+    "fixed_filters",
+    "status",
+    "effective_from",
+    "confirmed_by",
+    "confirmed_at",
+)
+
+
+def _metric_params(metric: DatasetMetric) -> dict[str, object]:
+    return {
+        "dataset_id": metric.dataset_id,
+        "dataset_version": metric.dataset_version,
+        "metric_id": metric.metric_id,
+        "metric_version": metric.metric_version,
+        "name": metric.name,
+        "definition": metric.definition,
+        "aggregation": metric.aggregation,
+        "formula": metric.formula,
+        "source_role": metric.source_role.value,
+        "source_table": metric.source_table,
+        "source_column": metric.source_column,
+        "supported_dimensions": Jsonb(
+            [dimension.value for dimension in metric.supported_dimensions]
+        ),
+        "fixed_filters": Jsonb(list(metric.fixed_filters)),
+        "status": metric.status.value,
+        "effective_from": metric.effective_from,
+        "confirmed_by": metric.confirmed_by,
+        "confirmed_at": metric.confirmed_at,
+    }
+
+
+def _metric_from_row(row: dict[str, object]) -> DatasetMetric:
+    return DatasetMetric.model_validate(
+        {key: row[key] for key in _METRIC_COLUMNS if key in row}
+    )
 
 
 def get_dataset_registry() -> DatasetRegistry:

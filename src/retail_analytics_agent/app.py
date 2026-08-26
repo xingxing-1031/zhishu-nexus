@@ -85,6 +85,7 @@ from retail_analytics_agent.dataset_models import (
     SchemaProfile,
 )
 from retail_analytics_agent.dataset_registry import (
+    DatasetMetricNotFoundError,
     DatasetRegistry,
     DatasetRegistryError,
     get_dataset_registry,
@@ -92,6 +93,13 @@ from retail_analytics_agent.dataset_registry import (
 from retail_analytics_agent.general_agent import GeneralAgent
 from retail_analytics_agent.knowledge_adapter import HttpKnowledgeAdapter
 from retail_analytics_agent.mcp_client import McpToolClient
+from retail_analytics_agent.metric_models import (
+    DatasetMetric,
+    MetricValidationError,
+    propose_metrics,
+    validate_metrics,
+    with_latest_version,
+)
 from retail_analytics_agent.model_adapters import ModelInvocationError
 from retail_analytics_agent.models import (
     AccessContext,
@@ -257,6 +265,16 @@ class DatasetProfileResponse(BaseModel):
     schema_: SchemaProfile = Field(alias="schema")
     mapping: DatasetMapping
     quality: QualityReport
+
+
+class MetricProposalsResponse(BaseModel):
+    dataset_id: str
+    version: int
+    metrics: tuple[DatasetMetric, ...]
+
+
+class MetricConfirmRequest(BaseModel):
+    metric_id: str = Field(min_length=1, max_length=80)
 
 
 def _enforce_public_demo_request(
@@ -1249,6 +1267,70 @@ def mark_dataset_ready(
         )
     except DatasetRegistryError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.post(
+    "/admin/datasets/{dataset_id}/metrics/proposals",
+    response_model=MetricProposalsResponse,
+)
+def propose_dataset_metrics(
+    dataset_id: str,
+    access_context: Annotated[AccessContext, Depends(get_access_context)],
+    settings: Annotated[Settings, Depends(get_settings)],
+    registry: Annotated[DatasetRegistry, Depends(get_dataset_registry)],
+    profiler: Annotated[SchemaProfiler, Depends(get_schema_profiler)],
+    connection: Annotated[DatabaseConnection, Depends(get_database_connection)],
+    version: Annotated[int, Query(ge=1)] = 1,
+) -> MetricProposalsResponse:
+    _require_admin_access(access_context, settings)
+    record = registry.get(dataset_id, version)
+    if record is None:
+        raise HTTPException(status_code=404, detail="数据集版本不存在。")
+    if not record.mapping_confirmed or record.mapping is None:
+        raise HTTPException(status_code=409, detail="请先确认字段映射。")
+    mapping = DatasetMapping.model_validate(record.mapping)
+    profile = profiler.inspect(record.schema_name, connection)
+    metrics = propose_metrics(dataset_id, version, mapping, profile)
+    existing = registry.list_metrics(dataset_id, version)
+    metrics = tuple(with_latest_version(metric, existing) for metric in metrics)
+    try:
+        validated = validate_metrics(metrics, mapping, profile)
+    except MetricValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    for metric in validated:
+        registry.save_metric(metric)
+    return MetricProposalsResponse(
+        dataset_id=dataset_id,
+        version=version,
+        metrics=validated,
+    )
+
+
+@app.post(
+    "/admin/datasets/{dataset_id}/metrics/confirm",
+    response_model=DatasetMetric,
+)
+def confirm_dataset_metric(
+    dataset_id: str,
+    payload: MetricConfirmRequest,
+    access_context: Annotated[AccessContext, Depends(get_access_context)],
+    settings: Annotated[Settings, Depends(get_settings)],
+    registry: Annotated[DatasetRegistry, Depends(get_dataset_registry)],
+    version: Annotated[int, Query(ge=1)] = 1,
+) -> DatasetMetric:
+    _require_admin_access(access_context, settings)
+    record = registry.get(dataset_id, version)
+    if record is None:
+        raise HTTPException(status_code=404, detail="数据集版本不存在。")
+    try:
+        return registry.confirm_metric(
+            dataset_id,
+            version,
+            payload.metric_id,
+            access_context.user_id,
+        )
+    except DatasetMetricNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @app.get("/admin/datasets", response_model=tuple[DatasetRecord, ...])
