@@ -38,6 +38,12 @@ from retail_analytics_agent.knowledge_adapter import (
 from retail_analytics_agent.models import AccessContext
 from retail_analytics_agent.public_errors import public_error_message
 from retail_analytics_agent.supervisor import AgentPlan, Supervisor
+from retail_analytics_agent.tracing import (
+    ExecutionTraceStore,
+    TraceStatus,
+    execution_trace_context,
+    record_execution_trace,
+)
 
 
 class EvidenceAnswerer(Protocol):
@@ -129,6 +135,21 @@ def _context_snapshot(
     }
 
 
+def _routing_evidence(request: AgentRequest, plan: AgentPlan) -> dict[str, object]:
+    evidence: dict[str, object] = {
+        "mode": plan.mode.value,
+        "confidence": plan.confidence,
+        "reason_code": plan.reason_code,
+        "missing_information": list(plan.missing_information),
+        "refused": plan.refused,
+        "agents": [step.agent for step in plan.steps],
+    }
+    if request.dataset_id is not None:
+        evidence["dataset_id"] = request.dataset_id
+        evidence["dataset_version"] = request.dataset_version
+    return evidence
+
+
 @dataclass
 class ZhishuAgentService:
     data_agent: EnterpriseAgentService
@@ -138,6 +159,7 @@ class ZhishuAgentService:
     answerer: EvidenceAnswerer
     knowledge_departments: tuple[str, ...] = ()
     run_store: AgentRunStore = field(default_factory=InMemoryAgentRunStore)
+    trace_store: ExecutionTraceStore | None = None
 
     def _prepare(
         self,
@@ -170,7 +192,35 @@ class ZhishuAgentService:
             dataset_id=request.dataset_id,
             dataset_version=request.dataset_version,
         )
+        self._record_trace_evidence(request, history, plan)
         return history, plan
+
+    def _record_trace_evidence(
+        self,
+        request: AgentRequest,
+        history: Sequence[dict[str, str]],
+        plan: AgentPlan,
+    ) -> None:
+        if self.trace_store is None:
+            return
+        with execution_trace_context(request.request_id, self.trace_store):
+            route_status = (
+                TraceStatus.REJECTED
+                if plan.refused
+                else TraceStatus.PENDING
+                if plan.missing_information
+                else TraceStatus.SUCCEEDED
+            )
+            record_execution_trace(
+                "supervisor.route",
+                route_status,
+                payload=_routing_evidence(request, plan),
+            )
+            record_execution_trace(
+                "agent.context",
+                TraceStatus.SUCCEEDED,
+                payload=_context_snapshot(request, history, plan),
+            )
 
     def run(
         self,

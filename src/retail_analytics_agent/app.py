@@ -796,6 +796,7 @@ def get_agent_service(
             ),
             knowledge_departments=settings.active_knowledge_departments,
             run_store=DatabaseAgentRunStore(),
+            trace_store=getattr(runner, "trace_store", None),
         )
     finally:
         if client is not None:

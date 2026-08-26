@@ -7,7 +7,7 @@ from contextvars import ContextVar
 from datetime import datetime, timezone
 from enum import StrEnum
 from threading import Lock
-from typing import Protocol
+from typing import Any, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -41,6 +41,7 @@ class ExecutionTraceEvent(BaseModel):
     error_type: str | None = None
     error_message: str | None = None
     retry_delay_ms: int | None = Field(default=None, ge=0)
+    payload: dict[str, Any] | None = Field(default=None)
 
 
 class ExecutionTraceResponse(BaseModel):
@@ -88,7 +89,8 @@ INSERT INTO analysis_trace_events (
     duration_ms,
     error_type,
     error_message,
-    retry_delay_ms
+    retry_delay_ms,
+    payload
 )
 VALUES (
     %(request_id)s,
@@ -99,7 +101,8 @@ VALUES (
     %(duration_ms)s,
     %(error_type)s,
     %(error_message)s,
-    %(retry_delay_ms)s
+    %(retry_delay_ms)s,
+    %(payload)s
 );
 """
 
@@ -112,7 +115,8 @@ SELECT request_id,
        duration_ms,
        error_type,
        error_message,
-       retry_delay_ms
+       retry_delay_ms,
+       payload
 FROM analysis_trace_events
 WHERE request_id = %(request_id)s
 ORDER BY trace_event_id;
@@ -168,6 +172,7 @@ def record_execution_trace(
     error_type: str | None = None,
     error_message: str | None = None,
     retry_delay_ms: int | None = None,
+    payload: dict[str, Any] | None = None,
 ) -> None:
     active = _ACTIVE_TRACE.get()
     if active is None:
@@ -185,6 +190,7 @@ def record_execution_trace(
                 error_type=error_type,
                 error_message=error_message,
                 retry_delay_ms=retry_delay_ms,
+                payload=payload,
             )
         )
     except Exception:

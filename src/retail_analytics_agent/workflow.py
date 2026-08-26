@@ -60,6 +60,7 @@ from retail_analytics_agent.request_routing import (
     classify_preflight_request,
 )
 from retail_analytics_agent.sql_safety import PreparedSQL, prepare_safe_sql
+
 from retail_analytics_agent.tracing import (
     TraceStatus,
     record_execution_trace,
@@ -887,6 +888,127 @@ def _node_trace_status(
     return TraceStatus.SUCCEEDED
 
 
+def _node_evidence(
+    node_name: str,
+    state: AnalysisState,
+    update: AnalysisStateUpdate,
+) -> dict[str, object] | None:
+    if node_name == SCOPE_NODE:
+        evidence: dict[str, object] = {
+            "scope_supported": update.get("scope_supported"),
+            "scope_rejection_reason": update.get("scope_rejection_reason"),
+        }
+        if state.get("dataset_id") is not None:
+            evidence["dataset_id"] = state["dataset_id"]
+            evidence["dataset_version"] = state.get("dataset_version")
+            evidence["dataset_name"] = update.get("dataset_name")
+            evidence["dataset_schema"] = update.get("dataset_schema")
+            dataset_scope = update.get("dataset_scope")
+            if dataset_scope is not None:
+                catalog = dataset_scope.metric_catalog
+                evidence["metric_count"] = (
+                    len(catalog.definitions) if catalog is not None else None
+                )
+        return evidence
+    if node_name == PLAN_NODE:
+        plan = update.get("plan")
+        if not isinstance(plan, AnalysisPlan):
+            return None
+        return {
+            "goal": plan.analysis_goal,
+            "metrics": [item.value for item in plan.metrics],
+            "dimensions": [item.value for item in plan.dimensions],
+            "time_range_days": (
+                plan.time_range.days if plan.time_range is not None else None
+            ),
+            "limit": plan.limit,
+        }
+    if node_name == RETRIEVE_NODE:
+        evidence_list = update.get("retrieved_context") or ()
+        return {"evidence_count": len(evidence_list)}
+    if node_name == GENERATE_SQL_NODE:
+        sql = update.get("generated_sql")
+        return {
+            "sql_length": len(sql) if isinstance(sql, str) else 0,
+            "retry_count": state["retry_count"],
+        }
+    if node_name == VALIDATE_SQL_NODE:
+        prepared = update.get("prepared_sql")
+        return {
+            "sql_valid": update.get("sql_valid"),
+            "sql_validation_error": update.get("sql_validation_error"),
+            "tables": (
+                list(prepared.tables) if isinstance(prepared, PreparedSQL) else None
+            ),
+            "result_limit": (
+                prepared.result_limit if isinstance(prepared, PreparedSQL) else None
+            ),
+        }
+    if node_name == VALIDATE_BUSINESS_SQL_NODE:
+        return {
+            "business_sql_valid": update.get("business_sql_valid"),
+            "business_sql_validation_error": update.get(
+                "business_sql_validation_error"
+            ),
+        }
+    if node_name == ASSESS_RISK_NODE:
+        status = update.get("approval_status")
+        risk = update.get("query_risk")
+        return {
+            "approval_status": (
+                status.value if isinstance(status, ApprovalStatus) else None
+            ),
+            "requires_approval": (
+                risk.requires_approval if isinstance(risk, QueryRisk) else None
+            ),
+            "risk_reasons": (
+                list(risk.reasons) if isinstance(risk, QueryRisk) else []
+            ),
+            "sensitive_column_count": (
+                len(risk.sensitive_columns)
+                if isinstance(risk, QueryRisk)
+                else None
+            ),
+        }
+    if node_name == REQUEST_APPROVAL_NODE:
+        status = update.get("approval_status")
+        return {
+            "approval_status": (
+                status.value if isinstance(status, ApprovalStatus) else None
+            ),
+            "reviewed_by": update.get("reviewed_by"),
+        }
+    if node_name == EXECUTE_SQL_NODE:
+        rows = update.get("query_rows")
+        return {
+            "row_count": len(rows) if isinstance(rows, (list, tuple)) else None,
+            "execution_error": update.get("execution_error"),
+        }
+    if node_name == SUMMARIZE_NODE:
+        status = update.get("result_status")
+        answer = update.get("final_answer")
+        return {
+            "result_status": (
+                status.value
+                if isinstance(status, AnalysisResultStatus)
+                else None
+            ),
+            "degradation_reason": update.get("degradation_reason"),
+            "answer_chars": len(answer) if isinstance(answer, str) else None,
+        }
+    if node_name == FAIL_NODE:
+        return {
+            "failure_reason": (
+                state.get("execution_error")
+                or state.get("approval_reason")
+                or state.get("scope_rejection_reason")
+                or state.get("business_sql_validation_error")
+                or state.get("sql_validation_error")
+            ),
+        }
+    return None
+
+
 def trace_workflow_node(
     node_name: str,
     node: AnalysisNode,
@@ -905,6 +1027,11 @@ def trace_workflow_node(
                     component,
                     TraceStatus.PENDING,
                     duration_ms=int((monotonic() - started_at) * 1000),
+                    payload=(
+                        {"interrupt": "approval_requested"}
+                        if node_name == REQUEST_APPROVAL_NODE
+                        else None
+                    ),
                 )
             else:
                 record_execution_trace(
@@ -919,6 +1046,7 @@ def trace_workflow_node(
             component,
             _node_trace_status(node_name, update),
             duration_ms=int((monotonic() - started_at) * 1000),
+            payload=_node_evidence(node_name, state, update),
         )
         return update
 

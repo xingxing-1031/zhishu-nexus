@@ -52,6 +52,7 @@ from retail_analytics_agent.schema_profiler import SchemaProfiler
 from retail_analytics_agent.settings import get_settings
 from retail_analytics_agent.tracing import (
     DatabaseExecutionTraceStore,
+    ExecutionTraceEvent,
     ExecutionTraceResponse,
     ExecutionTraceStore,
     execution_trace_context,
@@ -149,6 +150,24 @@ _PUBLIC_REJECTION_MESSAGES = {
     "dataset_no_metrics": "该数据集还没有已确认的分析指标。",
     "dataset_unavailable": "当前环境未启用数据集分析。",
 }
+
+
+def _sanitize_trace_events(
+    events: tuple[ExecutionTraceEvent, ...],
+    viewer_role: AccessRole,
+) -> tuple[ExecutionTraceEvent, ...]:
+    if viewer_role is AccessRole.ADMIN:
+        return events
+    sanitized: list[ExecutionTraceEvent] = []
+    for event in events:
+        payload = event.payload
+        if payload is not None and "dataset_schema" in payload:
+            payload = {**payload, "dataset_schema": None}
+        sanitized.append(
+            event if payload is event.payload
+            else event.model_copy(update={"payload": payload})
+        )
+    return tuple(sanitized)
 
 
 @dataclass(frozen=True, slots=True)
@@ -287,7 +306,10 @@ class LangGraphAnalysisRunner:
             if self.trace_store is not None
             else ()
         )
-        return ExecutionTraceResponse(request_id=request_id, events=events)
+        return ExecutionTraceResponse(
+            request_id=request_id,
+            events=_sanitize_trace_events(events, viewer.role),
+        )
 
     def stream(
         self,
