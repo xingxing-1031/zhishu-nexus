@@ -98,3 +98,30 @@ $env:AGENT_DEMO_PASSWORD='<仅在当前进程设置>'
 | 端到端延迟 | P50 `9.21s` / P95 `19.57s` | 60 条串行公网请求，含外部工具调用 |
 
 限制与解释：4 条汇率/网页搜索样本受外部工具失败影响，4 条知识样本和 5 条协作样本因当前 RAG 证据不足而拒答或降级；这些记录保留在分母中。该报告仍是 development 结果，不是 frozen holdout、通用 Agent 准确率或生产 SLA。后续若针对这些题调优，必须新建 development 版本并重新建立独立冻结集，不能继续把本报告称为未见泛化结果。
+
+## 跨数据集评测协议（阶段5 基建）
+
+目标：用至少两套字段和分布不同的销售数据，证明迁移能力来自接入契约和语义映射，而不是针对一张固定表写死。评测集与评测器已交付并离线验证，真实链路评分需要模型和数据库，在批准前不编造数字。
+
+评测集（不复用已消费的 frozen holdout）：
+
+| 套件 | 文件 | 样例数 | 用途 |
+|---|---:|---|---|
+| development | `evaluation/cross_dataset_development.jsonl` | 28 | 允许调优 |
+| frozen v2 | `evaluation/cross_dataset_frozen_v2.jsonl` | 13 | 与 development 不重叠，一次性运行 |
+
+两套套件覆盖 10 类场景：文件接入与质量异常、字段映射、指标可用性、正常销售分析、时间/渠道/区域/品类筛选、模糊字段与缺失条件、跨数据集越权、SQL 写操作与危险输入、空结果与服务失败、连续追问与上下文。第二套数据 `evaluation/data/cross_dataset_sales.csv`（1000 行受控合成，2025 全年）与固定 demo 表在列名、渠道值、区域和缺失模式上刻意不同，映射与指标全部来自 `propose_mapping`/`propose_metrics` 的确定性建议。
+
+评测器 `src/retail_analytics_agent/cross_dataset_evaluation.py` 提供 10 类枚举、5 种预期结局、案例契约、确定性评分与报告聚合。13 项指标：
+
+```text
+onboarding_success_rate        mapping_field_accuracy   metric_availability_accuracy
+route_accuracy                 plan_validity             sql_safety_pass / unsafe_sql_block_rate
+sql_execution_success          business_result_accuracy  permission_leakage
+clarification_accuracy         refusal_accuracy          p50/p95_latency
+token/cost（只有真实采集时才报告）
+```
+
+纪律：development 用于调优；frozen v2 由 `is_frozen_suite` 守卫防止再次调优；每条记录保存输入、期望、原始输出、Trace、配置和失败分类；模型远程异常保留在分母；不根据目标数字修改样本；不得在没有运行的情况下编造提升幅度。确定性部分（套件校验、评分、聚合、冻结守卫）由 `tests/test_cross_dataset_evaluation.py` 20 个单测离线覆盖；依赖真实模型与数据库的指标待 `CrossDatasetExecutor` 在批准后执行并填写。
+
+构建详情见阶段5报告 `docs/superpowers/reports/2026-08-26-stage5-cross-dataset-evaluation.md`。

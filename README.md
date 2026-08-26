@@ -8,7 +8,8 @@
 
 - 公网演示：`http://106.52.176.63/`，当前已部署“知枢 Nexus”品牌界面
 - 已实现：四类 Supervisor 路由、通用 Agent、五类只读 MCP 工具、服务端上下文、Text-to-SQL 数据 Agent、项目二 RAG Evidence API、跨域协作与审核、SSE、人工审批、顶层请求幂等与断线恢复、可信降级和结构化 Trace
-- 数据接入升级：管理员可以注册符合接入契约的 CSV/Parquet 销售数据；系统会创建隔离 staging schema，生成 SchemaProfile 和 QualityReport，并在字段/指标映射确认后才允许进入 `ready`
+- 可迁移销售数据闭环：管理员可在「数据集管理」页上传 CSV/Parquet，查看字段画像与质量报告，确认字段映射和指标口径，再标记 `ready` 或 `archived`；分析员可在分析工作台选择某个就绪数据集，Agent 只基于该数据集的 Schema 和已确认指标生成受控 SQL
+- 跨数据集评测基建：新增第二套字段名和分布不同的受控销售数据、10 类场景 development（28 例）与 frozen v2（13 例）评测集，以及确定性评分评测器（见 `docs/EVALUATION_PROTOCOL.md` 跨数据集一节与阶段5报告）；真实链路评分需模型与数据库，未运行时不编造提升幅度
 - 新增 60 条知枢 Nexus development 契约与公网评测脚本，覆盖通用对话、企业知识、经营数据、跨域协作和安全边界；报告保留逐题路由、工具、证据、拒答、预算与延迟指标
 - 2026-08-15 扩展评测：60 条公网 development 中逐题契约通过 46/60（76.67%），Agent 模式路由 60/60，安全拒答 8/8，工具选择 59/60，证据要求 50/60，P50/P95 为 9.21s/19.57s；详见 `docs/EVALUATION_PROTOCOL.md`
 - 历史 12 条线上冒烟评测保留在 `evaluation/reports/agent-live-development-20260813T220105Z.json`；当前应以 60 条扩展 development 报告及其分层指标为准
@@ -57,7 +58,10 @@
 - CSV 通过受控上传根目录导入；列名统一为小写 snake_case，规范化冲突、路径越界和扩展名不匹配会在执行 SQL 前拒绝。
 - Parquet 使用可选的 `.[data]` 依赖组，不安装时不会影响现有 API 启动。
 - `SchemaProfiler` 只读取 `staging_` schema 的元数据和有界样本，给出金额、时间、分类和标识字段候选，并报告空表、空值、重复标识、负金额和异常时间。
-- 探查结果会生成未确认的字段映射草稿；管理员通过 `/admin/datasets/{dataset_id}/mapping` 提交后，服务端按当前 Schema 再校验，`ready` 阶段不接受未经校验的布尔确认。
+- 探查结果会生成未确认的字段映射草稿；管理员提交后服务端按当前 Schema 再校验，`ready` 阶段不接受未经校验的布尔确认。
+- 映射确认后，`propose_metrics` 按语义角色自动建议销售额/订单数/销量/客单价等指标，管理员逐条确认；`ready` 数据集至少拥有一个可查询指标。
+- 已分析数据集可反复查看画像（`profile` 幂等，不重复导入或改动状态）；质量不通过时数据集进入 `failed`，界面显示具体问题与缺失字段原因。
+- 管理员「数据集管理」页完成上传→画像→映射→指标→`ready`/`archived` 全流程；分析员在分析工作台顶部选择就绪数据集后，Agent 只在该数据集范围内生成与执行 SQL。
 - 详细接口和状态流转见 [DATASET_ONBOARDING.md](docs/DATASET_ONBOARDING.md)。
 
 ### FastAPI 接口基础

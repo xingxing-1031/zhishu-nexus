@@ -45,13 +45,19 @@ flowchart LR
         UPLOAD["注册 CSV / Parquet"] --> REG["dataset_registry"]
         REG --> STAGING["staging_<dataset>_<version>"]
         STAGING --> PROFILE["SchemaProfile + QualityReport + mapping draft"]
+        PROFILE -->|"质量不通过"| FAILED["failed：界面显示质量原因"]
+        FAILED -.->|"重新分析"| PROFILE
         PROFILE --> MAPPING["管理员提交映射"]
         MAPPING --> RECHECK["按当前 Schema 再校验"]
         RECHECK --> CONFIRMED["mapping_confirmed"]
-        CONFIRMED --> READY["ready 数据集"]
+        CONFIRMED --> METRICS["指标建议 propose_metrics"]
+        METRICS --> CONFIRM_M["管理员逐条确认指标"]
+        CONFIRM_M --> READY["ready 数据集"]
     end
     API --> ONBOARDING
+    UI -->|"POST /agent/stream + dataset_id/version"| API
     READY -.-> PLAN
+    READY -.-> DS_SCOPE["scope 校验 dataset_resolver"]
 ```
 
 ## 组件职责
@@ -65,8 +71,9 @@ flowchart LR
 | 双重校验 | `sql_safety.py`、`sql_consistency.py` | 检查只读语法和业务契约一致性 | 证明数据库权限绝对安全 |
 | 查询执行 | `query_service.py`、`workflow_tools.py` | 只读事务、超时、强制 LIMIT、审计 | 判断用户身份 |
 | 状态与审计 | `checkpointing.py`、`tracing.py`、`audit.py` | 快照恢复、系统 Trace、查询和审批记录 | 替代业务结果 |
-| 评测 | `business_evaluation.py`、`evaluation_*` | 固定 Gold、分阶段评分和受控方案对比 | 修改 Agent 输出使其通过 |
-| 数据接入 | `dataset_registry.py`、`data_import.py`、`schema_profiler.py` | 版本登记、隔离 staging、字段画像和质量门槛 | 自动猜测最终业务口径或绕过 SQL 安全 |
+| 评测 | `business_evaluation.py`、`evaluation_*`、`cross_dataset_evaluation.py` | 固定 Gold、分阶段评分、跨数据集契约与确定性打分 | 修改 Agent 输出使其通过 |
+| 数据接入 | `dataset_registry.py`、`data_import.py`、`schema_profiler.py`、`dataset_mapping.py`、`metric_models.py`、`admin_views.py` | 版本登记、隔离 staging、字段画像、质量门槛、映射确认、指标确认与 ready/archive 管理 | 自动猜测最终业务口径或绕过 SQL 安全 |
+| 数据集选择与范围 | `workflow.py`（`dataset_resolver`）、`admin_views.py`（`list_analyst_datasets`） | 校验分析员选择的数据集、只允许访问该数据集 schema 与已确认指标 | 允许模型自行决定任意 schema 或跨数据集 JOIN |
 
 ## 三类状态不要混淆
 

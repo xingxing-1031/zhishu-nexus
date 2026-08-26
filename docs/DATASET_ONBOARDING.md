@@ -46,6 +46,8 @@ POST /admin/datasets/demo_sales/profile?version=1
 
 接口会依次执行 staging 导入、SchemaProfile 探查和 QualityReport 检查。质量不通过时返回报告并把版本标记为 `failed`；通过时标记为 `needs_mapping`，不会自动变成可查询数据集。
 
+对已经分析过的数据集（`needs_mapping`/`ready`/`failed`/`archived`）重复调用是幂等的：只重新读取 SchemaProfile，不会重复导入、不改变状态，管理员界面因此可以反复查看详情。
+
 ### 3. 确认字段和指标映射
 
 探查响应会返回确定性生成的映射草稿。管理员可以编辑后提交：
@@ -82,6 +84,40 @@ POST /admin/datasets/demo_sales/ready?version=1
 
 只有质量报告通过且注册表中存在已校验的确认映射，才能进入 `ready`。管理员可以通过 `GET /admin/datasets` 查看未归档数据集。
 
+### 5. 指标建议与确认
+
+映射确认后，为当前数据集自动生成版本化指标建议：
+
+```text
+POST /admin/datasets/demo_sales/metrics/proposals?version=1
+```
+
+返回按语义角色推导的指标（销售额、订单数、销量、平均订单金额等），每条为 `proposed` 状态。管理员逐条确认：
+
+```json
+POST /admin/datasets/demo_sales/metrics/confirm?version=1
+{
+  "metric_id": "sales_amount"
+}
+```
+
+确认后的指标状态变为 `confirmed`，才能被分析员查询使用；`ready` 数据集至少需要一个可查询指标。指标版本不可静默覆盖，新定义创建新版本。
+
+### 6. 归档
+
+```text
+POST /admin/datasets/demo_sales/archive?version=1
+```
+
+只允许从 `ready` 或 `failed` 归档。归档后该数据集不再出现在 `GET /datasets` 分析员视图中。
+
+### 7. 界面入口
+
+以上全部能力都有对应页面，不需要手写 API：
+
+- 管理员：「数据集管理」页完成上传 → 数据画像 → 字段映射确认 → 指标确认 → 标记 `ready`/`archived`，质量问题和缺失字段原因直接展示在界面上。
+- 分析员：分析工作台顶部「数据范围」下拉选择某个就绪数据集，Agent 只基于该数据集的 Schema 与已确认指标生成和校验 SQL；回答与执行记录会标注数据集版本与指标口径。
+
 ## 本地复现
 
 安装基础开发依赖即可运行现有 API 和 CSV 测试：
@@ -101,4 +137,4 @@ python -m pip install -e ".[data]"
 
 ## 当前边界
 
-当前导入器生成一个规范化的 `dataset_rows` 表，SchemaProfiler 提供候选字段角色而不是最终业务语义。管理员确认指标口径和字段映射后，后续任务才会把 `SchemaProfile` 接入 Agent 的指标语义层。暂不支持 MySQL 直连、任意多表关系自动推断或生产级异步大文件队列。
+当前导入器生成一个规范化的 `dataset_rows` 表，SchemaProfiler 提供候选字段角色而不是最终业务语义；字段映射和指标口径必须由管理员确认，模型建议不能直接生效。退款率、复购率等需要额外状态字段或客户口径的指标，字段不足时不会自动发布。暂不支持 MySQL 直连、任意多表关系自动推断、生产级异步大文件队列或租户级权限隔离。Agent 每次分析只能访问当前选中的就绪数据集，不允许跨数据集 JOIN。
