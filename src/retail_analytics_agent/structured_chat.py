@@ -7,6 +7,8 @@ from enum import StrEnum
 import httpx
 from pydantic import BaseModel, ConfigDict, Field
 
+from retail_analytics_agent.agent_runtime import record_active_model_call
+
 
 class StructuredChatProtocol(StrEnum):
     OLLAMA = "ollama"
@@ -51,6 +53,7 @@ class StructuredChatClient:
         response_schema: dict[str, object] | str,
         timeout_seconds: float,
     ) -> str:
+        record_active_model_call()
         messages = [
             {"role": "system", "content": system_prompt},
             {

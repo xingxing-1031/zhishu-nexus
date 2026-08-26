@@ -55,6 +55,9 @@ class Settings(BaseSettings):
     knowledge_departments: str = "admin"
     agent_context_token_budget: int = Field(default=4000, ge=256, le=32000)
     agent_max_steps: int = Field(default=8, ge=1, le=30)
+    agent_max_model_calls: int = Field(default=12, ge=1, le=100)
+    agent_max_tool_calls: int = Field(default=16, ge=1, le=100)
+    agent_run_deadline_seconds: float = Field(default=120, gt=0, le=900)
     mcp_export_enabled: bool = True
     mcp_export_timeout_seconds: float = Field(default=15, gt=0, le=60)
     mcp_common_enabled: bool = True

@@ -27,6 +27,15 @@ from retail_analytics_agent.agent_runs import (
     InMemoryAgentRunStore,
     is_auditable_agent_request,
 )
+from retail_analytics_agent.agent_runtime import (
+    AgentRunBudget,
+    AgentRunGuard,
+    AgentRunHalt,
+    AgentRunStatus,
+    agent_run_context,
+    map_run_status_to_task_status,
+    map_task_status_to_run_status,
+)
 from retail_analytics_agent.agent_service import EnterpriseAgentService
 from retail_analytics_agent.brand_identity import EVIDENCE_ANSWER_SYSTEM_PROMPT
 from retail_analytics_agent.general_agent import GeneralAgent, GeneralAgentResult
@@ -160,6 +169,7 @@ class ZhishuAgentService:
     knowledge_departments: tuple[str, ...] = ()
     run_store: AgentRunStore = field(default_factory=InMemoryAgentRunStore)
     trace_store: ExecutionTraceStore | None = None
+    run_budget: AgentRunBudget | None = None
 
     def _prepare(
         self,
@@ -258,16 +268,34 @@ class ZhishuAgentService:
             if claim.record.response is not None:
                 return claim.record.response
             return self._status_response(claim.record)
+        guard = AgentRunGuard.create(
+            request,
+            plan.mode,
+            self.run_budget or AgentRunBudget(),
+        )
+        guard.record_step()
         try:
-            self._append_user_turn(request)
-            result = self._execute(request, access_context, plan, history)
-            self._append_final_turn(request, result)
+            with agent_run_context(guard):
+                self._append_user_turn(request)
+                result = self._execute(request, access_context, plan, history)
+                guard.record_step()
+                self._append_final_turn(request, result)
+            guard.finish(map_task_status_to_run_status(result.status))
             self.run_store.complete(
                 result,
                 duration_ms=(monotonic() - started) * 1000,
             )
             return result
+        except AgentRunHalt as halt:
+            guard.finish(halt.status, reason=halt.reason)
+            degraded = self._budget_response(request, plan, halt)
+            self.run_store.complete(
+                degraded,
+                duration_ms=(monotonic() - started) * 1000,
+            )
+            return degraded
         except Exception as exc:
+            guard.finish(AgentRunStatus.FAILED, reason=public_error_message(exc))
             self.run_store.fail(
                 request.request_id,
                 public_error_message(exc),
@@ -286,6 +314,23 @@ class ZhishuAgentService:
         if record.response is not None:
             return record.response
         return self._status_response(record)
+
+    def _budget_response(
+        self,
+        request: AgentRequest,
+        plan: AgentPlan,
+        halt: AgentRunHalt,
+    ) -> AgentResponse:
+        status = map_run_status_to_task_status(halt.status)
+        return AgentResponse(
+            request_id=request.request_id,
+            conversation_id=request.conversation_id,
+            status=status,
+            agent_mode=plan.mode,
+            answer=f"本次分析因超出运行时预算而停止：{halt.reason}。",
+            limitations=(halt.reason, str(halt)),
+            agent_steps=self._completed_steps(plan.steps, status),
+        )
 
     @staticmethod
     def _status_response(record: AgentRunRecord) -> AgentResponse:

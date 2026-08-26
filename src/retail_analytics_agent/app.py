@@ -46,6 +46,7 @@ from retail_analytics_agent.agent_models import (
     AgentTaskStatus,
 )
 from retail_analytics_agent.agent_runs import DatabaseAgentRunStore
+from retail_analytics_agent.agent_runtime import AgentRunBudget
 from retail_analytics_agent.agent_service import EnterpriseAgentService
 from retail_analytics_agent.analysis_service import (
     AnalysisRequestConflictError,
@@ -801,6 +802,13 @@ def get_agent_service(
             knowledge_departments=settings.active_knowledge_departments,
             run_store=DatabaseAgentRunStore(),
             trace_store=getattr(runner, "trace_store", None),
+            run_budget=AgentRunBudget(
+                max_steps=settings.agent_max_steps,
+                max_model_calls=settings.agent_max_model_calls,
+                max_tool_calls=settings.agent_max_tool_calls,
+                deadline_seconds=settings.agent_run_deadline_seconds,
+                token_budget=settings.agent_context_token_budget,
+            ),
         )
     finally:
         if client is not None:

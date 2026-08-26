@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from typing import Iterator
 
 from retail_analytics_agent.agent_models import (
+    AgentMode,
     AgentRequest,
     AgentResponse,
     AgentStreamEvent,
@@ -11,6 +12,14 @@ from retail_analytics_agent.agent_models import (
     SkillId,
     ToolCallRecord,
     ToolResult,
+)
+from retail_analytics_agent.agent_runtime import (
+    AgentRunBudget,
+    AgentRunGuard,
+    AgentRunHalt,
+    active_run_guard,
+    agent_run_context,
+    map_run_status_to_task_status,
 )
 from retail_analytics_agent.agent_tools import create_agent_tool_registry
 from retail_analytics_agent.analysis_service import AnalysisRunner
@@ -32,6 +41,7 @@ from retail_analytics_agent.models import (
     AssistantResponse,
 )
 from retail_analytics_agent.reporting import ReportComposer
+from retail_analytics_agent.skills import evaluate_completion
 from retail_analytics_agent.task_planner import TaskPlanner, TaskPlanningError
 from retail_analytics_agent.tool_registry import ToolCallOutcome, ToolRegistry
 
@@ -58,6 +68,7 @@ class EnterpriseAgentService:
     composer: ReportComposer = field(default_factory=ReportComposer)
     mcp_client: McpToolClient | None = None
     tool_registry: ToolRegistry | None = None
+    run_budget: AgentRunBudget | None = None
 
     def __post_init__(self) -> None:
         if self.tool_registry is None:
@@ -76,6 +87,50 @@ class EnterpriseAgentService:
     ) -> AgentResponse:
         if request.user_id != access_context.user_id:
             raise PermissionError("agent request belongs to another user")
+        guard = active_run_guard()
+        if guard is not None:
+            return self._run_impl(
+                request,
+                access_context,
+                persist_context=persist_context,
+            )
+        owned = AgentRunGuard.create(
+            request,
+            AgentMode.DATA,
+            self.run_budget or AgentRunBudget(),
+        )
+        try:
+            with agent_run_context(owned):
+                return self._run_impl(
+                    request,
+                    access_context,
+                    persist_context=persist_context,
+                )
+        except AgentRunHalt as halt:
+            owned.finish(halt.status, reason=halt.reason)
+            return self._budget_response(request, halt)
+
+    def _budget_response(
+        self,
+        request: AgentRequest,
+        halt: AgentRunHalt,
+    ) -> AgentResponse:
+        status = map_run_status_to_task_status(halt.status)
+        return AgentResponse(
+            request_id=request.request_id,
+            conversation_id=request.conversation_id,
+            status=status,
+            answer=f"本次分析因超出运行时预算而停止：{halt.reason}。",
+            limitations=(halt.reason, str(halt)),
+        )
+
+    def _run_impl(
+        self,
+        request: AgentRequest,
+        access_context: AccessContext,
+        *,
+        persist_context: bool,
+    ) -> AgentResponse:
         if persist_context:
             self.context_builder.append_turn(
                 request.conversation_id,
@@ -112,6 +167,7 @@ class EnterpriseAgentService:
                 status=AgentTaskStatus.REFUSED,
                 limitations=(str(exc),),
             )
+        skill = self.task_planner.registry.get(plan.skill_id)
         context = self.context_builder.build(
             request.conversation_id,
             request.question,
@@ -122,13 +178,13 @@ class EnterpriseAgentService:
                 request.token_budget,
                 self.max_context_token_budget,
             ),
+            system_rules=skill.completion_criteria,
         )
         tool_calls: list[ToolCallRecord] = []
         tool_results: list[ToolResult] = []
         limitations: list[str] = []
 
         assert self.tool_registry is not None
-        skill = self.task_planner.registry.get(plan.skill_id)
         self._ensure_role_allows(skill.allowed_roles, access_context.role)
         self._ensure_skill_allows(skill.required_tools, "sql.query")
         analysis_question = request.question
@@ -145,6 +201,7 @@ class EnterpriseAgentService:
                 "max_rows": request.max_rows,
                 "dataset_id": request.dataset_id,
                 "dataset_version": request.dataset_version,
+                "context_snapshot": context.model_dump(mode="json"),
             },
             access_context=access_context,
             request_id=request.request_id,
@@ -263,6 +320,23 @@ class EnterpriseAgentService:
                 else:
                     limitations.append("MCP 报告导出失败，结构化报告仍可用。")
         if tuple(limitations) != report.limitations:
+            report = self.composer.compose(
+                title="企业经营分析复盘报告",
+                question=request.question,
+                findings=findings,
+                tool_results=tool_results,
+                tool_calls=tool_calls,
+                limitations=limitations,
+            )
+        completion = evaluate_completion(
+            skill,
+            evidence_ids=(*report.data_evidence, *report.document_evidence),
+        )
+        if not completion.satisfied:
+            limitations.append(
+                "完成条件要求的证据未全部获得："
+                + "、".join(completion.missing)
+            )
             report = self.composer.compose(
                 title="企业经营分析复盘报告",
                 question=request.question,
