@@ -132,7 +132,7 @@ Runtime 升级引入第二类评测数据：八层失败归因 harness 套件。
 
 | 套件 | 文件 | 样例数 | 用途 |
 |---|---:|---|---|
-| development | `evaluation/agent_harness_development.jsonl` | 19 | 允许调优，日常回归 |
+| development | `evaluation/agent_harness_development.jsonl` | 21 | 允许调优，日常回归 |
 | frozen | `evaluation/agent_harness_frozen.jsonl` | 12 | 首次消费于 2026-08-27；样本语义不得修改 |
 
 覆盖探针类型：`attribution`（含未知错误兜底归 runtime）、`context_render_order/stable_hash`、`skill_completion`、`checkpoint_guard`（版本不匹配拒绝 / 越权归属拒绝）、`authorize`（dataset 白名单、trace 属主、审批管理员、过期策略）、`conversation_memory`、`budget_step/token/model/tool/deadline`。

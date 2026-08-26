@@ -17,3 +17,5 @@
 {"case_id": "DEV-RUNTIME-001", "layer": "runtime", "check": "budget_step_limit", "args": {"max_steps": 2, "steps_to_take": 3}, "expect": {"raises_reason": "step_limit"}}
 {"case_id": "DEV-RUNTIME-002", "layer": "runtime", "check": "budget_token_limit", "args": {"token_budget": 1000, "tokens_per_call": 600, "calls": 2}, "expect": {"raises_reason": "token_budget"}}
 {"case_id": "DEV-RUNTIME-003", "layer": "runtime", "check": "budget_deadline", "args": {"deadline_seconds": 10.0, "clock_advance_seconds": 11.0}, "expect": {"raises_reason": "deadline_exceeded"}}
+{"case_id": "DEV-PERM-006", "layer": "permission", "check": "authorize", "args": {"role": "analyst", "action": "rag.retrieve", "resource": "kb-doc:retreat-policy-v3"}, "expect": {"allowed": false, "reason": "authorization rule not configured for this action"}}
+{"case_id": "DEV-PERM-007", "layer": "permission", "check": "authorize", "args": {"role": "analyst", "action": "report.export", "resource": "export:weekly-summary"}, "expect": {"allowed": false, "reason": "no authorization rule matched this resource"}}

@@ -140,6 +140,7 @@ class AuthorizationDecision:
     action: str
     resource: str
     policy_version: str = "1.0"
+    purpose: str = ""
 
 
 @dataclass(frozen=True)
@@ -166,6 +167,11 @@ def _resource_owner(resource: str) -> str | None:
     return parts[0] if parts else None
 
 
+_UNWIRED_ACTIONS = frozenset(
+    {AuthorizationAction.RAG_RETRIEVE, AuthorizationAction.EVIDENCE_RETURN}
+)
+
+
 def authorize(
     user: AccessContext,
     action: str,
@@ -174,7 +180,6 @@ def authorize(
     policy: AccessPolicy | None = None,
     purpose: str = "analysis",
 ) -> AuthorizationDecision:
-    del purpose
     if policy is not None and policy.expires_at is not None:
         if datetime.now(UTC) > policy.expires_at:
             return AuthorizationDecision(
@@ -194,6 +199,10 @@ def authorize(
             or (owner is not None and owner == user.user_id)
         )
         reason = "ok" if allowed else "trace belongs to another user"
+    elif action in _UNWIRED_ACTIONS:
+        # 尚未接线到调用方的动作默认拒绝：宁可配置后放行，不可静默放行。
+        allowed = False
+        reason = "authorization rule not configured for this action"
     elif _resource_dataset_id(resource) is not None:
         dataset_id = _resource_dataset_id(resource)
         allowed = (
@@ -203,14 +212,15 @@ def authorize(
         )
         reason = "ok" if allowed else "dataset not authorized"
     else:
-        allowed = True
-        reason = "ok"
+        allowed = False
+        reason = "no authorization rule matched this resource"
     return AuthorizationDecision(
         allowed=allowed,
         reason=reason,
         action=action,
         resource=resource,
         policy_version=(policy.policy_version if policy is not None else "1.0"),
+        purpose=purpose,
     )
 
 

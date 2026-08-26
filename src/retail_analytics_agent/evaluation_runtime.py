@@ -10,6 +10,7 @@ import httpx
 from retail_analytics_agent.analysis_service import LangGraphAnalysisRunner
 from retail_analytics_agent.approval import DatabaseApprovalAuditSink
 from retail_analytics_agent.audit import DatabaseAuditSink
+from retail_analytics_agent.checkpoint_meta import InMemoryCheckpointMetaStore
 from retail_analytics_agent.checkpointing import open_postgres_checkpointer
 from retail_analytics_agent.database import DatabaseConnection, connect_to_database
 from retail_analytics_agent.embeddings import OllamaEmbeddingProvider
@@ -182,6 +183,7 @@ def open_real_evaluation_executors(
                     active_settings.workflow_timeout_seconds
                 ),
                 reference_time=reference_time,
+                checkpoint_meta=InMemoryCheckpointMetaStore(),
             )
             return LangGraphEvaluationCaseWorkflow(runner)
 

@@ -323,3 +323,47 @@ def test_public_evidence_is_visible_to_all_roles() -> None:
         KnowledgeQuery(query="制度", user_id="u1", role="analyst", top_k=10)
     )
     assert result[0].source_id == "e:public"
+
+
+# --- 收窄默认放行（fail-closed 补强） -----------------------------------
+
+
+def test_rag_retrieve_denied_until_rule_configured() -> None:
+    decision = authorize(
+        _analyst(),
+        AuthorizationAction.RAG_RETRIEVE,
+        "kb-doc:retreat-policy-v3",
+    )
+    assert decision.allowed is False
+    assert decision.reason == "authorization rule not configured for this action"
+
+
+def test_evidence_return_denied_until_rule_configured() -> None:
+    decision = authorize(
+        _analyst(),
+        AuthorizationAction.EVIDENCE_RETURN,
+        "evidence:doc:7",
+    )
+    assert decision.allowed is False
+    assert decision.reason == "authorization rule not configured for this action"
+
+
+def test_unknown_action_denied_by_default() -> None:
+    decision = authorize(
+        _analyst(),
+        "report.export",
+        "export:weekly-summary",
+    )
+    assert decision.allowed is False
+    assert decision.reason == "no authorization rule matched this resource"
+
+
+def test_authorization_decision_records_purpose() -> None:
+    decision = authorize(
+        _analyst(),
+        AuthorizationAction.DATASET_SELECT,
+        "dataset:ds-a",
+        policy=_restricted_policy("ds-a"),
+        purpose="review-audit",
+    )
+    assert decision.purpose == "review-audit"

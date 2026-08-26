@@ -17,6 +17,7 @@ from retail_analytics_agent.audit import DatabaseAuditSink
 from retail_analytics_agent.checkpoint_meta import (
     CheckpointMeta,
     CheckpointMetaStore,
+    InMemoryCheckpointMetaStore,
 )
 from retail_analytics_agent.checkpointing import open_postgres_checkpointer
 from retail_analytics_agent.database import connect_to_database
@@ -708,6 +709,11 @@ class LangGraphAnalysisRunner:
         )
 
 
+# 进程内共享的 Checkpoint 元数据守卫（归属 / 版本 / 过期）。
+# 边界：随进程重启清空，不跨实例；PostgreSQL 持久化版本见升级路线。
+_SHARED_CHECKPOINT_META_STORE = InMemoryCheckpointMetaStore()
+
+
 def get_analysis_runner() -> Iterator[AnalysisRunner]:
     settings = get_settings()
     audit_sink = DatabaseAuditSink()
@@ -778,4 +784,5 @@ def get_analysis_runner() -> Iterator[AnalysisRunner]:
             request_store=request_store,
             trace_store=trace_store,
             workflow_timeout_seconds=settings.workflow_timeout_seconds,
+            checkpoint_meta=_SHARED_CHECKPOINT_META_STORE,
         )
