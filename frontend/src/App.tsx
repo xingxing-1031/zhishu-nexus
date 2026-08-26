@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, ApiError } from "./api";
 import { AuditPage, MetricsPage } from "./AdminPages";
+import DatasetAdminPage from "./DatasetAdminPage";
 import { Header, LoadingBlock, type Page } from "./components";
 import { BrandMark, BRAND } from "./brand";
 import LoginPage from "./LoginPage";
@@ -92,6 +93,7 @@ export default function App() {
       <Header session={session} online={online && ready} page={page} onPage={navigate} onLogout={() => void logout()} />
       {page === "audit" && session.role === "admin" && <AuditPage />}
       {page === "metrics" && session.role === "admin" && <MetricsPage />}
+      {page === "datasets" && session.role === "admin" && <DatasetAdminPage />}
     </div>
   );
 }

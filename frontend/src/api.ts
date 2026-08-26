@@ -3,7 +3,12 @@ import type {
   AgentResponse,
   AgentStreamEvent,
   AuditEntry,
+  DatasetMetric,
+  DatasetProfile,
+  DatasetRecord,
+  DatasetView,
   MetricDefinition,
+  MetricProposals,
   Overview,
   ResultDisplayMode,
   SessionInfo,
@@ -35,6 +40,21 @@ async function getJson<T>(url: string): Promise<T> {
   return response.json() as Promise<T>;
 }
 
+async function postJson<T>(url: string, body?: unknown): Promise<T> {
+  const response = await fetch(url, {
+    method: "POST",
+    headers: body === undefined ? undefined : { "Content-Type": "application/json" },
+    credentials: "same-origin",
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  if (!response.ok) return parseError(response);
+  return response.json() as Promise<T>;
+}
+
+function encodePath(value: string): string {
+  return encodeURIComponent(value);
+}
+
 export const api = {
   health: () => getJson<{ status: string }>("/health"),
   ready: () => getJson<{ status: string }>("/ready"),
@@ -46,6 +66,52 @@ export const api = {
     getJson<AgentResponse>(`/agent/runs/${encodeURIComponent(requestId)}`),
   metrics: () => getJson<MetricDefinition[]>("/admin/metrics"),
   audit: (query: string) => getJson<AuditEntry[]>(`/admin/audit?${query}`),
+  datasets: () => getJson<DatasetView[]>("/datasets"),
+  adminDatasets: () => getJson<DatasetRecord[]>("/admin/datasets"),
+  adminDatasetProfile: (datasetId: string, version: number) =>
+    postJson<DatasetProfile>(
+      `/admin/datasets/${encodePath(datasetId)}/profile?version=${version}`,
+    ),
+  adminConfirmMapping: (
+    datasetId: string,
+    version: number,
+    mapping: unknown,
+  ) =>
+    postJson<DatasetRecord>(
+      `/admin/datasets/${encodePath(datasetId)}/mapping?version=${version}`,
+      mapping,
+    ),
+  adminMetricProposals: (datasetId: string, version: number) =>
+    postJson<MetricProposals>(
+      `/admin/datasets/${encodePath(datasetId)}/metrics/proposals?version=${version}`,
+    ),
+  adminConfirmMetric: (
+    datasetId: string,
+    version: number,
+    metricId: string,
+  ) =>
+    postJson<DatasetMetric>(
+      `/admin/datasets/${encodePath(datasetId)}/metrics/confirm?version=${version}`,
+      { metric_id: metricId },
+    ),
+  adminMarkReady: (datasetId: string, version: number) =>
+    postJson<DatasetRecord>(
+      `/admin/datasets/${encodePath(datasetId)}/ready?version=${version}`,
+      { mapping_confirmed: true },
+    ),
+  adminArchive: (datasetId: string, version: number) =>
+    postJson<DatasetRecord>(
+      `/admin/datasets/${encodePath(datasetId)}/archive?version=${version}`,
+    ),
+  async adminUpload(form: FormData): Promise<DatasetRecord> {
+    const response = await fetch("/admin/datasets", {
+      method: "POST",
+      credentials: "same-origin",
+      body: form,
+    });
+    if (!response.ok) return parseError(response);
+    return response.json() as Promise<DatasetRecord>;
+  },
   conversations: {
     list: () => getJson<Conversation[]>("/agent/conversations"),
     async save(conversation: Conversation): Promise<Conversation> {
@@ -155,6 +221,8 @@ export async function streamAgent(
     token_budget?: number;
     result_display?: ResultDisplayMode;
     auto_open_evidence?: boolean;
+    dataset_id?: string | null;
+    dataset_version?: number | null;
   },
   onEvent: (event: AgentStreamEvent) => void,
   signal?: AbortSignal,

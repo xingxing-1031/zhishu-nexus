@@ -10,11 +10,13 @@ from retail_analytics_agent.app import app
 from retail_analytics_agent.data_import import ImportResult, get_dataset_importer
 from retail_analytics_agent.database import get_database_connection
 from retail_analytics_agent.dataset_models import (
+    ColumnProfile,
     DatasetRecord,
     DatasetSourceType,
     DatasetStatus,
     QualityReport,
     SchemaProfile,
+    TableProfile,
 )
 from retail_analytics_agent.dataset_registry import get_dataset_registry
 from retail_analytics_agent.models import AccessContext, AccessRole
@@ -311,3 +313,84 @@ def test_mapping_confirmation_is_stored_before_ready(tmp_path: Path) -> None:
 
     assert response.status_code == 200
     assert response.json()["mapping_confirmed"] is True
+
+
+def test_profile_review_is_idempotent_for_profiled_dataset(tmp_path: Path) -> None:
+    """Re-reading a profiled dataset must not re-import or change its state."""
+    registry = _FakeRegistry()
+    registry.create(
+        DatasetRecord(
+            dataset_id="demo",
+            dataset_name="Demo",
+            source_type=DatasetSourceType.CSV,
+            source_ref="demo/v1.csv",
+            schema_name="staging_demo_1",
+            version=1,
+            status=DatasetStatus.NEEDS_MAPPING,
+            row_count=2,
+            quality_report=QualityReport(passed=True, checked_rows=2).model_dump(
+                mode="json"
+            ),
+            mapping={
+                "dataset_id": "demo",
+                "version": 1,
+                "fields": [
+                    {
+                        "role": "amount",
+                        "table": "dataset_rows",
+                        "column": "amount",
+                        "confidence": 1.0,
+                        "reasons": [],
+                    },
+                ],
+                "confirmed": False,
+            },
+            mapping_confirmed=False,
+        )
+    )
+    importer = MagicMock()
+    profiler = MagicMock()
+    profiler.inspect.return_value = SchemaProfile(
+        schema_name="staging_demo_1",
+        tables=(
+            TableProfile(
+                table_name="dataset_rows",
+                row_count=2,
+                columns=(
+                    ColumnProfile(
+                        name="amount",
+                        normalized_type="number",
+                        null_ratio=0.0,
+                        unique_ratio=1.0,
+                    ),
+                ),
+            ),
+        ),
+    )
+    app.dependency_overrides[get_settings] = lambda: _settings(tmp_path)
+    app.dependency_overrides[get_access_context] = lambda: AccessContext(
+        user_id="admin",
+        role=AccessRole.ADMIN,
+    )
+    app.dependency_overrides[get_dataset_registry] = lambda: registry
+    app.dependency_overrides[get_dataset_importer] = lambda: importer
+    app.dependency_overrides[get_schema_profiler] = lambda: profiler
+    app.dependency_overrides[get_database_connection] = lambda: MagicMock()
+    try:
+        response = TestClient(app).post(
+            "/admin/datasets/demo/profile?version=1",
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["dataset"]["status"] == "needs_mapping"
+    assert payload["quality"]["passed"] is True
+    assert payload["mapping"]["fields"][0]["role"] == "amount"
+    assert payload["schema"]["tables"][0]["row_count"] == 2
+    assert payload["import_result"]["tables"] == ["dataset_rows"]
+    assert registry.get("demo", 1).status is DatasetStatus.NEEDS_MAPPING
+    importer.import_file.assert_not_called()
+    profiler.quality.assert_not_called()
+    profiler.inspect.assert_called_once()

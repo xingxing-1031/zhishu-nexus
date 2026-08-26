@@ -21,6 +21,7 @@ import type {
   AgentResponse,
   AgentStreamEvent,
   ApprovalRequired,
+  DatasetView,
   Overview,
   ResultDisplayMode,
   SessionInfo,
@@ -30,6 +31,7 @@ import { useConversationSync } from "./useConversationSync";
 import ApprovalSheet from "./workspace/ApprovalSheet";
 import ChatThread from "./workspace/ChatThread";
 import ConversationRail from "./workspace/ConversationRail";
+import DatasetSelector from "./workspace/DatasetSelector";
 import EvidenceInspector from "./workspace/EvidenceInspector";
 import MessageComposer from "./workspace/MessageComposer";
 import WorkspaceHeader from "./workspace/WorkspaceHeader";
@@ -81,6 +83,7 @@ export default function Workspace({
   const [resultDisplay, setResultDisplay] = useState<ResultDisplayMode>(initialPreferences.resultDisplay);
   const [autoOpenEvidence, setAutoOpenEvidence] = useState(initialPreferences.autoOpenEvidence);
   const [running, setRunning] = useState(false);
+  const [selectedDataset, setSelectedDataset] = useState<DatasetView | null>(null);
   const [liveTurn, setLiveTurn] = useState<LiveTurn | null>(null);
   const [liveConversationId, setLiveConversationId] = useState<string | null>(null);
   const [followUpContext, setFollowUpContext] = useState<FollowUpContext | null>(null);
@@ -177,6 +180,8 @@ export default function Workspace({
           max_rows: clampRows(maxRows, session.max_rows),
           result_display: resultDisplay,
           auto_open_evidence: autoOpenEvidence,
+          dataset_id: selectedDataset?.dataset_id ?? null,
+          dataset_version: selectedDataset?.version ?? null,
         },
         receiveAgent,
       );
@@ -369,8 +374,10 @@ export default function Workspace({
           />
         )}
         composer={(
-          <MessageComposer
-            question={question}
+          <div className="composer-column">
+            <DatasetSelector value={selectedDataset} onChange={setSelectedDataset} />
+            <MessageComposer
+              question={question}
             maxRows={maxRows}
             maxAllowedRows={session.max_rows}
             resultDisplay={resultDisplay}
@@ -384,7 +391,8 @@ export default function Workspace({
             onAutoOpenEvidence={setAutoOpenEvidence}
             onCancelFollowUp={() => setFollowUpContext(null)}
             onSubmit={() => void executeQuestion()}
-          />
+            />
+          </div>
         )}
         inspector={(
           <EvidenceInspector

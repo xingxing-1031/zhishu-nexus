@@ -32,8 +32,10 @@ from retail_analytics_agent.access_control import get_access_context
 from retail_analytics_agent.admin_views import (
     AdminAuditEntry,
     AdminAuditStatus,
+    DatasetAnalystView,
     MetricDefinitionView,
     list_admin_audit_entries,
+    list_analyst_datasets,
     list_metric_definitions,
 )
 from retail_analytics_agent.agent_models import (
@@ -86,8 +88,10 @@ from retail_analytics_agent.dataset_models import (
 )
 from retail_analytics_agent.dataset_registry import (
     DatasetMetricNotFoundError,
+    DatasetNotFoundError,
     DatasetRegistry,
     DatasetRegistryError,
+    DatasetStatusTransitionError,
     get_dataset_registry,
 )
 from retail_analytics_agent.general_agent import GeneralAgent
@@ -1163,6 +1167,34 @@ def register_dataset(
     return registry.create(record)
 
 
+def _existing_dataset_detail(
+    record: DatasetRecord,
+    profiler: SchemaProfiler,
+    connection: DatabaseConnection,
+) -> DatasetProfileResponse:
+    """Re-read an already-profiled dataset without re-importing or changing state."""
+    schema_profile = profiler.inspect(record.schema_name, connection)
+    if record.quality_report is None:
+        raise HTTPException(status_code=409, detail="数据集尚未完成质量检查，请先分析。")
+    if record.mapping is None:
+        raise HTTPException(status_code=409, detail="数据集尚未完成字段映射，请先分析。")
+    return DatasetProfileResponse(
+        dataset=record,
+        import_result=ImportResult(
+            dataset_id=record.dataset_id,
+            version=record.version,
+            schema_name=record.schema_name,
+            tables=tuple(table.table_name for table in schema_profile.tables),
+            row_counts={
+                table.table_name: table.row_count for table in schema_profile.tables
+            },
+        ),
+        schema_=schema_profile,
+        mapping=DatasetMapping.model_validate(record.mapping),
+        quality=QualityReport.model_validate(record.quality_report),
+    )
+
+
 @app.post(
     "/admin/datasets/{dataset_id}/profile",
     response_model=DatasetProfileResponse,
@@ -1181,6 +1213,8 @@ def profile_dataset(
     record = registry.get(dataset_id, version)
     if record is None or record.source_ref is None:
         raise HTTPException(status_code=404, detail="数据集版本不存在。")
+    if record.status not in (DatasetStatus.UPLOADED, DatasetStatus.PROFILING):
+        return _existing_dataset_detail(record, profiler, connection)
     try:
         registry.update_status(dataset_id, DatasetStatus.PROFILING, version=version)
         source_path = settings.dataset_upload_root / record.source_ref
@@ -1362,6 +1396,39 @@ def list_admin_datasets(
 ) -> tuple[DatasetRecord, ...]:
     _require_admin_access(access_context, settings)
     return registry.list_active()
+
+
+@app.get("/datasets", response_model=tuple[DatasetAnalystView, ...])
+def list_analyst_datasets_endpoint(
+    _access_context: Annotated[AccessContext, Depends(get_access_context)],
+    registry: Annotated[DatasetRegistry, Depends(get_dataset_registry)],
+) -> tuple[DatasetAnalystView, ...]:
+    """Ready datasets a signed-in analyst may select, with confirmed metric口径."""
+    return list_analyst_datasets(registry)
+
+
+@app.post(
+    "/admin/datasets/{dataset_id}/archive",
+    response_model=DatasetRecord,
+)
+def archive_dataset(
+    dataset_id: str,
+    access_context: Annotated[AccessContext, Depends(get_access_context)],
+    settings: Annotated[Settings, Depends(get_settings)],
+    registry: Annotated[DatasetRegistry, Depends(get_dataset_registry)],
+    version: Annotated[int, Query(ge=1)] = 1,
+) -> DatasetRecord:
+    _require_admin_access(access_context, settings)
+    try:
+        return registry.update_status(
+            dataset_id,
+            DatasetStatus.ARCHIVED,
+            version=version,
+        )
+    except DatasetNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except DatasetStatusTransitionError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 @app.get("/admin/audit", response_model=list[AdminAuditEntry])

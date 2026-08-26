@@ -2,6 +2,7 @@ import {
   Activity,
   BookOpenText,
   ClipboardList,
+  Database,
   LogOut,
   ShieldCheck,
   X,
@@ -10,7 +11,7 @@ import type { ReactNode } from "react";
 import type { Role, SessionInfo } from "./types";
 import { BrandLockup, BrandMark, BRAND } from "./brand";
 
-export type Page = "workspace" | "audit" | "metrics";
+export type Page = "workspace" | "audit" | "metrics" | "datasets";
 export type VisualStatus =
   | "success"
   | "warning"
@@ -49,6 +50,9 @@ export function Header({
           {isAdmin && <NavButton active={page === "metrics"} onClick={() => onPage("metrics")} icon={<BookOpenText />}>
             指标口径
           </NavButton>}
+          {isAdmin && <NavButton active={page === "datasets"} onClick={() => onPage("datasets")} icon={<Database />}>
+            数据集管理
+          </NavButton>}
         </nav>
         <div className="sidebar-footer">
           <button className="sidebar-utility" type="button" onClick={onLogout}><LogOut size={16} />退出登录</button>
@@ -56,7 +60,7 @@ export function Header({
       </aside>
       <header className="app-header">
         <div className="mobile-brand"><BrandMark decorative /><strong>{BRAND.chineseName}</strong></div>
-        <div className="header-title"><span>{page === "workspace" ? BRAND.workspaceName : page === "audit" ? "审计记录" : "指标口径"}</span><small>企业知识、经营数据与受控工具</small></div>
+        <div className="header-title"><span>{page === "workspace" ? BRAND.workspaceName : page === "audit" ? "审计记录" : page === "metrics" ? "指标口径" : "数据集管理"}</span><small>企业知识、经营数据与受控工具</small></div>
         <div className="header-status">
           <span className={`service-dot ${online ? "online" : "offline"}`} />
           <span>{online ? "服务在线" : "服务未就绪"}</span>
@@ -69,6 +73,7 @@ export function Header({
         <NavButton active={page === "workspace"} onClick={() => onPage("workspace")} icon={<Activity />}>分析</NavButton>
         <NavButton active={page === "audit"} onClick={() => onPage("audit")} icon={<ClipboardList />}>审计</NavButton>
         <NavButton active={page === "metrics"} onClick={() => onPage("metrics")} icon={<BookOpenText />}>口径</NavButton>
+        <NavButton active={page === "datasets"} onClick={() => onPage("datasets")} icon={<Database />}>数据集</NavButton>
       </nav>}
     </>
   );

@@ -256,3 +256,151 @@ export interface MetricDefinition {
   fixed_rules: string[];
   supported_dimensions: string[];
 }
+
+export type DatasetStatus =
+  | "uploaded"
+  | "profiling"
+  | "needs_mapping"
+  | "ready"
+  | "failed"
+  | "archived";
+
+export interface DatasetRecord {
+  dataset_id: string;
+  dataset_name: string;
+  source_type: string;
+  source_ref: string | null;
+  schema_name: string;
+  version: number;
+  status: DatasetStatus;
+  row_count: number;
+  quality_report: Record<string, unknown> | null;
+  mapping: Record<string, unknown> | null;
+  mapping_confirmed: boolean;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface QualityIssue {
+  code: string;
+  severity: "info" | "warning" | "critical";
+  message: string;
+  table: string;
+  column?: string | null;
+}
+
+export interface QualityReportView {
+  passed: boolean;
+  checked_rows: number;
+  issues: QualityIssue[];
+}
+
+export interface ImportResultView {
+  dataset_id: string;
+  version: number;
+  schema_name: string;
+  tables: string[];
+  row_counts: Record<string, number>;
+}
+
+export interface ColumnProfileView {
+  name: string;
+  normalized_type: string;
+  null_ratio: number;
+  unique_ratio: number;
+  sample_values: Array<unknown>;
+  candidate_roles: string[];
+}
+
+export interface TableProfileView {
+  table_name: string;
+  row_count: number;
+  columns: ColumnProfileView[];
+}
+
+export interface SchemaProfileView {
+  schema_name: string;
+  tables: TableProfileView[];
+}
+
+export interface MappingFieldView {
+  role: string;
+  table: string;
+  column: string;
+  confidence: number;
+  reasons: string[];
+}
+
+export interface DatasetMappingView {
+  dataset_id: string;
+  version: number;
+  mapping_version: string;
+  fields: MappingFieldView[];
+  confirmed: boolean;
+}
+
+export interface DatasetProfile {
+  dataset: DatasetRecord;
+  import_result: ImportResultView;
+  schema: SchemaProfileView;
+  mapping: DatasetMappingView;
+  quality: QualityReportView;
+}
+
+export interface DatasetMetricView {
+  metric_id: string;
+  name: string;
+  version: string;
+  definition: string;
+  formula: string;
+  source_table: string;
+  source_column: string;
+  supported_dimensions: string[];
+  status: "proposed" | "confirmed" | "archived";
+}
+
+export interface DatasetMetric {
+  dataset_id: string;
+  dataset_version: number;
+  metric_id: string;
+  metric_version: string;
+  name: string;
+  definition: string;
+  aggregation: string;
+  formula: string;
+  source_role: string;
+  source_table: string;
+  source_column: string;
+  supported_dimensions: string[];
+  fixed_filters: string[];
+  status: "proposed" | "confirmed" | "archived";
+  effective_from?: string | null;
+  confirmed_by?: string | null;
+  confirmed_at?: string | null;
+}
+
+export interface MetricProposals {
+  dataset_id: string;
+  version: number;
+  metrics: DatasetMetric[];
+}
+
+export interface DatasetView {
+  dataset_id: string;
+  dataset_name: string;
+  version: number;
+  source_type: string;
+  row_count: number;
+  schema_name: string;
+  status: DatasetStatus;
+  metrics: Array<{
+    metric_id: string;
+    name: string;
+    version: string;
+    definition: string;
+    formula: string;
+    source_table: string;
+    source_column: string;
+    supported_dimensions: string[];
+  }>;
+}
