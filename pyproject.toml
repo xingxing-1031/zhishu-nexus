@@ -43,6 +43,12 @@ retail_analytics_agent = ["static/*", "static/assets/*"]
 testpaths = ["tests"]
 pythonpath = ["src"]
 addopts = "-q"
+markers = [
+    "contract: Tool/Skill/State/Permission 边界契约测试",
+    "e2e: 端到端评测",
+    "fault_injection: 故障注入测试",
+    "frozen: 冻结集测试",
+]
 
 [tool.ruff]
 line-length = 88
