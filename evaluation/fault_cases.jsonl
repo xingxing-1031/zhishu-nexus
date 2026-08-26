@@ -1,0 +1,11 @@
+{"fault": "model_timeout", "layer": "model", "component": "model.generate_sql", "exception": "httpx.TimeoutException", "retryable": true, "expected_node": "generate_sql", "expected_category": "model"}
+{"fault": "model_invalid_json", "layer": "model", "component": "model.generate_sql", "exception": "ValidationError", "retryable": false, "expected_node": "generate_sql", "expected_category": "model"}
+{"fault": "tool_timeout", "layer": "tool", "component": "node.execute_sql", "exception": "SQLExecutionToolError", "retryable": true, "expected_node": "execute_sql", "expected_category": "tool"}
+{"fault": "tool_unauthorized", "layer": "tool", "component": "node.execute_sql", "exception": "SQLExecutionToolError", "retryable": false, "expected_node": "execute_sql", "expected_category": "tool"}
+{"fault": "rag_empty_evidence", "layer": "tool", "component": "node.retrieve", "exception": "CatalogRetrievalToolError", "retryable": false, "expected_node": "retrieve", "expected_category": "tool"}
+{"fault": "sql_ast_rejected", "layer": "tool", "component": "node.validate_sql", "exception": "SQLValidationToolError", "retryable": false, "expected_node": "validate_sql", "expected_category": "tool"}
+{"fault": "business_check_failed", "layer": "tool", "component": "node.validate_business_sql", "exception": "SQLBusinessConsistencyToolError", "retryable": false, "expected_node": "validate_business_sql", "expected_category": "tool"}
+{"fault": "database_unavailable", "layer": "tool", "component": "node.execute_sql", "exception": "SQLExecutionToolError", "retryable": false, "expected_node": "execute_sql", "expected_category": "tool"}
+{"fault": "checkpoint_corrupted", "layer": "state", "component": "checkpoint_meta", "exception": "CheckpointStateVersionMismatch", "retryable": false, "expected_node": "entry", "expected_category": "state"}
+{"fault": "approval_resume_duplicate", "layer": "state", "component": "resume_approval", "exception": "ApprovalNotPending", "retryable": false, "expected_node": "request_approval", "expected_category": "state"}
+{"fault": "sse_disconnect", "layer": "runtime", "component": "stream", "exception": "SseReconnect", "retryable": false, "expected_node": "run", "expected_category": "runtime"}
