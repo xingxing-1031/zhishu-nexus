@@ -125,3 +125,21 @@ token/cost（只有真实采集时才报告）
 纪律：development 用于调优；frozen v2 由 `is_frozen_suite` 守卫防止再次调优；每条记录保存输入、期望、原始输出、Trace、配置和失败分类；模型远程异常保留在分母；不根据目标数字修改样本；不得在没有运行的情况下编造提升幅度。确定性部分（套件校验、评分、聚合、冻结守卫）由 `tests/test_cross_dataset_evaluation.py` 20 个单测离线覆盖；依赖真实模型与数据库的指标待 `CrossDatasetExecutor` 在批准后执行并填写。
 
 构建详情见阶段5报告 `docs/superpowers/reports/2026-08-26-stage5-cross-dataset-evaluation.md`。
+
+## Agent Harness 八层评测套件（2026-08-27 新增）
+
+Runtime 升级引入第二类评测数据：八层失败归因 harness 套件。与跨数据集套件按"分析流程阶段"打分正交，本套件回答"单次运行卡在哪一层"，粒度是运行时契约探针而不是端到端答题。
+
+| 套件 | 文件 | 样例数 | 用途 |
+|---|---:|---|---|
+| development | `evaluation/agent_harness_development.jsonl` | 19 | 允许调优，日常回归 |
+| frozen | `evaluation/agent_harness_frozen.jsonl` | 12 | 首次消费于 2026-08-27；样本语义不得修改 |
+
+覆盖探针类型：`attribution`（含未知错误兜底归 runtime）、`context_render_order/stable_hash`、`skill_completion`、`checkpoint_guard`（版本不匹配拒绝 / 越权归属拒绝）、`authorize`（dataset 白名单、trace 属主、审批管理员、过期策略）、`conversation_memory`、`budget_step/token/model/tool/deadline`。
+
+纪律与边界：
+
+1. 执行器为 `tests/test_agent_harness_eval.py`，全部离线确定性验证；development 必须覆盖全部八层。
+2. 这是**契约级**证明，不等价于远程模型端到端效果；不得对外表述为生产准确率或延迟指标。
+3. frozen 样本如需变更：提升文件头中的协议版本并新增报告说明，禁止原位改期望值。
+4. 可选留存：设置 `RUNTIME_EVAL_WRITE_REPORTS=1` 后原始逐例结果写入 `evaluation/reports/`。
