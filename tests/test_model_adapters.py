@@ -171,6 +171,7 @@ def test_ollama_planner_returns_validated_analysis_plan() -> None:
                     "order_status",
                     "refund_status",
                     "day",
+                    "region",
                 ],
                 "explicit_metric_hints": ["sales_amount"],
                 "hard_rule": (

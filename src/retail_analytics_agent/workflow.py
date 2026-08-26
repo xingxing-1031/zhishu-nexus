@@ -25,6 +25,15 @@ from retail_analytics_agent.approval import (
     approval_status_for_risk,
     assess_query_risk,
 )
+from retail_analytics_agent.audit import (
+    AuditSink,
+    QueryAuditRecord,
+    QueryAuditStatus,
+)
+from retail_analytics_agent.dataset_scope import (
+    DatasetScope,
+    DatasetScopeRejectionError,
+)
 from retail_analytics_agent.charting import build_chart_spec
 from retail_analytics_agent.fault_injection import inject_fault
 from retail_analytics_agent.metric_domain import MetricDomainGate
@@ -77,6 +86,11 @@ class AnalysisState(TypedDict):
     request_route: RequestRoute
     request_reason_code: str | None
     assistant_message: str | None
+    dataset_id: str | None
+    dataset_version: int | None
+    dataset_name: str | None
+    dataset_schema: str | None
+    dataset_scope: DatasetScope | None
     scope_supported: bool | None
     scope_rejection_reason: str | None
     plan: AnalysisPlan | None
@@ -181,6 +195,11 @@ def create_initial_state(
         request_route=RequestRoute.ANALYSIS,
         request_reason_code=None,
         assistant_message=None,
+        dataset_id=request.dataset_id,
+        dataset_version=request.dataset_version,
+        dataset_name=None,
+        dataset_schema=None,
+        dataset_scope=None,
         scope_supported=None,
         scope_rejection_reason=None,
         plan=None,
@@ -214,7 +233,12 @@ def create_thread_config(thread_id: str) -> RunnableConfig:
     return {"configurable": {"thread_id": thread_id}}
 
 
-def create_domain_scope_node(gate: MetricDomainGate) -> AnalysisNode:
+def create_domain_scope_node(
+    gate: MetricDomainGate,
+    *,
+    dataset_resolver=None,
+    audit_sink: AuditSink | None = None,
+) -> AnalysisNode:
     def scope(state: AnalysisState) -> AnalysisStateUpdate:
         preflight = classify_preflight_request(state["question"])
         if preflight is not None:
@@ -282,6 +306,13 @@ def create_domain_scope_node(gate: MetricDomainGate) -> AnalysisNode:
                 "trace": [SCOPE_NODE],
             }
 
+        if state.get("dataset_id") is not None:
+            return _resolve_dataset_scope(
+                state,
+                dataset_resolver=dataset_resolver,
+                audit_sink=audit_sink,
+            )
+
         decision = gate.classify(state["question"])
         return {
             "scope_supported": decision.supported,
@@ -294,6 +325,56 @@ def create_domain_scope_node(gate: MetricDomainGate) -> AnalysisNode:
         }
 
     return scope
+
+
+def _resolve_dataset_scope(
+    state: AnalysisState,
+    *,
+    dataset_resolver,
+    audit_sink: AuditSink | None,
+) -> AnalysisStateUpdate:
+    if dataset_resolver is None:
+        return {
+            "scope_supported": False,
+            "scope_rejection_reason": "dataset_unavailable",
+            "trace": [SCOPE_NODE],
+        }
+    if state.get("dataset_scope") is not None:
+        return {
+            "scope_supported": True,
+            "scope_rejection_reason": None,
+            "trace": [SCOPE_NODE],
+        }
+    try:
+        resolved = dataset_resolver.resolve(
+            state["dataset_id"],
+            state.get("dataset_version"),
+        )
+    except DatasetScopeRejectionError as exc:
+        if audit_sink is not None:
+            audit_sink.record(
+                QueryAuditRecord(
+                    request_id=state["request_id"],
+                    user_id=state["user_id"],
+                    original_sql="",
+                    status=QueryAuditStatus.REJECTED,
+                    reason=f"dataset_{exc.reason_code}",
+                    duration_ms=0.0,
+                )
+            )
+        return {
+            "scope_supported": False,
+            "scope_rejection_reason": exc.reason_code,
+            "trace": [SCOPE_NODE],
+        }
+    return {
+        "dataset_scope": resolved,
+        "dataset_name": resolved.dataset_name,
+        "dataset_schema": resolved.schema_name,
+        "scope_supported": True,
+        "scope_rejection_reason": None,
+        "trace": [SCOPE_NODE],
+    }
 
 
 def create_conversation_response_node() -> AnalysisNode:
@@ -339,9 +420,13 @@ def create_retrieve_node(
             evidence = tool.retrieve_with_query(
                 query=state["question"],
                 plan=plan,
+                scope=state.get("dataset_scope"),
             )
         else:
-            evidence = tool.retrieve(plan)
+            evidence = tool.retrieve(
+                plan,
+                scope=state.get("dataset_scope"),
+            )
 
         return {
             "retrieved_context": evidence,
@@ -370,6 +455,7 @@ def create_sql_generation_node(model: SQLGenerator) -> AnalysisNode:
                     state["business_sql_validation_error"]
                     or state["sql_validation_error"]
                 ),
+                scope=state.get("dataset_scope"),
             ),
             "prepared_sql": None,
             "sql_valid": None,
@@ -411,6 +497,7 @@ def create_sql_validation_node(tool: SQLValidationTool) -> AnalysisNode:
                 sql=sql,
                 max_rows=effective_max_rows,
                 access_role=state["access_role"],
+                scope=state.get("dataset_scope"),
             )
         except SQLValidationToolError as exc:
             return {
@@ -449,7 +536,12 @@ def create_sql_business_validation_node(
             }
 
         try:
-            tool.validate(sql=sql, plan=plan, evidence=evidence)
+            tool.validate(
+                sql=sql,
+                plan=plan,
+                evidence=evidence,
+                scope=state.get("dataset_scope"),
+            )
         except SQLBusinessConsistencyToolError as exc:
             return {
                 "business_sql_valid": False,
@@ -623,6 +715,7 @@ def create_summarize_node(model: ResultSummarizer) -> AnalysisNode:
                 question=state["question"],
                 plan=plan,
                 rows=state["query_rows"],
+                dataset_name=state.get("dataset_name"),
             )
         except ModelInvocationError as exc:
             row_count = len(state["query_rows"])
@@ -684,6 +777,8 @@ def create_workflow_nodes(
     summarizer: ResultSummarizer,
     business_validation_tool: SQLBusinessConsistencyTool | None = None,
     domain_gate: MetricDomainGate | None = None,
+    dataset_resolver=None,
+    dataset_audit_sink: AuditSink | None = None,
 ) -> WorkflowNodes:
     return WorkflowNodes(
         plan=create_plan_node(planner),
@@ -701,7 +796,11 @@ def create_workflow_nodes(
             else None
         ),
         scope=(
-            create_domain_scope_node(domain_gate)
+            create_domain_scope_node(
+                domain_gate,
+                dataset_resolver=dataset_resolver,
+                audit_sink=dataset_audit_sink,
+            )
             if domain_gate is not None
             else None
         ),

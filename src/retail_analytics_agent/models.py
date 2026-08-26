@@ -48,6 +48,8 @@ class AnalysisRequest(BaseModel):
     user_id: str = Field(min_length=1)
     question: str = Field(min_length=1)
     max_rows: int = Field(default=100, ge=1, le=1000)
+    dataset_id: str | None = Field(default=None, min_length=1, max_length=80)
+    dataset_version: int | None = Field(default=None, ge=1)
 
 
 class AccessRole(StrEnum):
@@ -189,6 +191,7 @@ class AnalysisDimension(StrEnum):
     ORDER_STATUS = "order_status"
     REFUND_STATUS = "refund_status"
     DAY = "day"
+    REGION = "region"
 
 
 class AnalysisFilterField(StrEnum):

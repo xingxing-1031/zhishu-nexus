@@ -1,4 +1,4 @@
-from collections.abc import Mapping
+from collections.abc import Collection, Mapping
 from dataclasses import dataclass
 from time import perf_counter
 
@@ -42,6 +42,8 @@ def prepare_audited_sql(
     sql: str,
     max_rows: int = 100,
     access_role: AccessRole = AccessRole.ANALYST,
+    allowed_columns: Mapping[str, Collection[str]] | None = None,
+    allowed_schema: str | None = None,
 ) -> PreparedSQL:
     """Prepare one generated query and audit policy rejections."""
     started_at = perf_counter()
@@ -51,6 +53,8 @@ def prepare_audited_sql(
             sql,
             max_rows=max_rows,
             access_role=access_role,
+            allowed_columns=allowed_columns,
+            allowed_schema=allowed_schema,
         )
     except (SQLSafetyError, ValueError) as exc:
         audit = _build_audit(

@@ -284,6 +284,11 @@ def _enforce_public_demo_request(
 ) -> None:
     if not settings.public_demo_mode:
         return
+    if analysis_request.dataset_id is not None:
+        raise HTTPException(
+            status_code=403,
+            detail="公开演示环境不支持数据集分析。",
+        )
     if analysis_request.max_rows > settings.public_demo_max_rows:
         raise HTTPException(
             status_code=422,

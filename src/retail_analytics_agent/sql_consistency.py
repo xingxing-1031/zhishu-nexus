@@ -5,6 +5,7 @@ from collections.abc import Iterable, Sequence
 from pydantic import BaseModel, ConfigDict
 from sqlglot import exp, parse_one
 
+from retail_analytics_agent.dataset_scope import DatasetScope
 from retail_analytics_agent.knowledge import (
     DEFAULT_METRIC_CATALOG,
     DEFAULT_SCHEMA_CATALOG,
@@ -56,6 +57,7 @@ def validate_sql_against_evidence(
     evidence: Sequence[RetrievalEvidence],
     metric_catalog: MetricCatalog = DEFAULT_METRIC_CATALOG,
     schema_catalog: SchemaCatalog = DEFAULT_SCHEMA_CATALOG,
+    scope: DatasetScope | None = None,
 ) -> SQLConsistencyResult:
     """Validate business structure after SQLGlot's read-only check.
 
@@ -69,8 +71,19 @@ def validate_sql_against_evidence(
     except SQLSafetyError as exc:
         raise SQLBusinessConsistencyError(f"sql_safety_failed: {exc}") from exc
 
+    effective_metric_catalog = (
+        scope.metric_catalog if scope is not None else metric_catalog
+    )
+    effective_schema_catalog = (
+        scope.schema_catalog if scope is not None else schema_catalog
+    )
+    filter_columns = (
+        scope.filter_columns if scope is not None else _FILTER_COLUMNS
+    )
     evidence_ids = tuple(item.source_id for item in evidence)
-    definitions = tuple(_definitions_for_plan(plan, evidence_ids, metric_catalog))
+    definitions = tuple(
+        _definitions_for_plan(plan, evidence_ids, effective_metric_catalog)
+    )
     expected_tables = _evidence_tables(evidence_ids)
     actual_tables, aliases = _tables_and_aliases(statement)
     reasons: list[str] = []
@@ -97,7 +110,7 @@ def validate_sql_against_evidence(
         )
 
     actual_join_pairs = _join_pairs(statement, aliases)
-    for join in schema_catalog.joins:
+    for join in effective_schema_catalog.joins:
         if join.source_id not in evidence_ids:
             continue
         expected_pair = frozenset(
@@ -110,7 +123,10 @@ def validate_sql_against_evidence(
             reasons.append(f"missing_required_join:{join.source_id}")
 
     for definition in definitions:
-        if definition.metric is AnalysisMetric.SALES_AMOUNT:
+        if scope is not None:
+            if not _dataset_metric_matches(statement, aliases, definition):
+                reasons.append(f"metric_formula_mismatch:{definition.source_id}")
+        elif definition.metric is AnalysisMetric.SALES_AMOUNT:
             expected_product = frozenset(
                 (
                     "order_items.quantity",
@@ -127,7 +143,7 @@ def validate_sql_against_evidence(
                 _check_filter(
                     statement,
                     aliases,
-                    _FILTER_COLUMNS[fixed_filter.field],
+                    filter_columns[fixed_filter.field],
                     fixed_filter.operator,
                     fixed_filter.value,
                     required=True,
@@ -139,7 +155,7 @@ def validate_sql_against_evidence(
             _check_filter(
                 statement,
                 aliases,
-                _FILTER_COLUMNS[plan_filter.field],
+                filter_columns[plan_filter.field],
                 plan_filter.operator,
                 plan_filter.value,
                 required=True,
@@ -148,19 +164,30 @@ def validate_sql_against_evidence(
 
     if plan.time_range is not None:
         time_column = (
-            "refunds.created_at"
-            if all(
-                item.source_tables == ("refunds",)
-                for item in definitions
+            scope.time_column
+            if scope is not None
+            else (
+                "refunds.created_at"
+                if all(
+                    item.source_tables == ("refunds",)
+                    for item in definitions
+                )
+                else "orders.created_at"
             )
-            else "orders.created_at"
         )
-        reasons.extend(_check_time_range(statement, aliases, time_column))
+        if time_column is None:
+            reasons.append("dataset_has_no_time_column")
+        else:
+            reasons.extend(_check_time_range(statement, aliases, time_column))
 
     if plan.dimensions:
         group_columns = _group_columns(statement, aliases)
         for dimension in plan.dimensions:
-            dimension_column = _dimension_column(dimension, definitions)
+            dimension_column = (
+                scope.dimension_columns.get(dimension)
+                if scope is not None
+                else _dimension_column(dimension, definitions)
+            )
             if dimension_column is None:
                 reasons.append(f"unsupported_dimension:{dimension.value}")
             elif dimension is AnalysisDimension.DAY:
@@ -190,13 +217,21 @@ def _definitions_for_plan(
     evidence_ids: Sequence[str],
     catalog: MetricCatalog,
 ) -> Iterable[MetricDefinition]:
-    by_metric = {
-        parts[1]: source_id
-        for source_id in evidence_ids
-        if source_id.startswith("metric.")
-        for parts in [source_id.split(".")]
-        if len(parts) == 3
-    }
+    """Resolve plan metrics to definitions, matching both source_id formats.
+
+    Fixed demo evidence uses ``metric.<metric>.<version>``; dataset evidence
+    uses ``metric.<dataset>.v<version>.<metric_id>.<metric_version>``.
+    """
+    by_metric: dict[str, str] = {}
+    for source_id in evidence_ids:
+        if not source_id.startswith("metric."):
+            continue
+        parts = source_id.split(".")
+        if len(parts) == 3:
+            by_metric[parts[1]] = source_id
+        elif len(parts) == 5:
+            by_metric[parts[3]] = source_id
+
     definitions: list[MetricDefinition] = []
     for metric in plan.metrics:
         source_id = by_metric.get(metric.value)
@@ -205,11 +240,15 @@ def _definitions_for_plan(
                 f"missing_metric_evidence:metric.{metric.value}"
             )
         parts = source_id.split(".")
-        if len(parts) != 3:
+        if len(parts) == 3:
+            version = parts[2]
+        elif len(parts) == 5:
+            version = parts[4]
+        else:
             raise SQLBusinessConsistencyError(
                 f"invalid_metric_source_id:{source_id}"
             )
-        definitions.append(catalog.get(metric, version=parts[2]))
+        definitions.append(catalog.get(metric, version=version))
     return definitions
 
 
@@ -331,6 +370,42 @@ def _has_distinct_count(
         and column in _expression_columns(item, aliases)
         for item in statement.find_all(exp.Count)
     )
+
+
+def _dataset_metric_matches(
+    statement: exp.Expression,
+    aliases: dict[str, str],
+    definition: MetricDefinition,
+) -> bool:
+    """Check a dataset metric formula against the generated query structure."""
+    formula = parse_one(definition.formula, dialect="postgres")
+    columns = _formula_columns(definition.formula)
+    if isinstance(formula, exp.Div):
+        return (
+            statement.find(exp.Div) is not None
+            and any(_has_sum(statement, aliases, column) for column in columns)
+            and any(
+                _has_distinct_count(statement, aliases, column)
+                for column in columns
+            )
+        )
+    if isinstance(formula, exp.Count):
+        return any(
+            _has_distinct_count(statement, aliases, column)
+            for column in columns
+        )
+    if isinstance(formula, exp.Sum):
+        return any(_has_sum(statement, aliases, column) for column in columns)
+    return False
+
+
+def _formula_columns(formula: str) -> tuple[str, ...]:
+    expression = parse_one(formula, dialect="postgres")
+    columns: list[str] = []
+    for column in expression.find_all(exp.Column):
+        if column.table:
+            columns.append(f"{column.table}.{column.name}")
+    return tuple(dict.fromkeys(columns))
 
 
 def _metric_formula_matches(

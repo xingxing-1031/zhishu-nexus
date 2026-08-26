@@ -10,6 +10,8 @@ from retail_analytics_agent.approval import DatabaseApprovalAuditSink
 from retail_analytics_agent.audit import DatabaseAuditSink
 from retail_analytics_agent.checkpointing import open_postgres_checkpointer
 from retail_analytics_agent.database import connect_to_database
+from retail_analytics_agent.dataset_registry import DatasetRegistry
+from retail_analytics_agent.dataset_scope import DatasetScopeResolver
 from retail_analytics_agent.fault_injection import (
     FaultInjector,
     fault_injection_context,
@@ -46,6 +48,7 @@ from retail_analytics_agent.request_registry import (
 )
 from retail_analytics_agent.request_routing import RequestRoute
 from retail_analytics_agent.resilience import RetryPolicy, workflow_time_budget
+from retail_analytics_agent.schema_profiler import SchemaProfiler
 from retail_analytics_agent.settings import get_settings
 from retail_analytics_agent.tracing import (
     DatabaseExecutionTraceStore,
@@ -139,6 +142,12 @@ _PUBLIC_REJECTION_MESSAGES = {
         "为避免暴露无关字段，本系统不允许读取全部字段。请明确要查看的业务指标。"
     ),
     "forbidden_column": "当前分析员角色无权查看该敏感字段。",
+    "dataset_not_found": "指定数据集不存在，请确认数据集标识。",
+    "dataset_not_ready": "该数据集尚未完成质量检查与映射确认，不能用于分析。",
+    "dataset_archived": "该数据集已归档，不能用于分析。",
+    "dataset_mapping_unconfirmed": "该数据集尚未确认字段映射，不能用于分析。",
+    "dataset_no_metrics": "该数据集还没有已确认的分析指标。",
+    "dataset_unavailable": "当前环境未启用数据集分析。",
 }
 
 
@@ -596,6 +605,11 @@ def get_analysis_runner() -> Iterator[AnalysisRunner]:
         connect_to_database(settings) as query_connection,
         open_postgres_checkpointer(settings) as checkpointer,
     ):
+        dataset_resolver = DatasetScopeResolver(
+            DatasetRegistry(),
+            SchemaProfiler(),
+            connect_to_database,
+        )
         nodes = create_workflow_nodes(
             domain_gate=StructuredMetricDomainGate(
                 model_client,
@@ -632,6 +646,8 @@ def get_analysis_runner() -> Iterator[AnalysisRunner]:
                 timeout_seconds=settings.active_model_timeout_seconds,
                 retry_policy=retry_policy,
             ),
+            dataset_resolver=dataset_resolver,
+            dataset_audit_sink=audit_sink,
         )
         yield LangGraphAnalysisRunner(
             build_analysis_graph(nodes, checkpointer=checkpointer),

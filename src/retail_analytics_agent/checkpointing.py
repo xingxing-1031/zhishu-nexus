@@ -7,6 +7,14 @@ from psycopg import Connection
 from psycopg.conninfo import make_conninfo
 from psycopg.rows import dict_row
 
+from retail_analytics_agent.dataset_scope import DatasetScope
+from retail_analytics_agent.knowledge import (
+    MetricCatalog,
+    MetricDefinition,
+    SchemaCatalog,
+    SchemaColumnDefinition,
+    SchemaTableDefinition,
+)
 from retail_analytics_agent.models import (
     AccessRole,
     AnalysisDimension,
@@ -31,6 +39,12 @@ from retail_analytics_agent.sql_safety import PreparedSQL
 
 _CHECKPOINT_TYPES = (
     AccessRole,
+    DatasetScope,
+    MetricCatalog,
+    MetricDefinition,
+    SchemaCatalog,
+    SchemaColumnDefinition,
+    SchemaTableDefinition,
     ApprovalDecision,
     ApprovalStatus,
     AnalysisDimension,

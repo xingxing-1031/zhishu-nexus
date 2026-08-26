@@ -10,6 +10,7 @@ import httpx
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from retail_analytics_agent.access_control import denied_columns_for_role
+from retail_analytics_agent.dataset_scope import DatasetScope
 from retail_analytics_agent.fault_injection import inject_fault
 from retail_analytics_agent.knowledge import (
     DEFAULT_METRIC_CATALOG,
@@ -60,6 +61,7 @@ class SQLGenerator(Protocol):
         evidence: Sequence[RetrievalEvidence],
         access_role: AccessRole,
         validation_error: str | None = None,
+        scope: DatasetScope | None = None,
     ) -> str: ...
 
 
@@ -70,6 +72,7 @@ class ResultSummarizer(Protocol):
         question: str,
         plan: AnalysisPlan,
         rows: Sequence[dict[str, object]],
+        dataset_name: str | None = None,
     ) -> str: ...
 
 
@@ -93,15 +96,28 @@ _FILTER_SQL_COLUMNS = {
 def _sql_generation_contract(
     plan: AnalysisPlan,
     evidence: Sequence[RetrievalEvidence],
+    *,
+    scope: DatasetScope | None = None,
 ) -> dict[str, object]:
     """Build deterministic SQL obligations from the validated plan and evidence."""
 
+    metric_catalog = (
+        scope.metric_catalog if scope is not None else DEFAULT_METRIC_CATALOG
+    )
+    schema_catalog = (
+        scope.schema_catalog if scope is not None else DEFAULT_SCHEMA_CATALOG
+    )
+    filter_columns = (
+        scope.filter_columns if scope is not None else _FILTER_SQL_COLUMNS
+    )
+
+    def table_ref(table_name: str) -> str:
+        return scope.sql_table(table_name) if scope is not None else table_name
+
     evidence_ids = {item.source_id for item in evidence}
-    metric_definitions = [
-        DEFAULT_METRIC_CATALOG.get(metric) for metric in plan.metrics
-    ]
+    metric_definitions = [metric_catalog.get(metric) for metric in plan.metrics]
     required_tables = sorted(
-        item.removeprefix("schema.")
+        table_ref(item.removeprefix("schema."))
         for item in evidence_ids
         if item.startswith("schema.") and not item.startswith("schema.join.")
     )
@@ -109,28 +125,32 @@ def _sql_generation_contract(
         {
             "source_id": join.source_id,
             "on": (
-                f"{join.left_table}.{join.left_column} = "
-                f"{join.right_table}.{join.right_column}"
+                f"{table_ref(join.left_table)}.{join.left_column} = "
+                f"{table_ref(join.right_table)}.{join.right_column}"
             ),
         }
-        for join in DEFAULT_SCHEMA_CATALOG.joins
+        for join in schema_catalog.joins
         if join.source_id in evidence_ids
     ]
     time_column = (
-        "refunds.created_at"
-        if all(
-            definition.source_tables == ("refunds",)
-            for definition in metric_definitions
+        scope.time_column
+        if scope is not None
+        else (
+            "refunds.created_at"
+            if all(
+                definition.source_tables == ("refunds",)
+                for definition in metric_definitions
+            )
+            else "orders.created_at"
         )
-        else "orders.created_at"
     )
     required_predicates = [
-        f"{_FILTER_SQL_COLUMNS[fixed_filter.field]} = '{fixed_filter.value}'"
+        f"{filter_columns[fixed_filter.field]} = '{fixed_filter.value}'"
         for definition in metric_definitions
         for fixed_filter in definition.fixed_filters
     ]
     required_group_by = [
-        _dimension_sql_expression(dimension, metric_definitions)
+        _dimension_sql_expression(dimension, metric_definitions, scope=scope)
         for dimension in plan.dimensions
     ]
     required_order_by = [
@@ -159,7 +179,9 @@ def _sql_generation_contract(
             {
                 "plan_field": dimension.value,
                 "sql_expression": _dimension_sql_expression(
-                    dimension, metric_definitions
+                    dimension,
+                    metric_definitions,
+                    scope=scope,
                 ),
                 "output_alias": dimension.value,
                 "must_be_grouped": True,
@@ -204,7 +226,7 @@ def _sql_generation_contract(
                 ),
                 "parameter_source": "trusted workflow reference_time",
             }
-            if plan.time_range is not None
+            if plan.time_range is not None and time_column is not None
             else None
         ),
         "hard_rule": (
@@ -218,7 +240,14 @@ def _sql_generation_contract(
 def _dimension_sql_expression(
     dimension: AnalysisDimension,
     metric_definitions: Sequence[MetricDefinition],
+    *,
+    scope: DatasetScope | None = None,
 ) -> str:
+    if scope is not None:
+        column = scope.dimension_columns.get(dimension)
+        if column is None:
+            raise KeyError(f"dimension is not supported: {dimension.value}")
+        return column
     if dimension is AnalysisDimension.DAY:
         table = (
             "refunds"
@@ -992,6 +1021,7 @@ class StructuredSQLGenerator:
         evidence: Sequence[RetrievalEvidence],
         access_role: AccessRole,
         validation_error: str | None = None,
+        scope: DatasetScope | None = None,
     ) -> str:
         if not evidence:
             raise ValueError("retrieval evidence is required for SQL generation")
@@ -1024,6 +1054,7 @@ class StructuredSQLGenerator:
                 "sql_generation_contract": _sql_generation_contract(
                     plan,
                     evidence,
+                    scope=scope,
                 ),
                 "access_role": access_role.value,
                 "forbidden_columns": [
@@ -1064,6 +1095,7 @@ class StructuredResultSummarizer:
         question: str,
         plan: AnalysisPlan,
         rows: Sequence[dict[str, object]],
+        dataset_name: str | None = None,
     ) -> str:
         content = _chat_json(
             self.client,
@@ -1073,11 +1105,13 @@ class StructuredResultSummarizer:
                 "你是零售分析结果解释器。只能根据给定查询结果回答，"
                 "不得补造结果中不存在的数字或原因。结果为空时明确说明没有符合条件的数据。"
                 "回答要简洁，并保留重要数值和分组名称。"
+                "若提供了数据集名称，需在回答开头指出统计来自该数据集。"
             ),
             user_payload={
                 "question": question,
                 "analysis_plan": plan.model_dump(mode="json"),
                 "query_rows": list(rows),
+                "dataset_name": dataset_name,
             },
             response_schema=_GeneratedSummary.model_json_schema(),
             timeout_seconds=self.timeout_seconds,

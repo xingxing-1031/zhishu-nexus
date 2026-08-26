@@ -83,7 +83,7 @@ def test_retrieve_node_writes_structured_evidence_to_state() -> None:
 
     assert update["retrieved_context"] == evidence
     assert update["trace"] == ["retrieve"]
-    tool.retrieve.assert_called_once_with(state["plan"])
+    tool.retrieve.assert_called_once_with(state["plan"], scope=None)
 
 
 def test_retrieve_node_requires_a_validated_plan() -> None:
@@ -106,6 +106,7 @@ def test_retrieve_node_passes_question_to_query_aware_adapter() -> None:
             *,
             query: str,
             plan: AnalysisPlan,
+            scope=None,
         ) -> list[RetrievalEvidence]:
             self.calls.append((query, plan))
             return [
@@ -270,6 +271,7 @@ def test_validation_node_stores_prepared_sql() -> None:
         sql="SELECT channel FROM orders",
         max_rows=50,
         access_role=AccessRole.ANALYST,
+        scope=None,
     )
 
 

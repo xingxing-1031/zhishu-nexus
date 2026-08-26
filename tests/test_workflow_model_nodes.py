@@ -101,6 +101,7 @@ def test_sql_generation_node_passes_validation_error_on_retry() -> None:
         evidence=state["retrieved_context"],
         access_role=AccessRole.ANALYST,
         validation_error="unsafe SQL",
+        scope=None,
     )
 
 
@@ -124,6 +125,7 @@ def test_summarize_node_passes_zero_rows_as_successful_result() -> None:
         question=state["question"],
         plan=state["plan"],
         rows=[],
+        dataset_name=None,
     )
 
 

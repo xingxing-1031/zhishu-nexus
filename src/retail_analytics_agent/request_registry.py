@@ -123,6 +123,8 @@ def request_fingerprint(
         "access_role": access_context.role.value,
         "question": request.question,
         "max_rows": request.max_rows,
+        "dataset_id": request.dataset_id,
+        "dataset_version": request.dataset_version,
     }
     encoded = json.dumps(
         payload,

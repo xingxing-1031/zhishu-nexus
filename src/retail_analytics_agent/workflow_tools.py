@@ -5,6 +5,7 @@ from typing import Protocol
 
 from retail_analytics_agent.audit import AuditSink
 from retail_analytics_agent.database import DatabaseConnection
+from retail_analytics_agent.dataset_scope import DatasetScope
 from retail_analytics_agent.knowledge import (
     DEFAULT_METRIC_CATALOG,
     DEFAULT_SCHEMA_CATALOG,
@@ -53,7 +54,12 @@ class CatalogRetrievalToolError(ValueError):
 
 
 class RetrievalTool(Protocol):
-    def retrieve(self, plan: AnalysisPlan) -> list[RetrievalEvidence]: ...
+    def retrieve(
+        self,
+        plan: AnalysisPlan,
+        *,
+        scope: DatasetScope | None = None,
+    ) -> list[RetrievalEvidence]: ...
 
 
 class QueryAwareRetrievalTool(Protocol):
@@ -64,6 +70,7 @@ class QueryAwareRetrievalTool(Protocol):
         *,
         query: str,
         plan: AnalysisPlan,
+        scope: DatasetScope | None = None,
     ) -> list[RetrievalEvidence]: ...
 
 
@@ -76,6 +83,7 @@ class SQLValidationTool(Protocol):
         sql: str,
         max_rows: int,
         access_role: AccessRole,
+        scope: DatasetScope | None = None,
     ) -> PreparedSQL: ...
 
 
@@ -86,6 +94,7 @@ class SQLBusinessConsistencyTool(Protocol):
         sql: str,
         plan: AnalysisPlan,
         evidence: Sequence[RetrievalEvidence],
+        scope: DatasetScope | None = None,
     ) -> SQLConsistencyResult: ...
 
 
@@ -118,6 +127,12 @@ _FILTER_TABLES = {
 }
 
 
+def _scope_column_tables(
+    columns: Mapping[object, str],
+) -> dict[object, str]:
+    return {key: value.split(".", 1)[0] for key, value in columns.items()}
+
+
 @dataclass(frozen=True, slots=True)
 class CatalogRetrievalTool:
     """Retrieve the minimum catalog evidence required by an analysis plan."""
@@ -125,9 +140,30 @@ class CatalogRetrievalTool:
     metric_catalog: MetricCatalog = DEFAULT_METRIC_CATALOG
     schema_catalog: SchemaCatalog = DEFAULT_SCHEMA_CATALOG
 
-    def retrieve(self, plan: AnalysisPlan) -> list[RetrievalEvidence]:
+    def retrieve(
+        self,
+        plan: AnalysisPlan,
+        *,
+        scope: DatasetScope | None = None,
+    ) -> list[RetrievalEvidence]:
+        metric_catalog = (
+            scope.metric_catalog if scope is not None else self.metric_catalog
+        )
+        schema_catalog = (
+            scope.schema_catalog if scope is not None else self.schema_catalog
+        )
+        dimension_tables = (
+            _scope_column_tables(scope.dimension_columns)
+            if scope is not None
+            else _DIMENSION_TABLES
+        )
+        filter_tables = (
+            _scope_column_tables(scope.filter_columns)
+            if scope is not None
+            else _FILTER_TABLES
+        )
         metric_definitions = [
-            self.metric_catalog.get(metric) for metric in plan.metrics
+            metric_catalog.get(metric) for metric in plan.metrics
         ]
         self._validate_dimensions(plan, metric_definitions)
 
@@ -137,20 +173,23 @@ class CatalogRetrievalTool:
             for table_name in definition.source_tables
         }
         required_tables.update(
-            _DIMENSION_TABLES[dimension]
+            dimension_tables[dimension]
             for dimension in plan.dimensions
-            if dimension in _DIMENSION_TABLES
+            if dimension in dimension_tables
         )
         required_tables.update(
-            _FILTER_TABLES[item.field]
+            filter_tables[item.field]
             for item in plan.filters
-            if item.field in _FILTER_TABLES
+            if item.field in filter_tables
         )
 
-        join_indexes = self._find_required_join_indexes(required_tables)
+        join_indexes = self._find_required_join_indexes(
+            required_tables,
+            schema_catalog,
+        )
         selected_tables = set(required_tables)
         for index in join_indexes:
-            join = self.schema_catalog.joins[index]
+            join = schema_catalog.joins[index]
             selected_tables.update((join.left_table, join.right_table))
 
         evidence = [
@@ -158,12 +197,12 @@ class CatalogRetrievalTool:
         ]
         evidence.extend(
             table.to_evidence()
-            for table in self.schema_catalog.tables
+            for table in schema_catalog.tables
             if table.table_name in selected_tables
         )
         evidence.extend(
             join.to_evidence()
-            for index, join in enumerate(self.schema_catalog.joins)
+            for index, join in enumerate(schema_catalog.joins)
             if index in join_indexes
         )
         return evidence
@@ -184,12 +223,16 @@ class CatalogRetrievalTool:
                     f"dimensions: {names}"
                 )
 
-    def _find_required_join_indexes(self, required_tables: set[str]) -> set[int]:
+    def _find_required_join_indexes(
+        self,
+        required_tables: set[str],
+        schema_catalog: SchemaCatalog,
+    ) -> set[int]:
         if not required_tables:
             return set()
 
         known_tables = {
-            table.table_name for table in self.schema_catalog.tables
+            table.table_name for table in schema_catalog.tables
         }
         unknown_tables = required_tables - known_tables
         if unknown_tables:
@@ -199,7 +242,7 @@ class CatalogRetrievalTool:
 
         table_order = [
             table.table_name
-            for table in self.schema_catalog.tables
+            for table in schema_catalog.tables
             if table.table_name in required_tables
         ]
         connected = {table_order[0]}
@@ -208,13 +251,17 @@ class CatalogRetrievalTool:
         for target in table_order[1:]:
             if target in connected:
                 continue
-            path = self._shortest_join_path(connected, target)
+            path = self._shortest_join_path(
+                connected,
+                target,
+                schema_catalog,
+            )
             if path is None:
                 raise CatalogRetrievalToolError(
                     f"no approved join path to schema table: {target}"
                 )
             for index in path:
-                join = self.schema_catalog.joins[index]
+                join = schema_catalog.joins[index]
                 selected_joins.add(index)
                 connected.update((join.left_table, join.right_table))
 
@@ -224,6 +271,7 @@ class CatalogRetrievalTool:
         self,
         connected: set[str],
         target: str,
+        schema_catalog: SchemaCatalog,
     ) -> list[int] | None:
         queue = deque((table_name, []) for table_name in connected)
         visited = set(connected)
@@ -231,7 +279,7 @@ class CatalogRetrievalTool:
             table_name, path = queue.popleft()
             if table_name == target:
                 return path
-            for index, join in enumerate(self.schema_catalog.joins):
+            for index, join in enumerate(schema_catalog.joins):
                 if join.left_table == table_name:
                     neighbor = join.right_table
                 elif join.right_table == table_name:
@@ -256,6 +304,7 @@ class SQLGlotValidationTool:
         sql: str,
         max_rows: int,
         access_role: AccessRole,
+        scope: DatasetScope | None = None,
     ) -> PreparedSQL:
         try:
             return prepare_audited_sql(
@@ -265,6 +314,12 @@ class SQLGlotValidationTool:
                 sql=sql,
                 max_rows=max_rows,
                 access_role=access_role,
+                allowed_columns=(
+                    scope.allowed_columns if scope is not None else None
+                ),
+                allowed_schema=(
+                    scope.schema_name if scope is not None else None
+                ),
             )
         except (SQLSafetyError, ValueError) as exc:
             raise SQLValidationToolError(str(exc)) from exc
@@ -283,6 +338,7 @@ class SQLConsistencyValidationTool:
         sql: str,
         plan: AnalysisPlan,
         evidence: Sequence[RetrievalEvidence],
+        scope: DatasetScope | None = None,
     ) -> SQLConsistencyResult:
         try:
             return validate_sql_against_evidence(
@@ -291,6 +347,7 @@ class SQLConsistencyValidationTool:
                 evidence=evidence,
                 metric_catalog=self.metric_catalog,
                 schema_catalog=self.schema_catalog,
+                scope=scope,
             )
         except SQLBusinessConsistencyError as exc:
             raise SQLBusinessConsistencyToolError(str(exc)) from exc

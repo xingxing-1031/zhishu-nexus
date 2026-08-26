@@ -1,3 +1,5 @@
+from collections.abc import Collection, Mapping
+
 from pydantic import BaseModel, ConfigDict, Field
 from sqlglot import exp, parse
 from sqlglot.errors import ParseError
@@ -119,20 +121,40 @@ def prepare_safe_sql(
     max_rows: int = 100,
     *,
     access_role: AccessRole = AccessRole.ANALYST,
+    allowed_columns: Mapping[str, Collection[str]] | None = None,
+    allowed_schema: str | None = None,
 ) -> PreparedSQL:
-    """Validate a generated query and enforce its maximum result size."""
+    """Validate a generated query and enforce its maximum result size.
+
+    ``allowed_columns`` and ``allowed_schema`` narrow the query to one dataset;
+    when omitted the fixed public demo tables and public schema are used.
+    """
     if not 1 <= max_rows <= MAX_QUERY_ROWS:
         raise SQLSafetyError(
             f"max_rows must be between 1 and {MAX_QUERY_ROWS}"
         )
 
+    effective_columns = dict(
+        _ALLOWED_COLUMNS if allowed_columns is None else allowed_columns
+    )
     statement = validate_read_only_sql(sql)
-    tables, aliases, derived_relations = _validate_tables(statement)
-    _validate_columns(statement, tables, aliases, derived_relations)
+    tables, aliases, derived_relations = _validate_tables(
+        statement,
+        effective_columns,
+        allowed_schema,
+    )
+    _validate_columns(
+        statement,
+        tables,
+        aliases,
+        derived_relations,
+        effective_columns,
+    )
     referenced_columns = _collect_referenced_columns(
         statement,
         tables,
         aliases,
+        effective_columns,
     )
     _validate_role_columns(referenced_columns, access_role)
     _validate_functions(statement)
@@ -170,6 +192,7 @@ def _collect_referenced_columns(
     statement: exp.Expression,
     tables: set[str],
     aliases: dict[str, str],
+    allowed_columns: Mapping[str, Collection[str]],
 ) -> set[str]:
     referenced: set[str] = set()
     for column in statement.find_all(exp.Column):
@@ -185,13 +208,15 @@ def _collect_referenced_columns(
             continue
 
         for table_name in tables:
-            if column_name in _ALLOWED_COLUMNS[table_name]:
+            if column_name in allowed_columns[table_name]:
                 referenced.add(f"{table_name}.{column_name}")
     return referenced
 
 
 def _validate_tables(
     statement: exp.Expression,
+    allowed_columns: Mapping[str, Collection[str]],
+    allowed_schema: str | None = None,
 ) -> tuple[set[str], dict[str, str], set[str]]:
     cte_names = {
         cte.alias_or_name.lower()
@@ -206,18 +231,21 @@ def _validate_tables(
     tables: set[str] = set()
     aliases: dict[str, str] = {}
 
+    accepted_schemas = (
+        {"", "public"} if allowed_schema is None else {allowed_schema}
+    )
     for table in statement.find_all(exp.Table):
         table_name = table.name.lower()
         if table_name in cte_names:
             continue
 
         schema_name = table.db.lower() if table.db else ""
-        if table.catalog or schema_name not in {"", "public"}:
+        if table.catalog or schema_name not in accepted_schemas:
             raise SQLSafetyError(
                 f"table is outside the allowed schema: {table.sql()}"
             )
 
-        if table_name not in _ALLOWED_COLUMNS:
+        if table_name not in allowed_columns:
             raise SQLSafetyError(f"table is not allowed: {table_name}")
 
         tables.add(table_name)
@@ -231,6 +259,7 @@ def _validate_columns(
     tables: set[str],
     aliases: dict[str, str],
     derived_relations: set[str],
+    allowed_columns: Mapping[str, Collection[str]],
 ) -> None:
     for star in statement.find_all(exp.Star):
         if not _is_count_star(star):
@@ -239,7 +268,7 @@ def _validate_columns(
             )
 
     allowed_unqualified = (
-        set().union(*(_ALLOWED_COLUMNS[table] for table in tables))
+        set().union(*(allowed_columns[table] for table in tables))
         if tables
         else set()
     )
@@ -273,7 +302,7 @@ def _validate_columns(
         table_name = aliases.get(qualifier)
         if table_name is None:
             raise SQLSafetyError(f"unknown table alias: {qualifier}")
-        if column_name not in _ALLOWED_COLUMNS[table_name]:
+        if column_name not in allowed_columns[table_name]:
             raise SQLSafetyError(
                 f"column is not allowed: {qualifier}.{column_name}"
             )
