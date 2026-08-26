@@ -53,7 +53,8 @@ def test_csv_import_creates_isolated_schema_and_preserves_rows(tmp_path: Path) -
     assert "CREATE SCHEMA" in create_sql
     assert "staging_demo_2" in create_sql
     assert "order_id" in str(connection.execute.call_args_list[1].args[0])
-    connection.executemany.assert_called_once()
+    connection.cursor.assert_called_once()
+    connection.cursor.return_value.__enter__.return_value.executemany.assert_called_once()
 
 
 def test_csv_import_rejects_duplicate_columns_after_normalization(tmp_path: Path) -> None:

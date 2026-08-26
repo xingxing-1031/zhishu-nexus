@@ -112,7 +112,8 @@ class FileDatasetImporter:
                     tuple(row[column] for column in normalized_columns)
                     for row in normalized_rows
                 ]
-                connection.executemany(insert_statement, values)
+                with connection.cursor() as cursor:
+                    cursor.executemany(insert_statement, values)
 
         return ImportResult(
             dataset_id=request.dataset_id,
