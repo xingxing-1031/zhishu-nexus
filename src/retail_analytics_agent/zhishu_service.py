@@ -142,6 +142,7 @@ class ZhishuAgentService:
     def _prepare(
         self,
         request: AgentRequest,
+        access_context: AccessContext,
     ) -> tuple[list[dict[str, str]], AgentPlan]:
         history = _history_from_store(self.data_agent, request)
         record = self.data_agent.context_builder.store.get(
@@ -165,6 +166,9 @@ class ZhishuAgentService:
             request.question,
             history,
             previous_mode=previous_mode,
+            access_role=access_context.role,
+            dataset_id=request.dataset_id,
+            dataset_version=request.dataset_version,
         )
         return history, plan
 
@@ -175,7 +179,11 @@ class ZhishuAgentService:
     ) -> AgentResponse:
         if request.user_id != access_context.user_id:
             raise PermissionError("agent request belongs to another user")
-        history, plan = self._prepare(request)
+        history, plan = self._prepare(request, access_context)
+        if plan.refused:
+            return self._refused_response(request, plan)
+        if plan.missing_information:
+            return self._clarification_response(request, plan)
         return self._run_prepared(request, access_context, plan, history)
 
     def _run_prepared(
@@ -241,6 +249,48 @@ class ZhishuAgentService:
             limitations=limitations,
         )
 
+    def _refused_response(
+        self,
+        request: AgentRequest,
+        plan: AgentPlan,
+    ) -> AgentResponse:
+        return AgentResponse(
+            request_id=request.request_id,
+            conversation_id=request.conversation_id,
+            status=AgentTaskStatus.REFUSED,
+            agent_mode=plan.mode,
+            answer=plan.reason or "该请求被拒绝。",
+            limitations=(plan.reason_code,),
+            agent_steps=self._completed_steps(
+                plan.steps,
+                AgentTaskStatus.REFUSED,
+            ),
+        )
+
+    def _clarification_response(
+        self,
+        request: AgentRequest,
+        plan: AgentPlan,
+    ) -> AgentResponse:
+        missing = "、".join(plan.missing_information)
+        answer = (
+            "这个问题还缺少明确的分析口径，需要补充："
+            f"{missing}。例如：最近30天哪个渠道销售额最高，"
+            "或最近30天哪些商品销量最高。"
+        )
+        return AgentResponse(
+            request_id=request.request_id,
+            conversation_id=request.conversation_id,
+            status=AgentTaskStatus.REFUSED,
+            agent_mode=plan.mode,
+            answer=answer,
+            limitations=(plan.reason_code,),
+            agent_steps=self._completed_steps(
+                plan.steps,
+                AgentTaskStatus.REFUSED,
+            ),
+        )
+
     def _execute(
         self,
         request: AgentRequest,
@@ -263,7 +313,7 @@ class ZhishuAgentService:
     ):
         if request.user_id != access_context.user_id:
             raise PermissionError("agent request belongs to another user")
-        history, plan = self._prepare(request)
+        history, plan = self._prepare(request, access_context)
         yield AgentStreamEvent(
             event="status",
             node="supervisor",
@@ -275,6 +325,22 @@ class ZhishuAgentService:
                 node=step.agent,
                 message=step.task,
             )
+        if plan.refused:
+            yield AgentStreamEvent(
+                event="result",
+                node="supervisor",
+                message="请求被拒绝",
+                response=self._refused_response(request, plan),
+            )
+            return
+        if plan.missing_information:
+            yield AgentStreamEvent(
+                event="result",
+                node="supervisor",
+                message="请求需要澄清",
+                response=self._clarification_response(request, plan),
+            )
+            return
         try:
             result = self._run_prepared(
                 request,

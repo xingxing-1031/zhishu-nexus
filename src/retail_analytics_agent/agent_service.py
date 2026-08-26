@@ -22,6 +22,7 @@ from retail_analytics_agent.knowledge_adapter import (
 from retail_analytics_agent.mcp_client import McpToolClient
 from retail_analytics_agent.models import (
     AccessContext,
+    AccessRole,
     AnalysisRejectedResponse,
     AnalysisResponse,
     AnalysisResultStatus,
@@ -128,6 +129,7 @@ class EnterpriseAgentService:
 
         assert self.tool_registry is not None
         skill = self.task_planner.registry.get(plan.skill_id)
+        self._ensure_role_allows(skill.allowed_roles, access_context.role)
         self._ensure_skill_allows(skill.required_tools, "sql.query")
         analysis_question = request.question
         if plan.skill_id is SkillId.WEEKLY_REPORT:
@@ -141,6 +143,8 @@ class EnterpriseAgentService:
                 "user_id": request.user_id,
                 "question": analysis_question,
                 "max_rows": request.max_rows,
+                "dataset_id": request.dataset_id,
+                "dataset_version": request.dataset_version,
             },
             access_context=access_context,
             request_id=request.request_id,
@@ -325,6 +329,16 @@ class EnterpriseAgentService:
         if tool_name not in allowed_tools:
             raise PermissionError(
                 f"skill tool allowlist does not permit {tool_name}"
+            )
+
+    @staticmethod
+    def _ensure_role_allows(
+        allowed_roles: tuple[AccessRole, ...],
+        role: AccessRole,
+    ) -> None:
+        if role not in allowed_roles:
+            raise PermissionError(
+                f"skill is not allowed for role {role.value}"
             )
 
     def stream(

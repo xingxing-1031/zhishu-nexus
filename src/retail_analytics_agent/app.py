@@ -3,7 +3,7 @@ import hmac
 import logging
 import re
 import sys
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import asynccontextmanager
 from pathlib import Path
 from queue import Queue
@@ -704,6 +704,16 @@ def delete_workspace_conversation(
     store.delete(access_context.user_id, conversation_id)
 
 
+def _dataset_status_checker() -> Callable[[str, int | None], str | None]:
+    registry = DatasetRegistry()
+
+    def check(dataset_id: str, version: int | None) -> str | None:
+        record = registry.get(dataset_id, version)
+        return record.status.value if record is not None else None
+
+    return check
+
+
 def get_agent_service(
     runner: Annotated[AnalysisRunner, Depends(get_analysis_runner)],
     settings: Annotated[Settings, Depends(get_settings)],
@@ -765,7 +775,12 @@ def get_agent_service(
         model = StructuredChatClient(model_client, settings.model_provider)
         yield ZhishuAgentService(
             data_agent=data_agent,
-            supervisor=Supervisor(),
+            supervisor=Supervisor(
+                model=model,
+                model_name=settings.active_model_name,
+                timeout_seconds=settings.active_model_timeout_seconds,
+                dataset_checker=_dataset_status_checker(),
+            ),
             general_agent=GeneralAgent(
                 model=model,
                 mcp_client=common_mcp_client,

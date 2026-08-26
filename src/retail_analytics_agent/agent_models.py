@@ -68,11 +68,22 @@ class KnowledgeEvidenceView(AgentStrictModel):
     effective_from: str | None = Field(default=None, max_length=80)
 
 
+class RoutingDecision(AgentStrictModel):
+    mode: AgentMode
+    confidence: float = Field(ge=0, le=1)
+    subtasks: tuple[str, ...] = Field(default=(), max_length=12)
+    missing_information: tuple[str, ...] = Field(default=(), max_length=12)
+    reason_code: str = Field(min_length=1, max_length=80)
+    reason: str = Field(default="", max_length=300)
+    refused: bool = False
+
+
 class Subtask(AgentStrictModel):
     id: str = Field(min_length=1, max_length=80)
     description: str = Field(min_length=1, max_length=500)
     required_tools: tuple[str, ...] = Field(default=(), max_length=8)
     status: AgentTaskStatus = AgentTaskStatus.PENDING
+    depends_on: tuple[str, ...] = Field(default=(), max_length=8)
 
 
 class TaskPlan(AgentStrictModel):
@@ -89,6 +100,33 @@ class TaskPlan(AgentStrictModel):
             raise ValueError("subtask ids must be unique")
         if len(self.subtasks) > self.max_steps:
             raise ValueError("subtasks cannot exceed max_steps")
+        by_id = {item.id: item for item in self.subtasks}
+        for item in self.subtasks:
+            unknown = [
+                dep for dep in item.depends_on if dep not in by_id
+            ]
+            if unknown:
+                raise ValueError(
+                    f"subtask depends_on unknown id: {unknown[0]}"
+                )
+        visiting: set[str] = set()
+        visited: set[str] = set()
+
+        def visit(node_id: str) -> None:
+            if node_id in visited:
+                return
+            if node_id in visiting:
+                raise ValueError(
+                    f"subtask dependency cycle involving: {node_id}"
+                )
+            visiting.add(node_id)
+            for dep in by_id[node_id].depends_on:
+                visit(dep)
+            visiting.remove(node_id)
+            visited.add(node_id)
+
+        for item in self.subtasks:
+            visit(item.id)
         return self
 
 
@@ -149,6 +187,8 @@ class AgentRequest(AgentStrictModel):
     include_knowledge: bool = True
     result_display: ResultDisplayMode = ResultDisplayMode.AUTO
     auto_open_evidence: bool = False
+    dataset_id: str | None = Field(default=None, max_length=80)
+    dataset_version: int | None = Field(default=None, ge=1)
 
 
 class AgentResponse(AgentStrictModel):

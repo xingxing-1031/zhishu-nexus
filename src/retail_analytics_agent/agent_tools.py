@@ -23,6 +23,8 @@ class SQLAnalysisInput(ToolInput):
     user_id: str = Field(min_length=1, max_length=128)
     question: str = Field(min_length=1, max_length=4000)
     max_rows: int = Field(ge=1, le=1000)
+    dataset_id: str | None = Field(default=None, max_length=80)
+    dataset_version: int | None = Field(default=None, ge=1)
 
 
 class KnowledgeSearchInput(ToolInput):
@@ -52,6 +54,8 @@ def create_agent_tool_registry(
                 user_id=payload.user_id,
                 question=payload.question,
                 max_rows=payload.max_rows,
+                dataset_id=payload.dataset_id,
+                dataset_version=payload.dataset_version,
             ),
             access_context,
         )
