@@ -10,6 +10,8 @@ import httpx
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from retail_analytics_agent.access_control import denied_columns_for_role
+from retail_analytics_agent.agent_models import ContextLayer, ContextSnapshot
+from retail_analytics_agent.context_builder import render_layers
 from retail_analytics_agent.dataset_scope import DatasetScope
 from retail_analytics_agent.fault_injection import inject_fault
 from retail_analytics_agent.knowledge import (
@@ -837,15 +839,19 @@ def _chat_json(
     timeout_seconds: float,
     retry_policy: RetryPolicy,
     component: str,
+    context_layers: Sequence[ContextLayer] | None = None,
 ) -> str:
     chat_client = StructuredChatClient(client, protocol)
     last_error: ModelInvocationError | None = None
+    if context_layers:
+        user_payload = {**user_payload, "context": render_layers(context_layers)}
 
     for attempt in range(1, retry_policy.max_attempts + 1):
         record_execution_trace(
             component,
             TraceStatus.STARTED,
             attempt=attempt,
+            event_type="model.call",
         )
         started_at = monotonic()
         try:
@@ -862,6 +868,7 @@ def _chat_json(
                 TraceStatus.SUCCEEDED,
                 attempt=attempt,
                 duration_ms=int((monotonic() - started_at) * 1000),
+                event_type="model.call",
             )
             return content
         except httpx.HTTPStatusError as exc:
@@ -891,6 +898,7 @@ def _chat_json(
                 TraceStatus.FAILED,
                 attempt=attempt,
                 duration_ms=int((monotonic() - started_at) * 1000),
+                event_type="model.call",
                 error_type=type(exc).__name__,
                 error_message=str(exc),
             )
@@ -901,6 +909,7 @@ def _chat_json(
                 TraceStatus.FAILED,
                 attempt=attempt,
                 duration_ms=int((monotonic() - started_at) * 1000),
+                event_type="model.call",
                 error_type=type(exc).__name__,
                 error_message=str(exc),
             )
@@ -914,6 +923,7 @@ def _chat_json(
             TraceStatus.FAILED,
             attempt=attempt,
             duration_ms=int((monotonic() - started_at) * 1000),
+            event_type="model.call",
             error_type=error_type,
             error_message=str(last_error),
         )
@@ -924,6 +934,7 @@ def _chat_json(
             component,
             TraceStatus.RETRY_SCHEDULED,
             attempt=attempt,
+            event_type="model.call",
             error_type=error_type,
             error_message=str(last_error),
             retry_delay_ms=int(delay * 1000),
@@ -1096,6 +1107,7 @@ class StructuredResultSummarizer:
         plan: AnalysisPlan,
         rows: Sequence[dict[str, object]],
         dataset_name: str | None = None,
+        context_snapshot: ContextSnapshot | None = None,
     ) -> str:
         content = _chat_json(
             self.client,
@@ -1117,6 +1129,9 @@ class StructuredResultSummarizer:
             timeout_seconds=self.timeout_seconds,
             retry_policy=self.retry_policy,
             component="model.summarize",
+            context_layers=(
+                context_snapshot.layers if context_snapshot else None
+            ),
         )
         try:
             answer = _GeneratedSummary.model_validate_json(content).answer.strip()

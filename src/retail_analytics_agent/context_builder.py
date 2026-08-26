@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass
-from typing import Sequence
+from typing import Protocol, Sequence
 
 from retail_analytics_agent.agent_models import (
+    ContextLayer,
+    ContextLayerName,
     ContextSnapshot,
     TaskPlan,
     ToolCallRecord,
@@ -18,9 +21,37 @@ def estimate_tokens(text: str) -> int:
     return max(1, (len(text) + 2) // 3)
 
 
+def content_hash(text: str) -> str:
+    encoded = text.encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+class TokenCounter(Protocol):
+    def count(self, text: str) -> int: ...
+
+
+@dataclass(frozen=True)
+class ConservativeTokenCounter:
+    def count(self, text: str) -> int:
+        return estimate_tokens(text)
+
+
+def render_layers(layers: Sequence[ContextLayer]) -> str:
+    ordered = sorted(layers, key=lambda item: (item.priority, item.source_id))
+    return "\n".join(
+        f"[{item.layer.value}:{item.source_id}] {item.content}"
+        for item in ordered
+    )
+
+
+def render_context_for_model(snapshot: ContextSnapshot) -> str:
+    return render_layers(snapshot.layers)
+
+
 @dataclass(frozen=True)
 class ContextBuilder:
     store: ConversationStore
+    token_counter: TokenCounter = ConservativeTokenCounter()
 
     def build(
         self,
@@ -33,13 +64,16 @@ class ContextBuilder:
         evidence: Sequence[str] = (),
         tool_calls: Sequence[ToolCallRecord] = (),
         token_budget: int = 4000,
+        system_rules: Sequence[str] = (),
+        metrics_schema: Sequence[str] = (),
+        allowed_evidence: Sequence[str] = (),
     ) -> ContextSnapshot:
         record = self.store.create_or_get(conversation_id, user_id)
         constraints = list(record.confirmed_constraints)
-        current = [f"access_role={access_context}"]
-        current.extend(constraints)
-        current.append(f"question={question}")
-        current.extend(
+        question_lines = [f"access_role={access_context}"]
+        question_lines.extend(constraints)
+        question_lines.append(f"question={question}")
+        question_lines.extend(
             f"subtask:{item.id}={item.description} ({item.status.value})"
             for item in task_plan.subtasks
         )
@@ -48,30 +82,78 @@ class ContextBuilder:
             f"{call.tool_name}:{call.status}:{call.duration_ms}ms"
             for call in tool_calls[-8:]
         ]
+        history_lines = list(recent_tools)
+        if record.summary:
+            history_lines.append(record.summary)
+        history_lines.extend(
+            f"{turn.role}: {turn.content}" for turn in record.turns
+        )
 
-        sections: list[tuple[str, list[str]]] = [
-            ("goal", current),
-            ("evidence", [f"evidence={item}" for item in evidence_ids]),
-            ("tools", recent_tools),
-            ("summary", [record.summary] if record.summary else []),
-            ("history", [f"{turn.role}: {turn.content}" for turn in record.turns]),
-        ]
-        selected: list[str] = []
+        allowed = frozenset(allowed_evidence)
+        layers: list[ContextLayer] = []
+        excluded: list[str] = []
+        seen_evidence_hashes: set[str] = set()
+
+        def push(
+            layer: ContextLayerName,
+            source_id: str,
+            priority: int,
+            content: str,
+        ) -> None:
+            cost = self.token_counter.count(content)
+            layers.append(
+                ContextLayer(
+                    layer=layer,
+                    source_id=source_id,
+                    priority=priority,
+                    token_cost=cost,
+                    permission_scope=access_context,
+                    content_hash=content_hash(content),
+                    content=content,
+                )
+            )
+
+        for index, rule in enumerate(system_rules):
+            push(ContextLayerName.SYSTEM_RULES, f"system_rule:{index}", 1, rule)
+        for line in question_lines:
+            push(ContextLayerName.QUESTION, "question", 2, line)
+        for index, item in enumerate(metrics_schema):
+            push(
+                ContextLayerName.METRICS_SCHEMA,
+                f"metric:{index}",
+                3,
+                f"metric_definition={item}",
+            )
+        for item in evidence_ids:
+            if allowed and item not in allowed:
+                excluded.append(f"no_permission:{item}")
+                continue
+            content = f"evidence={item}"
+            digest = content_hash(content)
+            if digest in seen_evidence_hashes:
+                excluded.append(f"duplicate:{item}")
+                continue
+            seen_evidence_hashes.add(digest)
+            push(ContextLayerName.EVIDENCE, item, 4, content)
+        for index, line in enumerate(history_lines):
+            push(ContextLayerName.HISTORY, f"history:{index}", 5, line)
+
+        selected: list[ContextLayer] = []
         estimate = 0
         truncated = False
-        for index, (_name, values) in enumerate(sections):
-            for value in values:
-                cost = estimate_tokens(value)
-                if estimate + cost <= token_budget:
-                    selected.append(value)
-                    estimate += cost
-                else:
-                    truncated = True
-                    if index == 0:
-                        raise ValueError("token_budget is too small for current goal")
-                    break
+        for candidate in layers:
+            cost = candidate.token_cost
+            if estimate + cost <= token_budget:
+                selected.append(candidate)
+                estimate += cost
+                continue
+            if candidate.layer is ContextLayerName.QUESTION:
+                raise ValueError("token_budget is too small for current goal")
+            truncated = True
+            excluded.append(f"budget:priority={candidate.priority}")
+            break
 
-        summary = "\n".join(selected)
+        summary = "\n".join(item.content for item in selected)
         return ContextSnapshot(
             conversation_id=conversation_id,
             task_goal=task_plan.goal,
@@ -82,6 +164,10 @@ class ContextBuilder:
             token_budget=token_budget,
             token_estimate=estimate,
             truncated=truncated,
+            layers=tuple(selected),
+            included_hashes=tuple(item.content_hash for item in selected),
+            excluded_reasons=tuple(excluded),
+            token_estimation_method=type(self.token_counter).__name__,
         )
 
     def append_turn(

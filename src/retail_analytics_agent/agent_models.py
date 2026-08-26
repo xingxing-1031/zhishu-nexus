@@ -130,6 +130,24 @@ class TaskPlan(AgentStrictModel):
         return self
 
 
+class ContextLayerName(StrEnum):
+    SYSTEM_RULES = "system_rules"
+    QUESTION = "question"
+    METRICS_SCHEMA = "metrics_schema"
+    EVIDENCE = "evidence"
+    HISTORY = "history"
+
+
+class ContextLayer(AgentStrictModel):
+    layer: ContextLayerName
+    source_id: str = Field(min_length=1, max_length=200)
+    priority: int = Field(ge=1, le=5)
+    token_cost: int = Field(ge=0)
+    permission_scope: str = Field(max_length=40)
+    content_hash: str = Field(min_length=64, max_length=64)
+    content: str = Field(min_length=1, max_length=12000)
+
+
 class ContextSnapshot(AgentStrictModel):
     conversation_id: str = Field(min_length=1, max_length=128)
     task_goal: str = Field(min_length=1, max_length=500)
@@ -140,6 +158,10 @@ class ContextSnapshot(AgentStrictModel):
     token_budget: int = Field(default=4000, ge=256, le=32000)
     token_estimate: int = Field(default=0, ge=0)
     truncated: bool = False
+    layers: tuple[ContextLayer, ...] = Field(default=(), max_length=200)
+    included_hashes: tuple[str, ...] = Field(default=(), max_length=200)
+    excluded_reasons: tuple[str, ...] = Field(default=(), max_length=200)
+    token_estimation_method: str = Field(default="conservative", max_length=40)
 
 
 class ToolCallRecord(AgentStrictModel):
