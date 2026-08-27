@@ -222,12 +222,6 @@ def aggregate_cross_dataset_report(
     latencies = sorted(item.latency_ms for item in records)
 
     succeeded = [item for item in records if item.actual_outcome is ExpectedOutcome.SUCCEEDED]
-    refused = [item for item in records if item.actual_outcome is ExpectedOutcome.REFUSED]
-    clarification = [
-        item
-        for item in records
-        if item.actual_outcome is ExpectedOutcome.CLARIFICATION
-    ]
     evidence_cases = [
         item for item in records if case_by_id[item.case_id].expect_data_evidence
     ]

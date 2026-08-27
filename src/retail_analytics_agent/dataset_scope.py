@@ -14,7 +14,6 @@ from retail_analytics_agent.dataset_models import (
     DatasetRecord,
     DatasetStatus,
     SchemaProfile,
-    TableProfile,
 )
 from retail_analytics_agent.knowledge import (
     MetricCatalog,

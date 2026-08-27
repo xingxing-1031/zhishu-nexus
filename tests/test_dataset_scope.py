@@ -33,6 +33,7 @@ from retail_analytics_agent.metric_models import (
     DatasetMetric,
     MetricStatus,
 )
+from retail_analytics_agent.model_adapters import _sql_generation_contract
 from retail_analytics_agent.models import (
     AccessRole,
     AnalysisDimension,
@@ -40,7 +41,6 @@ from retail_analytics_agent.models import (
     AnalysisPlan,
     AnalysisRequest,
 )
-from retail_analytics_agent.model_adapters import _sql_generation_contract
 from retail_analytics_agent.sql_safety import SQLSafetyError, prepare_safe_sql
 from retail_analytics_agent.workflow import (
     build_analysis_graph,

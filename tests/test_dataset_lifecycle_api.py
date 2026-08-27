@@ -10,13 +10,13 @@ from fastapi.testclient import TestClient
 
 from retail_analytics_agent.access_control import get_access_context
 from retail_analytics_agent.app import app
+from retail_analytics_agent.dataset_mapping import MappingRole
 from retail_analytics_agent.dataset_models import (
     DatasetRecord,
     DatasetSourceType,
     DatasetStatus,
     QualityReport,
 )
-from retail_analytics_agent.dataset_mapping import MappingRole
 from retail_analytics_agent.dataset_registry import (
     DatasetNotFoundError,
     DatasetStatusTransitionError,
@@ -147,7 +147,7 @@ def _confirmed_metric(dataset_id: str, version: int) -> DatasetMetric:
         name="销售额",
         definition="销售额为已确认金额字段的合计。",
         aggregation="SUM",
-        formula=f"SUM(dataset_rows.gross_amount)",
+        formula="SUM(dataset_rows.gross_amount)",
         source_role=MappingRole.AMOUNT,
         source_table="dataset_rows",
         source_column="gross_amount",

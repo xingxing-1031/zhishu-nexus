@@ -11,7 +11,6 @@ from retail_analytics_agent.agent_models import AgentMode
 from retail_analytics_agent.cross_dataset_evaluation import (
     CrossDatasetCase,
     CrossDatasetCategory,
-    CrossDatasetEvaluationReport,
     CrossDatasetObservation,
     ExpectedOutcome,
     _score_observation,

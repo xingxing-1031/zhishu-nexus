@@ -6,10 +6,10 @@ from enum import StrEnum
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from retail_analytics_agent.dataset_mapping import (
-    _role_compatible,
     DatasetMapping,
     MappingField,
     MappingRole,
+    _role_compatible,
 )
 from retail_analytics_agent.dataset_models import SchemaProfile
 
