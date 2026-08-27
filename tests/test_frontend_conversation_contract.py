@@ -108,7 +108,11 @@ def test_brand_mark_uses_single_serif_tile() -> None:
     )[0]
     assert "grid-template-columns" not in brand_rule
     assert "inline-flex" in brand_rule
-    assert 'font-family: var(--font-serif)' in brand_rule
+
+    span_rule = styles.split(".brand-mark > span {", maxsplit=1)[1].split(
+        "}", maxsplit=1
+    )[0]
+    assert "var(--font-serif)" in span_rule
 
     brand_component = (FRONTEND / "brand.tsx").read_text(encoding="utf-8")
     assert "<span>知枢</span>" in brand_component
