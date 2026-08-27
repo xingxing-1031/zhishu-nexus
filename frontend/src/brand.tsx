@@ -24,7 +24,7 @@ export function BrandMark({
   const label = decorative ? undefined : "知枢 AI 助手";
   return (
     <span className={classes} aria-label={label} aria-hidden={decorative || undefined}>
-      <span>知枢</span>
+      <span>知</span>
     </span>
   );
 }

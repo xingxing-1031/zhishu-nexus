@@ -115,8 +115,8 @@ def test_brand_mark_uses_single_serif_tile() -> None:
     assert "var(--font-serif)" in span_rule
 
     brand_component = (FRONTEND / "brand.tsx").read_text(encoding="utf-8")
-    assert "<span>知枢</span>" in brand_component
-    assert "<span>知</span>" not in brand_component
+    assert "<span>知</span>" in brand_component
+    assert "<span>知枢</span>" not in brand_component
 
     login_rule = styles.split(".login-brand-panel {", maxsplit=1)[1].split(
         "}", maxsplit=1
