@@ -396,6 +396,19 @@ def login(
         None,
     )
     if account is None:
+        # 安全审计：失败登录只记录尝试的用户名与是否命中已有账号，绝不记录密码。
+        username_known = any(
+            item[0] == payload.username and item[3] for item in accounts
+        )
+        logger.warning(
+            "login failed",
+            extra={
+                "event": "login_failed",
+                "attempted_username": payload.username,
+                "username_known": username_known,
+                "client_host": client_host,
+            },
+        )
         raise HTTPException(status_code=401, detail="用户名或密码错误。")
     _, user_id, role, _ = account
     assert settings.auth_session_secret is not None
