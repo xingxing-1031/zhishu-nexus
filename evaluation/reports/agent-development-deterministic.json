@@ -71,7 +71,7 @@
       "skill_correct": true,
       "tool_allowlist_correct": true,
       "evidence_complete": true,
-      "latency_ms": 15
+      "latency_ms": 0
     },
     {
       "case_id": "weekly_001",
@@ -115,5 +115,16 @@
   "skill_route_accuracy": 1.0,
   "refusal_accuracy": 1.0,
   "tool_allowlist_accuracy": 1.0,
-  "evidence_completeness": 1.0
+  "evidence_completeness": 1.0,
+  "post_run_annotations": {
+    "data_snapshot_id": "不适用：离线确定性评测，使用假 Tool Registry，不连数据库",
+    "data_volume": "910 订单 / 4 渠道 / 180 天跨度（/demo/overview 口径 179 天），VPS 与本地一致",
+    "reference_time": "不适用",
+    "model_versions": {
+      "runtime_llm": "qwen-plus（阿里云百炼 compatible-mode，VPS .env.vps MODEL_NAME）",
+      "enterprise_rag": "text-embedding-v3 + qwen3-rerank（项目二 evidence 后端）"
+    },
+    "evaluation_date": "2026-08-28（Asia/Shanghai）；运行窗口 2026-08-27T18:05:33Z 起",
+    "note": "本节为运行后补注（post_run_annotations），由 docs/EVALUATION_PROTOCOL.md 2026-08-28 修订的标注纪律要求；运行器原始输出未改动。"
+  }
 }

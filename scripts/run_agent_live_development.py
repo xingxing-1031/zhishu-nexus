@@ -338,6 +338,21 @@ def main() -> int:
         "--runtime-commit",
         help="Deployed commit SHA; defaults to the current local HEAD.",
     )
+    parser.add_argument(
+        "--data-snapshot-id",
+        default="demo-live-seed@HEAD (db/seeds/001+002, 910 orders / 180d)",
+        help="Data snapshot identifier recorded in the report annotations.",
+    )
+    parser.add_argument(
+        "--reference-time",
+        default="unfixed (demo seed relative time, evaluated per request)",
+        help="Reference time policy recorded in the report annotations.",
+    )
+    parser.add_argument(
+        "--model-name",
+        default="qwen-plus (dashscope compatible-mode)",
+        help="Runtime model version recorded in the report annotations.",
+    )
     args = parser.parse_args()
     password = os.getenv(args.password_env)
     if not password:
@@ -433,6 +448,12 @@ def main() -> int:
             "enterprise_rag": True,
             "mcp_export": True,
             "token_budget": args.token_budget,
+        },
+        "annotations": {
+            "data_snapshot_id": args.data_snapshot_id,
+            "reference_time": args.reference_time,
+            "model_name": args.model_name,
+            "evaluation_date": datetime.now(UTC).isoformat(),
         },
         "metrics": _aggregate(records),
         "records": records,
