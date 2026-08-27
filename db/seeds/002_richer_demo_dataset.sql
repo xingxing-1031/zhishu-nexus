@@ -34,9 +34,9 @@ WITH generated_orders AS (
             WHEN series % 5 = 0 THEN 'shipped'
             ELSE 'paid'
         END AS status,
-        CURRENT_TIMESTAMP - make_interval(days => series % 75)
+        CURRENT_TIMESTAMP - make_interval(days => series % 180)
             - make_interval(hours => (series * 3) % 24) AS created_at
-    FROM generate_series(1, 120) AS series
+    FROM generate_series(1, 900) AS series
 ), generated_items AS (
     SELECT
         orders.series,
@@ -82,7 +82,7 @@ WITH generated_items AS (
         item_no,
         1 + ((series + item_no) % 3) AS quantity,
         1 + ((series * 5 + item_no * 3) % 16) AS product_number
-    FROM generate_series(1, 120) AS series
+    FROM generate_series(1, 900) AS series
     CROSS JOIN LATERAL generate_series(1, 1 + (series % 3)) AS item_no
 )
 INSERT INTO order_items (order_item_id, order_id, product_id, quantity, unit_price)

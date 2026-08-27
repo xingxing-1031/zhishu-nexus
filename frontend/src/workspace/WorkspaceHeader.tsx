@@ -1,4 +1,4 @@
-import { Info, Menu, PanelRightClose, PanelRightOpen } from "lucide-react";
+import { CalendarRange, Globe2, Menu, PanelRightClose, PanelRightOpen, ShoppingBag } from "lucide-react";
 import { BRAND } from "../brand";
 import type { Overview } from "../types";
 
@@ -24,8 +24,21 @@ export default function WorkspaceHeader({
       </div>
       {overview && (
         <div className="workspace-overview" title="演示数据概况">
-          <Info size={15} />
-          <span>{overview.order_count.toLocaleString("zh-CN")} 单 · {overview.channel_count} 个渠道 · {overview.coverage_days} 天</span>
+          <span className="ov-item">
+            <ShoppingBag size={15} />
+            <b>{overview.order_count.toLocaleString("zh-CN")}</b>
+            <small>订单</small>
+          </span>
+          <span className="ov-item">
+            <Globe2 size={15} />
+            <b>{overview.channel_count}</b>
+            <small>渠道</small>
+          </span>
+          <span className="ov-item">
+            <CalendarRange size={15} />
+            <b>{overview.coverage_days}</b>
+            <small>天数据跨度</small>
+          </span>
         </div>
       )}
       <button className="topbar-icon" type="button" onClick={onToggleInspector} aria-label={inspectorOpen ? "关闭证据面板" : "打开证据面板"} title={inspectorOpen ? "关闭证据面板" : "打开证据面板"}>
