@@ -99,14 +99,25 @@ def test_admin_audit_exposes_agent_mode_tools_and_evidence() -> None:
     assert "min-height: 44px" in filter_control_rule
 
 
-def test_brand_mark_uses_horizontal_two_character_layout() -> None:
+def test_brand_mark_uses_single_serif_tile() -> None:
+    """品牌标记为单块衬线字牌：两字同行渲染，不拆分网格，且不拦截点击。"""
     styles = (FRONTEND / "styles.css").read_text(encoding="utf-8")
 
     brand_rule = styles.split(".brand-mark {", maxsplit=1)[1].split(
         "}", maxsplit=1
     )[0]
-    assert "grid-template-columns: 1fr 1fr" in brand_rule
-    assert "grid-template-rows: 1fr 1fr" not in brand_rule
+    assert "grid-template-columns" not in brand_rule
+    assert "inline-flex" in brand_rule
+    assert 'font-family: var(--font-serif)' in brand_rule
+
+    brand_component = (FRONTEND / "brand.tsx").read_text(encoding="utf-8")
+    assert "<span>知枢</span>" in brand_component
+    assert "<span>知</span>" not in brand_component
+
+    login_rule = styles.split(".login-brand-panel {", maxsplit=1)[1].split(
+        "}", maxsplit=1
+    )[0]
+    assert "pointer-events: none" not in login_rule
 
 
 def test_workspace_persists_stream_error_and_attempts_status_recovery() -> None:
