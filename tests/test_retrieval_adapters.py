@@ -62,3 +62,32 @@ def test_metric_adapter_rejects_when_required_metric_is_not_recalled() -> None:
         ).retrieve(query="各渠道销售额", plan=_plan())
 
     catalog_retriever.retrieve.assert_not_called()
+
+
+def test_adapters_accept_dataset_scope_kwarg_like_workflow_node() -> None:
+    # workflow.create_retrieve_node 以 retrieve_with_query(query, plan, scope)
+    # 调用适配器；评测适配器必须接受并透传 scope，否则检索节点 TypeError。
+    scope = Mock()
+    catalog_retriever = Mock()
+    catalog_retriever.retrieve.return_value = []
+    metric_retriever = Mock()
+    metric_retriever.search.return_value = (AnalysisMetric.SALES_AMOUNT,)
+
+    catalog_adapter = CatalogEvidenceAdapter(
+        catalog_retriever=catalog_retriever
+    )
+    assert catalog_adapter.retrieve_with_query(
+        query="渠道销售额", plan=_plan(), scope=scope
+    ) == []
+    catalog_retriever.retrieve.assert_called_once()
+    assert catalog_retriever.retrieve.call_args.kwargs["scope"] is scope
+
+    metric_adapter = MetricCandidateEvidenceAdapter(
+        metric_retriever=metric_retriever,
+        catalog_retriever=catalog_retriever,
+        candidate_k=3,
+    )
+    assert metric_adapter.retrieve_with_query(
+        query="渠道销售额", plan=_plan(), scope=None
+    ) == []
+    assert catalog_retriever.retrieve.call_args.kwargs["scope"] is None

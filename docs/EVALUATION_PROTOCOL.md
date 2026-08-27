@@ -99,6 +99,16 @@ $env:AGENT_DEMO_PASSWORD='<仅在当前进程设置>'
 
 限制与解释：4 条汇率/网页搜索样本受外部工具失败影响，4 条知识样本和 5 条协作样本因当前 RAG 证据不足而拒答或降级；这些记录保留在分母中。该报告仍是 development 结果，不是 frozen holdout、通用 Agent 准确率或生产 SLA。后续若针对这些题调优，必须新建 development 版本并重新建立独立冻结集，不能继续把本报告称为未见泛化结果。
 
+### 扩展套件变更记录（suite changelog）
+
+**v2（2026-08-28，`evaluation/agent_live_development_extended_v2.jsonl`）**——依据终审裁决，将 safety-01/02/03 三例的 `expected_mode` 从 `data` 更新为 `general`，并新增 `expected_reason_code: "write_operation_refused"` 断言。
+
+- 依据：升级提交 `4c2d2fd`（2026-08-26 "structured routing, planning, and skill contracts"）把写操作拦截从 data Agent 层前移到路由-规划层（`supervisor._apply_rules` 的 `requests_write_operation` 规则），路由契约测试 `tests/test_agent_routing_contract.py` 已固化新行为。v1 样本的 `expected_mode: "data"` 反映升级前语义，与新安全设计不再一致；更新样本是让契约跟随已固化的系统语义，不是为凑数字改标签——拒答结局（`expected_statuses: ["refused"]`、`expected_tools: []`）三例均未改动，且新增的 reason_code 断言比 v1 更严格。
+- 字段 diff（机器校验，与 v1 逐行比对仅以下 6 处）：safety-01/02/03 各 2 处——`expected_mode: data→general`、`expected_reason_code: null→write_operation_refused`。其余 57 例 114 项字段逐字节一致；v1 文件保留不动。
+- 语义边界（同步写入样本注释性说明）：命中路由层关键词规则的写操作（删除/update/drop 等）→ general 模式 + `write_operation_refused`；未命中规则的自然语言写操作（如"写入一条新记录"）仍由 data 模式下游拒答（safety-04 保持 `data` 不变）。
+- 执行器配套：`scripts/run_agent_live_development.py` 的 `_evaluate_case` 新增 `reason_pass` 检查——样本声明 `expected_reason_code` 时，响应 `limitations` 必须包含该代码，否则该题失败（`tests/test_agent_live_development.py` 新增用例覆盖）。
+- v1（2026-08-15 初版，`agent_live_development_extended.jsonl`）：60 条分层 development 套件，对应报告见上文；文件自此冻结不再修改。
+
 ## 跨数据集评测协议（阶段5 基建）
 
 目标：用至少两套字段和分布不同的销售数据，证明迁移能力来自接入契约和语义映射，而不是针对一张固定表写死。评测集与评测器已交付并离线验证，真实链路评分需要模型和数据库，在批准前不编造数字。
@@ -243,6 +253,68 @@ Runtime 升级引入第二类评测数据：八层失败归因 harness 套件。
 |---|---|---|---|
 | (i) 重建 v1 快照原样跑（回归口径） | `compose.evaluation.yaml` 已备好独立评测库（只挂 001 种子，端口 55432），指向该库先 `verify_w6_1_gold.py` 校验金标准，再跑 40 条真实模型 | 约 0.5 人日 | 低：金标准零改动；外部变量仅模型版本漂移；严禁在共享演示库上做 |
 | (ii) 基于 910 单重标金标准建 v2（能力口径） | 新 reference_time + 快照钉扎机制（910 行时间戳无法硬编码，需"建快照时冻结 dump + 记录 reference_time"的新实现）；18 条时间无关 gold 只需重采 `expected_rows`，6 条时间相关需重推导 gold_sql；新建 `business_development_v2.json`（v1 文件不动）；另须新建一次性 frozen holdout v2 | 约 1.5-2 人日 | 中-高：金标准重建是评测独立性最大风险点，必须坚持"金标准由可信 SQL 在受控事务内生成"，禁止用模型输出反标；快照钉扎是新代码需测试 |
+
+## web.search 外部依赖排查结论（2026-08-28）
+
+`web.search` 工具在 2026-08-15 与 2026-08-28 两轮 60 条评测中均为 0% 调用成功（对应 `general-09/10` 每轮降级）。排查结论：
+
+1. 上游为 GDELT DOC 2.0 API（`https://api.gdeltproject.org/api/v2/doc/doc`，免密钥，无凭据问题）。
+2. 可达性实测：本机与腾讯云 VPS `curl` 均为连接超时（HTTP 000），DNS 正常解析至 Google Cloud IP（104.197.47.124）；同一时刻两台机器访问 baidu/dashscope 正常。根因为 **GDELT 托管于 GCP，境内网络不可达**，属外部网络环境问题，非代码或凭据缺陷。
+3. 系统侧行为符合设计：httpx 10s 超时 → `CommonToolError("external service is unavailable")` → 治理层捕获并拒绝采用未经验证的实时信息 → 样本降级（degraded）而非失败，无未验证内容泄漏。
+4. 处置：按裁决记录结论并**降低演示优先级**（`docs/INTERVIEW_DEMO_SCRIPT.md` 已注明演示避开网页搜索类问题），不引入代理或备用搜索源；两轮评测中相关样本保留在分母的口径不变。
+
+## 第二轮回归与修复记录（2026-08-28，终审裁决执行）
+
+执行顺序 ②→①→③→④。以下记录全部带原始报告。
+
+### ② 扩展套件 v2 重跑（60 条，VPS 真实模型）
+
+报告 `agent-live-development-20260827T194633Z.json`（annotations 内嵌，零限流重试，间隔 10s）：
+
+| 指标 | v1 首轮（同日早前） | v2 本轮 | 基线 08-15 |
+|---|---:|---:|---:|
+| **Agent 模式路由** | 57/60 | **60/60** | 60/60 |
+| Skill 路由 | 60/60 | 60/60 | 60/60 |
+| 安全拒答 | 8/8 | 8/8 | 8/8 |
+| 工具选择 | 59/60 | 59/60 | 59/60 |
+| 业务题非失败 | 48/52 | 47/52 | 48/52 |
+| 证据要求 | 50/60 | 49/60 | 50/60 |
+| P50/P95 | 10.74s/26.44s（含 2 次限流重试） | 10.64s/24.40s（零重试） | 9.21s/19.57s |
+
+safety-01/02/03 以新语义通过（general + `write_operation_refused` 断言），safety-04 保持 data 拒答，语义边界与变更记录一致。业务非失败 47/52 的差 1 例为知识证据不足拒答（本轮 5 例，此前 4 例），属 RAG 证据可用性波动，保留在分母；`exchange.rate` 本轮出现 1 次瞬时失败降级（上轮 100%），同样如实保留。
+
+**"模式路由 60/60"自此获得升级后代码的当轮报告背书**，简历该数字的证据从"仅锚定 08-15 基线"升级为"v2 当轮报告"。
+
+### ① business_development.json v1 快照回归（40 条 × 3 变体，本地 Ollama qwen3:4b + bge-m3）
+
+按方案 (i) 在 `compose.evaluation.yaml` 独立评测库（只挂 001 种子）执行，先以 `verify_w6_1_gold.py` 校验：**36 条可信结果用例与固定快照逐行一致**。
+
+回归发现并修复两个环境/集成断裂（本轮回归的真实价值）：
+
+1. **`CatalogEvidenceAdapter.retrieve_with_query()` 缺 `scope` 参数（真实集成 bug）**：数据集作用域升级后，workflow 检索节点以 `retrieve_with_query(query, plan, scope)` 调用适配器，评测适配器未跟进 → 全部 40 例在检索节点 TypeError（首次回归 120/120 全挂，报告 `w6-2-business-v1-regression-20260827T191155Z.json`）。855 项测试未覆盖该评测路径。已修复两个适配器并新增 workflow 契约回归测试（`tests/test_retrieval_adapters.py`）。
+2. **评测库缺 METRIC 向量索引（环境缺口）**：新评测库 `knowledge_chunks` 为空 → retrieval/reranker 变体召回失败（第二次回归 core 72.5%，报告 `...20260827T193610Z.json`）。已用 `scripts/index_knowledge.py` 索引 14 个 METRIC 知识块。
+
+修复后正式回归 `w6-2-business-v1-regression-20260827T194501Z.json`（120 次执行，条件 model_id=qwen3:4b、seed_snapshot_id=retail-demo-evaluation-2026-08-16-v1、reference_time=2026-08-16T12:00:00+08:00）：
+
+| 变体 | 本轮 core_pass | 验收基线（08-16） | 差异归因 |
+|---|---:|---:|---|
+| baseline | **95.00%**（38/40） | 100% | 2 例均为本地 qwen3:4b 抽样漂移 |
+| retrieval | **95.00%**（38/40） | 100% | 同左 |
+| reranker | **95.00%**（38/40） | 100% | 同左 |
+
+未通过的 2 例（三变体完全一致）：`dev-complex-category-units-30d`（生成 SQL 缺 created_at 时间边界，被业务一致性校验器**正确拦截**，未产生错误结果）与 `dev-resilience-summary-degraded`（注入降级用例的计划抽样漂移，降级路径如实记录）。失败模式是"治理层正确拦住了漂移输出"，不是校验或数据回归；按纪律不做挑选性重跑。
+
+### ③ 协作总结退款率口径约束（P1）
+
+问题（快捷提问 Q3 线上实测）：协作答案声称"淘宝、抖音、京东三渠道退款率均为100%"，而数据库事实为每渠道退款率约 2.7%-3.9%（退款订单 6-9 / 渠道订单 225-229）；同一句答案还自认"数据证据中未提供退款率"。修复：`brand_identity.py` 新增 `REFUND_RATE_CALIBER_RULE` 并入 `EVIDENCE_ANSWER_SYSTEM_PROMPT`——固定口径"退款订单 ÷ 同范围已支付订单总数"、禁止退款笔数充当分母、证据缺分母时禁止给出任何退款率百分比；新增提示词契约测试（`tests/test_answer_prompt_contracts.py`）。修复前原始记录 `q3-refund-caliber-before-fix.json`；修复后对照在部署后回填。
+
+### ④ web.search 外部依赖
+
+见上文排查结论：GDELT（GCP）境内不可达，演示降优先级，不深修。
+
+### 运行器健壮性加固（本轮附带）
+
+`scripts/run_agent_live_development.py`：①非 HTTP 传输异常（URLError/超时）兜底记为失败样本保留在分母，不再中断整轮（此前一次运行在 29/60 处静默挂死丢失全部记录）；②逐例增量落盘报告（`partial` 标记）；③新增 `expected_reason_code` 断言；④`--data-snapshot-id/--reference-time/--model-name` 标注参数内嵌报告。
 
 ## 报告标注纪律（2026-08-28 修订）
 

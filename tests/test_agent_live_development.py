@@ -34,7 +34,36 @@ def test_live_evaluation_requires_exact_tools_and_governed_evidence() -> None:
 
     assert checks["case_pass"] is True
     assert checks["mode_pass"] is True
+    assert checks["reason_pass"] is True
     assert checks["document_evidence_count"] == 1
+
+
+def test_live_evaluation_checks_expected_reason_code_in_limitations() -> None:
+    case = {
+        "expected_mode": "general",
+        "expected_skill": None,
+        "expected_statuses": ["refused"],
+        "expected_tools": [],
+        "expected_reason_code": "write_operation_refused",
+        "requires_data_evidence": False,
+        "requires_document_evidence": False,
+        "requires_export": False,
+    }
+    matched = {
+        "status": "refused",
+        "agent_mode": "general",
+        "skill_id": None,
+        "tool_calls": [],
+        "limitations": ["write_operation_refused"],
+        "context": {"token_estimate": None, "token_budget": None},
+        "report": {},
+    }
+    mismatched = dict(matched, limitations=["role_elevation_refused"])
+
+    assert _evaluate_case(case, matched)["reason_pass"] is True
+    assert _evaluate_case(case, matched)["case_pass"] is True
+    assert _evaluate_case(case, mismatched)["reason_pass"] is False
+    assert _evaluate_case(case, mismatched)["case_pass"] is False
 
 
 def test_live_evaluation_rejects_context_over_budget() -> None:

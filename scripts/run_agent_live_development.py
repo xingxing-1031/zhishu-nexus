@@ -126,6 +126,9 @@ def _evaluate_case(case: dict[str, Any], response: dict[str, Any]) -> dict[str, 
         or token_budget is None
         or token_estimate <= token_budget
     )
+    expected_reason_code = case.get("expected_reason_code")
+    limitations = [str(item) for item in (response.get("limitations") or [])]
+    reason_pass = expected_reason_code is None or expected_reason_code in limitations
     return {
         "status_pass": status_pass,
         "mode_pass": mode_pass,
@@ -136,6 +139,7 @@ def _evaluate_case(case: dict[str, Any], response: dict[str, Any]) -> dict[str, 
         "export_pass": export_pass,
         "tools_succeeded": tools_succeeded,
         "context_budget_pass": context_budget_pass,
+        "reason_pass": reason_pass,
         "case_pass": all(
             (
                 status_pass,
@@ -147,6 +151,7 @@ def _evaluate_case(case: dict[str, Any], response: dict[str, Any]) -> dict[str, 
                 export_pass,
                 tools_succeeded,
                 context_budget_pass,
+                reason_pass,
             )
         ),
         "actual_tools": actual_tools,
@@ -376,12 +381,13 @@ def main() -> int:
     for index, case in enumerate(cases):
         request_id = f"agent-live-{run_id}-{index + 1:02d}-{uuid4().hex[:6]}"
         started = time.perf_counter()
-        (
-            http_status,
-            response,
-            rate_limit_retry_count,
-            rate_limit_wait_seconds,
-        ) = _post_json_with_rate_limit_retry(
+        try:
+            (
+                http_status,
+                response,
+                rate_limit_retry_count,
+                rate_limit_wait_seconds,
+            ) = _post_json_with_rate_limit_retry(
                 post_json=lambda: _post_json(
                     opener,
                     f"{args.base_url.rstrip('/')}/agent/run",
@@ -399,6 +405,13 @@ def main() -> int:
                 ),
                 max_retries=args.rate_limit_retries,
             )
+        except (urllib.error.URLError, TimeoutError, OSError) as exc:
+            # Remote transport failure keeps the case in the denominator
+            # instead of aborting the whole run.
+            http_status = 0
+            response = {"status": None, "limitations": [f"transport_error: {exc}"]}
+            rate_limit_retry_count = 0
+            rate_limit_wait_seconds = 0.0
         latency = time.perf_counter() - started
         checks = _evaluate_case(case, response)
         records.append(
@@ -433,6 +446,43 @@ def main() -> int:
         )
         if index + 1 < len(cases):
             time.sleep(args.interval_seconds)
+
+        # Persist intermediate state after every case so a crashed or killed
+        # run still leaves a usable partial report behind.
+        output = root / "evaluation" / "reports" / f"agent-live-development-{run_id}.json"
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(
+            json.dumps(
+                {
+                    "dataset": args.cases.name,
+                    "dataset_kind": "live_development",
+                    "run_id": run_id,
+                    "created_at": datetime.now(UTC).isoformat(),
+                    "base_url": args.base_url,
+                    "runtime_commit": args.runtime_commit or _git_commit(root),
+                    "conditions": {
+                        "public_vps": True,
+                        "remote_model": True,
+                        "postgresql": True,
+                        "enterprise_rag": True,
+                        "mcp_export": True,
+                        "token_budget": args.token_budget,
+                    },
+                    "annotations": {
+                        "data_snapshot_id": args.data_snapshot_id,
+                        "reference_time": args.reference_time,
+                        "model_name": args.model_name,
+                        "evaluation_date": datetime.now(UTC).isoformat(),
+                    },
+                    "partial": index + 1 < len(cases),
+                    "metrics": _aggregate(records),
+                    "records": records,
+                },
+                ensure_ascii=False,
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
 
     report = {
         "dataset": args.cases.name,

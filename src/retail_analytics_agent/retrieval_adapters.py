@@ -5,6 +5,7 @@ from typing import Protocol
 
 from pydantic import BaseModel, ConfigDict
 
+from retail_analytics_agent.dataset_scope import DatasetScope
 from retail_analytics_agent.metric_retrieval import MetricRetriever
 from retail_analytics_agent.models import (
     AnalysisMetric,
@@ -50,9 +51,10 @@ class CatalogEvidenceAdapter:
         *,
         query: str,
         plan: AnalysisPlan,
+        scope: DatasetScope | None = None,
     ) -> EvidenceRetrievalResult:
         del query
-        evidence = tuple(self.catalog_retriever.retrieve(plan))
+        evidence = tuple(self.catalog_retriever.retrieve(plan, scope=scope))
         return EvidenceRetrievalResult(
             evidence=evidence,
             candidate_metrics=tuple(plan.metrics),
@@ -63,8 +65,11 @@ class CatalogEvidenceAdapter:
         *,
         query: str,
         plan: AnalysisPlan,
+        scope: DatasetScope | None = None,
     ) -> list[RetrievalEvidence]:
-        return list(self.retrieve(query=query, plan=plan).evidence)
+        return list(
+            self.retrieve(query=query, plan=plan, scope=scope).evidence
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -86,6 +91,7 @@ class MetricCandidateEvidenceAdapter:
         *,
         query: str,
         plan: AnalysisPlan,
+        scope: DatasetScope | None = None,
     ) -> EvidenceRetrievalResult:
         if not query.strip():
             raise EvidenceRetrievalError("query must not be blank")
@@ -103,7 +109,7 @@ class MetricCandidateEvidenceAdapter:
                 "required metrics were not recalled: " + names
             )
 
-        evidence = tuple(self.catalog_retriever.retrieve(plan))
+        evidence = tuple(self.catalog_retriever.retrieve(plan, scope=scope))
         return EvidenceRetrievalResult(
             evidence=evidence,
             candidate_metrics=candidates,
@@ -114,5 +120,8 @@ class MetricCandidateEvidenceAdapter:
         *,
         query: str,
         plan: AnalysisPlan,
+        scope: DatasetScope | None = None,
     ) -> list[RetrievalEvidence]:
-        return list(self.retrieve(query=query, plan=plan).evidence)
+        return list(
+            self.retrieve(query=query, plan=plan, scope=scope).evidence
+        )
