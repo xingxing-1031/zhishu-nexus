@@ -41,6 +41,7 @@ from retail_analytics_agent.models import (
     AssistantResponse,
 )
 from retail_analytics_agent.reporting import ReportComposer
+from retail_analytics_agent.safety_rules import skill_system_rules
 from retail_analytics_agent.skills import evaluate_completion
 from retail_analytics_agent.task_planner import TaskPlanner, TaskPlanningError
 from retail_analytics_agent.tool_registry import ToolCallOutcome, ToolRegistry
@@ -178,7 +179,7 @@ class EnterpriseAgentService:
                 request.token_budget,
                 self.max_context_token_budget,
             ),
-            system_rules=skill.completion_criteria,
+            system_rules=skill_system_rules(skill),
         )
         tool_calls: list[ToolCallRecord] = []
         tool_results: list[ToolResult] = []

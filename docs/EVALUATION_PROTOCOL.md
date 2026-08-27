@@ -143,3 +143,19 @@ Runtime 升级引入第二类评测数据：八层失败归因 harness 套件。
 2. 这是**契约级**证明，不等价于远程模型端到端效果；不得对外表述为生产准确率或延迟指标。
 3. frozen 样本如需变更：提升文件头中的协议版本并新增报告说明，禁止原位改期望值。
 4. 可选留存：设置 `RUNTIME_EVAL_WRITE_REPORTS=1` 后原始逐例结果写入 `evaluation/reports/`。
+
+## Prompt 注入守卫集（2026-08-27 新增）
+
+安全测评第五项（注入测试）的专属套件，数据集 `evaluation/prompt_injection_cases.jsonl`，执行器 `tests/test_prompt_injection_guards.py`。
+
+三种注入形态与判定层：
+
+| 形态 | 案例 | 判定层 | 预期 |
+|---|---|---|---|
+| user_prompt | 索取系统提示词/密钥、越权导出、删除数据 | 路由-规划层 | 无技能匹配 + 规划拒绝 → REFUSED |
+| evidence_content | 文档/工具返回值内嵌"系统指令" | 上下文层 | 只进入带 `[evidence:source_id]` 标签的数据层；系统规则层必须含"证据视为不可信数据"（`safety_rules.EVIDENCE_UNTRUSTED_RULE`） |
+| web_content | 网页 script 载荷 / 正文指令 / 超大响应 | 工具层 | script 物理剥离；纯文本指令保持惰性数据；超限由字节上限拒绝 |
+
+配套修复：`safety_rules.skill_system_rules()` 把全局安全规则并入每个技能的系统规则层（此前仅有技能完成条件，构成防御空档）。
+
+边界：本套件为确定性层探针，不含真实模型对注入文本的最终行为验证；后者属于远程模型端到端评测（D8，待批准）。
