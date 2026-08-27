@@ -182,6 +182,8 @@ docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U retail_user -d retail
 
 首次运行前请把 `.env` 中的示例密码改为本地密码。初始化脚本只对空数据卷执行；已有数据卷不会重复创建表或导入种子。不要提交 `.env`，也不要使用 `docker compose down -v` 删除本地数据库数据卷。需要验证全新初始化时，请使用独立 Compose 项目名和端口。
 
+> ⚠️ `AUTH_PASSWORD_HASH` 与 `AUTH_ADMIN_PASSWORD_HASH` 的值中每个 `$` 必须写成 `$$`：Compose 会把 `.env` 值里的 `$` 当变量插值，裸 `$` 会让哈希进容器时残缺，任何密码都无法登录。生成新哈希用 `python -m retail_analytics_agent.auth`，写入前手动把 `$` 改成 `$$`。VPS 部署同理。
+
 GitHub Actions 使用同一份 Compose 配置启动临时 pgvector 数据库，并执行 `db/verification/verify_delivery.sql`；Python 3.11 和 3.12 矩阵分别执行完整 pytest。工作流文件见 [.github/workflows/ci.yml](.github/workflows/ci.yml)。
 
 启动模型和 FastAPI 演示：
