@@ -271,7 +271,8 @@ def test_tool_registry_records_active_run_tool_call() -> None:
     assert outcome.result.payload == {"value": "hello"}
 
 
-def test_tool_registry_idempotent_replay_does_not_recount() -> None:
+def test_tool_registry_idempotent_replay_counts_toward_budget() -> None:
+    """幂等重放也计入工具调用预算：预算约束的是执行尝试次数，不能被缓存绕过。"""
     registry = ToolRegistry()
     registry.register(
         ToolSpec(name="demo.echo", description="echo"),
@@ -297,7 +298,35 @@ def test_tool_registry_idempotent_replay_does_not_recount() -> None:
             request_id="REQ-RT-001",
             conversation_id="CONV-RT-001",
         )
-    assert guard.tool_call_count == 1
+    assert guard.tool_call_count == 2
+
+
+def test_tool_registry_replay_loop_hits_tool_call_budget() -> None:
+    """同一个幂等工具的无限重放必须被预算熔断，而不是静默绕过预算。"""
+    registry = ToolRegistry()
+    registry.register(
+        ToolSpec(name="demo.echo", description="echo"),
+        lambda parsed, ctx: ToolResult(
+            tool_name="demo.echo",
+            status="succeeded",
+            payload={"value": parsed.value},
+        ),
+    )
+    guard = _guard(budget=AgentRunBudget(max_tool_calls=3))
+    with (
+        agent_run_context(guard),
+        pytest.raises(AgentRunBudgetExceeded) as excinfo,
+    ):
+        for _ in range(10):
+            registry.call(
+                "demo.echo",
+                {"value": "same"},
+                access_context=_access(),
+                request_id="REQ-RT-001",
+                conversation_id="CONV-RT-001",
+            )
+    assert excinfo.value.reason == "tool_call_limit"
+    assert guard.tool_call_count == 4
 
 
 def test_end_to_end_normal_run_records_full_counts() -> None:

@@ -13,7 +13,7 @@ if str(ROOT / "src") not in sys.path:
 
 from retail_analytics_agent.common_tools import CommonTools  # noqa: E402
 
-_client = httpx.Client()
+_client = httpx.Client(follow_redirects=True)
 _tools = CommonTools(
     _client,
     timeout_seconds=float(os.getenv("MCP_HTTP_TIMEOUT_SECONDS", "10")),

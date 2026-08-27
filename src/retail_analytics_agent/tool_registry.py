@@ -119,6 +119,8 @@ class ToolRegistry:
         input_hash = hashlib.sha256(
             json.dumps(parsed.model_dump(mode="json"), sort_keys=True, ensure_ascii=False).encode()
         ).hexdigest()
+        # 每次执行尝试都计入工具调用预算，幂等重放也不例外，防止预算被缓存绕过。
+        record_active_tool_call()
         cache_key = (name, access_context.user_id, idempotency_key or input_hash)
         if spec.idempotent and cache_key in self._idempotency:
             cached_hash, cached_outcome = self._idempotency[cache_key]
@@ -129,7 +131,6 @@ class ToolRegistry:
             return cached_outcome
 
         started = self.clock()
-        record_active_tool_call()
         try:
             raw = self._handlers[name](parsed, access_context)
             if isinstance(raw, ToolResult):
