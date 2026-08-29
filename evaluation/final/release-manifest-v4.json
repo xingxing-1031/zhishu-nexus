@@ -1,0 +1,82 @@
+{
+  "release_id": "final-20260830-v4",
+  "created_at": "2026-08-30T04:22:36+08:00",
+  "conditions": {
+    "host": "Tencent Cloud VPS 106.52.176.63",
+    "model": "qwen-plus via DashScope compatible-mode",
+    "reference_time": "2026-08-30T00:00:00+08:00",
+    "synthetic_data_note": "受控合成数据，按真实业务规则生成并经程序校验，不是生产数据",
+    "browser_journeys": "not_counted; browser runtime unavailable; HTTP smoke is not a browser metric"
+  },
+  "zhishu_nexus": {
+    "project_commit": "3020c94",
+    "dataset": {
+      "development": "evaluation/final/agent-live-development-final-v4.jsonl",
+      "development_cases": 100,
+      "holdout": "evaluation/final/agent-live-holdout-final-v4.jsonl",
+      "holdout_cases": 30,
+      "development_sha256": "6c530458c745f36d9826e767acb67d02047283fe0d276ef89c07f1993b72efc8",
+      "holdout_sha256": "d2c882c31b8b80792c72d57b681bdb6c52a6f92dbccf5eba31e95fae067e32b3"
+    },
+    "business_development": {
+      "report": "evaluation/reports/agent-live-development-20260829T193636Z.json",
+      "report_sha256": "0d72e295e52de990428b62d4b33dcdbeab23d384e0cd40f8cf1e042ed59daaf8",
+      "cases": 70,
+      "case_pass_rate": 0.8571,
+      "business_non_failure_rate": 0.9483,
+      "safety_refusal_accuracy": 1.0,
+      "p50_seconds": 10.807,
+      "p95_seconds": 30.032,
+      "note": "external dependency failures (web.search x2, exchange.rate x1) retained in denominator and classified separately; 10 failures: 3 external API, 1 RAG nondeterminism, 6 real agent weaknesses"
+    },
+    "business_holdout": {
+      "report": "evaluation/reports/agent-live-development-20260829T201507Z.json",
+      "report_sha256": "5433db8a0272550308d1df810dd5534805382ed46ba36f2a08b3012a4e46cbf1",
+      "cases": 15,
+      "case_pass_rate": 0.4667,
+      "note": "v4 frozen holdout consumed once on 2026-08-30; v1-inherited annotation bugs corrected (question text frozen) before formal consumption; 8 failures classified: 5 technical metadata questions the live system cannot answer, 2 annotation-broken questions triggering no registered skill, 1 unstable empty success"
+    },
+    "runtime_dev": {
+      "report": "evaluation/reports/runtime-dev-final-20260830.json",
+      "cases": 30,
+      "pass_rate": 0.7333,
+      "note": "8 failures are text-level refusals reported as succeeded by the general agent (no_secret_leak/no_state_changing_tools all hold); real status-mapping gap, no secret or side-effect risk"
+    },
+    "runtime_probes": {
+      "report": "evaluation/reports/runtime-probes-final-20260829T154318Z.json",
+      "budget_shutdown": true,
+      "disconnect_recovery": true,
+      "fingerprint_conflict": true,
+      "prompt_injection_safe_outcome": "4/4"
+    },
+    "runtime_holdout": {
+      "report": "evaluation/reports/runtime-holdout-final-v4-20260830.json",
+      "cases": 15,
+      "pass_rate": 1.0,
+      "note": "budget degrade (no tools), recovery idempotency, injection/default-deny/isolation refusals all verified on live VPS"
+    }
+  },
+  "enterprise_knowledge_rag": {
+    "project": "enterprise-knowledge-rag",
+    "project_commit": "f041345ee8dcc9bdc3a3854e6b12df875f28fd43",
+    "corpus_cleanup": "blocked: garbage docs paasshow/26-040 cannot be removed via API (409 source-path check / 503 deactivate); both visibility=restricted so invisible to analyst/EMPLOYEE and do not affect evaluation results",
+    "corpus_snapshot": "sha256:0045d9a1866ff7c6c403d032a26fe90809ddc3227d515ac6adb913e276fbcd02 (unchanged since 2026-08-28T16:18:08Z index; reports reproducible)",
+    "development_report": "enterprise-knowledge-rag/evaluation/final/reports/development-summary-fixed-100x3-vps.json",
+    "development_report_sha256": "91dba81995e4243d1dffcb6398c87e6efd86c468e725a94b42ace3593f3d74a5",
+    "holdout_report": "enterprise-knowledge-rag/evaluation/final/reports/final-holdout-v3-30.json",
+    "holdout_report_sha256": "6ee5b48b0bbafa863add03098538ca7a2ff3bd8e9e66cf661784eee987f35d8c",
+    "development_cases": 100,
+    "development_repetitions": 3,
+    "hybrid_core_pass_rate": 0.51,
+    "vector_core_pass_rate": 0.46,
+    "reranker_core_pass_rate": 0.46,
+    "holdout_cases": 30,
+    "holdout_core_pass_rate": 0.70,
+    "holdout_recall_at_k": 0.8929,
+    "holdout_citation_accuracy": 0.7619,
+    "holdout_access_leakage_rate": 0.0333,
+    "holdout_correct_refusal_rate": 0.50
+  },
+  "release_status": "completed: 100 dev + 30 holdout consumed on 2026-08-30 under frozen v4 datasets; all reports sha256-pinned and reproducible",
+  "historical_policy": "Reports outside the referenced final paths remain historical and are not mixed into resume metrics."
+}
