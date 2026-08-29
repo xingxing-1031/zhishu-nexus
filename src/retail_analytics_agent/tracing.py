@@ -13,6 +13,7 @@ from typing import Any, Protocol
 from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
+from psycopg.types.json import Jsonb
 
 from retail_analytics_agent.database import connect_to_database
 from retail_analytics_agent.fault_injection import inject_fault
@@ -268,10 +269,10 @@ class DatabaseExecutionTraceStore:
             "payload",
         }
         with connect_to_database() as connection:
-            connection.execute(
-                TRACE_INSERT_SQL,
-                event.model_dump(mode="json", include=legacy_fields),
-            )
+            params = event.model_dump(mode="json", include=legacy_fields)
+            # psycopg does not adapt plain Python mappings to PostgreSQL JSONB.
+            params["payload"] = Jsonb(params["payload"]) if params["payload"] is not None else None
+            connection.execute(TRACE_INSERT_SQL, params)
 
     def list_for_request(
         self,

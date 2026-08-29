@@ -335,6 +335,12 @@ def main() -> int:
         type=Path,
         default=root / "evaluation" / "agent_live_development.jsonl",
     )
+    parser.add_argument(
+        "--executor",
+        choices=("live_agent", "runtime_probe", "all"),
+        default="live_agent",
+        help="Select cases by evaluation_executor; runtime probes use their dedicated runner.",
+    )
     parser.add_argument("--timeout-seconds", type=float, default=240)
     parser.add_argument("--interval-seconds", type=float, default=2)
     parser.add_argument("--rate-limit-retries", type=int, default=2)
@@ -359,6 +365,14 @@ def main() -> int:
         help="Runtime model version recorded in the report annotations.",
     )
     args = parser.parse_args()
+    cases = _load_cases(args.cases)
+    if args.executor != "all":
+        cases = [
+            case for case in cases
+            if case.get("evaluation_executor", "live_agent") == args.executor
+        ]
+    if not cases:
+        raise SystemExit(f"no cases for executor={args.executor}")
     password = os.getenv(args.password_env)
     if not password:
         raise SystemExit(f"missing environment variable: {args.password_env}")
@@ -376,7 +390,6 @@ def main() -> int:
         raise SystemExit(f"login failed with HTTP {status}")
 
     records: list[dict[str, Any]] = []
-    cases = _load_cases(args.cases)
     run_id = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     for index, case in enumerate(cases):
         request_id = f"agent-live-{run_id}-{index + 1:02d}-{uuid4().hex[:6]}"

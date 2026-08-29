@@ -6,6 +6,15 @@
 - 基线报告：`evaluation/reports/agent-live-development-20260815T000815Z.json`（升级前，2026-08-15）
 - 本轮报告：`evaluation/reports/agent-live-development-20260827T180533Z.json`（升级后 a9a1c05d，2026-08-28），补注块 `post_run_annotations` 记录快照/模型/日期
 
+## 最终发布版（简历唯一引用来源）
+
+2026-08-28 在 VPS 以当前提交 `8028d823`、`qwen-plus` 和独立快照
+`retail-final-eval-20260828-v1` 重新运行 60 条扩展 development。原始报告为
+`evaluation/final/agent-live-development-final-20260828.json`，发布清单为
+`evaluation/final/release-manifest.json`。该报告替代本表前面的历史口径：50/60
+逐题通过、模式路由 60/60、工具选择 59/60、安全拒答 8/8、业务非失败 49/52、
+P50/P95 10.396s/27.145s。旧报告仅用于审计和升级对照，不再作为简历数字来源。
+
 ## 一、项目一（知枢 Nexus zhishu-nexus）
 
 | # | 简历声称 | 证据来源 | 验证方式 | 本轮核验结果 | 决策 |

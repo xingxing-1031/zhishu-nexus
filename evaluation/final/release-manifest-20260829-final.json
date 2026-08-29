@@ -1,0 +1,78 @@
+{
+  "release_id": "final-20260829-v2",
+  "created_at": "2026-08-29T23:00:00+08:00",
+  "conditions": {
+    "host": "Tencent Cloud VPS 106.52.176.63",
+    "model": "qwen-plus via DashScope compatible-mode",
+    "reference_time": "2026-08-29T00:00:00+08:00",
+    "synthetic_data_note": "受控合成数据，按真实业务规则生成并经程序校验，不是生产数据",
+    "browser_journeys": "not_counted; browser runtime unavailable; HTTP smoke is not a browser metric"
+  },
+  "zhishu_nexus": {
+    "project_commit": "8028d823af1354cfe88e8b5f8a5c57ddd8b13b55",
+    "dataset": {
+      "development": "evaluation/final/agent-live-development-final.jsonl",
+      "development_cases": 100,
+      "holdout": "evaluation/final/agent-live-holdout-final-v3.jsonl",
+      "holdout_cases": 30,
+      "development_sha256": "efc3a7d5fe1df764215e07e63a94e825c8e65728a2fcc3bbc8ffa76c984f2391",
+      "holdout_sha256": "d76c2239c3f01bf1fb5b881a193bb1750e4f614a0769027b8a7858a8e62cb08b"
+    },
+    "business_development": {
+      "report": "evaluation/reports/agent-live-development-20260829T151436Z.json",
+      "report_sha256": "a8eb9fb2372f4826621211f2deab1738e68d9b91f3aa6003dd51cfc0ee05eebf",
+      "cases": 70,
+      "case_pass_rate": 0.6857,
+      "business_non_failure_rate": 0.8548,
+      "safety_refusal_accuracy": 1.0,
+      "p50_seconds": 11.088,
+      "p95_seconds": 27.988
+    },
+    "business_holdout": {
+      "report": "evaluation/reports/agent-live-development-20260829T175451Z.json",
+      "report_sha256": "1d71a08c10e624e95a967df3797b116ae94c240a40534f931c8d4c56e747fbb7",
+      "cases": 15,
+      "case_pass_rate": 0.0667,
+      "note": "v3 独立 holdout；失败样本保留，未据此改代码或 Gold。未见 API 402/余额不足证据，主要失败为路由/知识适配器边界。"
+    },
+    "holdout_execution_status": "complete: v3 15 business + 15 runtime cases have independent raw reports",
+    "trace_write_status": "fixed and smoke-verified after Jsonb adaptation",
+    "runtime_probes": {
+      "report": "evaluation/reports/runtime-probes-final-20260829T154318Z.json",
+      "report_sha256": "ba8b5d3aaff904def3a8faef332a303240552d78c5a34179055ddb0cec5ec658",
+      "budget_shutdown": true,
+      "disconnect_recovery": true,
+      "fingerprint_conflict": true,
+      "user_prompt_injection_safe_outcome": "4/4"
+    },
+    "runtime_holdout": {
+      "report": "evaluation/reports/runtime-holdout-final-v3-20260830.json",
+      "report_sha256": "9110fb850724caa44fd3e5bfcb949d1660fc5342a7202e7a71b5db88fdeec919",
+      "cases": 15,
+      "pass_count": 14,
+      "pass_rate": 0.9333,
+      "note": "唯一失败为恢复题题面被路由到知识模式，重放返回 409；保留在分母。"
+    }
+  },
+  "enterprise_knowledge_rag": {
+    "project": "enterprise-knowledge-rag",
+    "development_report": "enterprise-knowledge-rag/evaluation/final/reports/development-summary-fixed-100x3-vps.json",
+    "development_report_sha256": "91dba81995e4243d1dffcb6398c87e6efd86c468e725a94b42ace3593f3d74a5",
+    "holdout_report": "enterprise-knowledge-rag/evaluation/final/reports/final-holdout-v3-30.json",
+    "holdout_report_sha256": "6ee5b48b0bbafa863add03098538ca7a2ff3bd8e9e66cf661784eee987f35d8c",
+    "development_cases": 100,
+    "development_repetitions": 3,
+    "hybrid_core_pass_rate": 0.51,
+    "vector_core_pass_rate": 0.46,
+    "reranker_core_pass_rate": 0.46,
+    "holdout_cases": 30,
+    "holdout_core_pass_rate": 0.70,
+    "holdout_recall_at_k": 0.8929,
+    "holdout_citation_accuracy": 0.7619,
+    "holdout_access_leakage_rate": 0.0333,
+    "holdout_correct_refusal_rate": 0.50
+  },
+  "release_status": "conditional: holdout complete; one recovery case is a probe-contract mismatch and is retained as a failure",
+  "historical_policy": "Reports outside the referenced final paths remain historical and are not mixed into resume metrics."
+}
+

@@ -376,7 +376,9 @@ def main() -> int:
             "injection_case_count": len(injection),
         },
     }
-    output = root / "evaluation" / "reports" / f"runtime-probes-{run_id}.json"
+    output_dir = Path(os.getenv("RUNTIME_PROBE_OUTPUT_DIR", str(root / "evaluation" / "reports")))
+    output_dir.mkdir(parents=True, exist_ok=True)
+    output = output_dir / f"runtime-probes-{run_id}.json"
     output.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     print(json.dumps({"summary": report["summary"], "output": str(output)}, ensure_ascii=False))
     return 0

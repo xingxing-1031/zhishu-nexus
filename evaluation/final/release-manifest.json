@@ -1,0 +1,91 @@
+{
+  "release_id": "final-20260828-v1",
+  "purpose": "唯一允许为简历提供指标的最终评测发布版",
+  "created_at": "2026-08-29T00:00:00+08:00",
+  "projects": {
+    "zhishu_nexus": {
+      "repository": "zhishu-nexus",
+      "project_commit": "8028d823af1354cfe88e8b5f8a5c57ddd8b13b55",
+      "runtime_host": "Tencent Cloud VPS 106.52.176.63",
+      "model": "qwen-plus via DashScope compatible-mode",
+      "database": {
+        "snapshot_id": "retail-final-eval-20260828-v1",
+        "seed_file": "evaluation/final/seed_final.sql",
+        "seed_sha256": "90c930e3e65510b50ef16062c3a0e5068443f184a4dd26c4a0342a1a71c2a6c2",
+        "reference_time": "2026-08-28T12:00:00+08:00",
+        "orders": 1000,
+        "products": 16,
+        "order_items": 2000,
+        "refunds": 76,
+        "channels": 4,
+        "coverage_days": 180
+      },
+      "agent_report": {
+        "file": "evaluation/final/agent-live-development-final-20260828.json",
+        "sha256": "939a61fe5d1a860548fd759bbb84b21bb37d8327f9ba2ab6f1fa9937590fba88",
+        "case_count": 60,
+        "case_pass_rate": 0.8333,
+        "mode_routing": "60/60",
+        "skill_routing": "60/60",
+        "tool_selection": "59/60",
+        "safety_refusal": "8/8",
+        "business_non_failure": "49/52",
+        "context_budget_compliance": "100%",
+        "latency_seconds": {"mean": 12.073, "p50": 10.396, "p95": 27.145, "max": 33.366},
+        "rate_limit_retries": 0
+      },
+      "frontend_smoke": {
+        "base_url": "http://106.52.176.63/",
+        "status": "passed",
+        "checks": ["homepage bundle", "storage migration", "analyst login", "demo overview"]
+      }
+    },
+    "enterprise_knowledge_rag": {
+      "repository": "enterprise-knowledge-rag",
+      "project_commit": "9035d1c5212c38a4bc63973a114262cab2c5e980",
+      "runtime_host": "Tencent Cloud VPS 106.52.176.63",
+      "models": {
+        "llm": "qwen-plus",
+        "embedding": "text-embedding-v3",
+        "reranker": "qwen3-rerank"
+      },
+      "corpus": {
+        "manifest": "knowledge/manifest.yaml",
+        "snapshot": "sha256:24af1c83c3db4a018e71eb7850d7ed25fc96dfaa88df6bf7ed90662815159232",
+        "server_document_versions": 29,
+        "server_indexed_chunks": 112,
+        "note": "当前服务器索引实时核验值；正文快照哈希与报告一致"
+      },
+      "development_report": {
+        "file": "evaluation/final/rag-development-summary.json",
+        "sha256": "83a0d3d7dbb7de215761f74fbf8912123a248ce19bcbb8276e9c0661ac62c1",
+        "cases_per_strategy": 60,
+        "strategies": 3,
+        "repetitions": 3,
+        "raw_executions": 540,
+        "hybrid_core_pass_rate": "60.56%",
+        "vector_baseline_core_pass_rate": "55.56%",
+        "reranker_recall_at_5": "95.62%",
+        "hybrid_p50_latency": "7.98s"
+      },
+      "holdout_report": {
+        "file": "evaluation/final/rag-final-holdout-v2.json",
+        "sha256": "ddf9107219b887e9d08a6f7f65c740fb67e1f6e72c30192e6398dd8b6ff761b8",
+        "case_count": 20,
+        "core_pass_rate": "90.00%",
+        "recall_at_5": "100.00%",
+        "citation_accuracy": "97.06%",
+        "correct_refusal_rate": "100.00%",
+        "access_leakage_rate": "0%",
+        "p50_p95_latency": "6.79s/12.58s",
+        "validity": "current HEAD and corpus unchanged since this holdout was consumed"
+      }
+    }
+  },
+  "browser_journeys": {
+    "status": "not_counted",
+    "reason": "in-app browser runtime failed to initialize; HTTP frontend smoke passed",
+    "do_not_use_as_metric": true
+  },
+  "historical_data_policy": "All reports outside evaluation/final are historical evidence and are not valid resume sources."
+}

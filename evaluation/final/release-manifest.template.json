@@ -1,0 +1,37 @@
+{
+  "release_id": "final-YYYYMMDD",
+  "project_commit": "",
+  "runtime": {
+    "host": "vps",
+    "base_url": "",
+    "model_id": "",
+    "model_provider": "",
+    "timeout_seconds": 0,
+    "rate_limit_retries": 0
+  },
+  "database": {
+    "seed_script_sha256": "",
+    "snapshot_id": "",
+    "snapshot_sha256": "",
+    "order_count": 0,
+    "product_count": 0,
+    "channel_count": 0,
+    "reference_time": "",
+    "timezone": "Asia/Shanghai"
+  },
+  "knowledge_corpus": {
+    "manifest_sha256": "",
+    "document_count": 0,
+    "chunk_count": 0,
+    "embedding_model": "",
+    "reranker_model": ""
+  },
+  "suites": {
+    "agent_development": "",
+    "agent_holdout": "",
+    "rag_development": "",
+    "rag_holdout": "",
+    "browser_journeys": ""
+  },
+  "commands": {}
+}
