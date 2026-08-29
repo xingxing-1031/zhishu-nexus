@@ -1,38 +1,49 @@
 # 简历数字溯源映射表（Resume Evidence Mapping）
 
-- 简历版本：v23（`求职材料/杨家峦_AI应用开发实习_简历_打磨版_v23.docx/.pdf`，docx 与 PDF 数字一致，2026-08-28 提取核对）
-- 核验日期：2026-08-28；核验人：ZCode 自动核验 + 人工确认
+- 简历版本：v24（待提取核对，见 `docs/RESUME_EVIDENCE_AGENT.md` 推荐表述）
+- 核验日期：2026-08-30；核验人：ZCode 自动核验 + 人工确认
 - 规则：每个数字必须给出「证据来源 + 可复现验证命令/文件」；数字不符时"修简历或修系统"二选一，决策记录在本表；禁止在没有原始运行记录的情况下写入任何数字。
-- 基线报告：`evaluation/reports/agent-live-development-20260815T000815Z.json`（升级前，2026-08-15）
-- 本轮报告：`evaluation/reports/agent-live-development-20260827T180533Z.json`（升级后 a9a1c05d，2026-08-28），补注块 `post_run_annotations` 记录快照/模型/日期
+- v4 发布清单：`evaluation/final/release-manifest-v4.json`（release_id `final-20260830-v4`），数据集 SHA、报告 SHA 与全部指标逐项钉定
+- 基线报告（v4 业务 development）：`evaluation/reports/agent-live-development-20260829T193636Z.json`（70 条，2026-08-30）
+- v4 冻结数据集：`evaluation/final/agent-live-development-final-v4.jsonl`（100）+ `agent-live-holdout-final-v4.jsonl`（30）
 
 ## 最终发布版（简历唯一引用来源）
 
-2026-08-28 在 VPS 以当前提交 `8028d823`、`qwen-plus` 和独立快照
-`retail-final-eval-20260828-v1` 重新运行 60 条扩展 development。原始报告为
-`evaluation/final/agent-live-development-final-20260828.json`，发布清单为
-`evaluation/final/release-manifest.json`。该报告替代本表前面的历史口径：50/60
-逐题通过、模式路由 60/60、工具选择 59/60、安全拒答 8/8、业务非失败 49/52、
-P50/P95 10.396s/27.145s。旧报告仅用于审计和升级对照，不再作为简历数字来源。
+2026-08-30 在 VPS（腾讯云 106.52.176.63）以冻结提交 `3020c94`、`qwen-plus`
+（DashScope compatible-mode）运行 v4 评测。业务 development 70 条 60/70（85.71%）、
+业务 holdout 15 条 7/15（46.67%）、运行时 development 30 条 22/30（73.33%）、
+运行时 holdout 15 条 15/15（100%）。冻结数据集与全部报告的 sha256 见
+`evaluation/final/release-manifest-v4.json`。该发布替代本表前面的历史口径
+（46/60、60/60、59/60、P50/P95 9.21/19.57 等），旧报告仅用于审计和升级对照，
+不再作为简历数字来源。
 
 ## 一、项目一（知枢 Nexus zhishu-nexus）
 
 | # | 简历声称 | 证据来源 | 验证方式 | 本轮核验结果 | 决策 |
 |---|---|---|---|---|---|
 | 1 | 855 项 Python 回归测试 | 本地 pytest 全量 | `.\.venv\Scripts\python.exe -m pytest -q`（`--collect-only -q` 计数） | **855 收集、855 通过、0 失败**（2026-08-28 实测，exit 0） | 一致，保留 |
-| 2 | 60 条 development 评测 | `evaluation/agent_live_development_extended.jsonl`（60 行，分层：通用 12/知识 12/数据 16/协作 12/安全 8） | `wc -l` + 基线/本轮报告 `case_count` | 60 条确认；两轮报告 case_count=60 | 一致，保留 |
-| 3 | 模式路由 60/60 | 基线报告 `agent_mode_accuracy: 1.0` | `jq .metrics.agent_mode_accuracy`（或 json 解析） | 基线 60/60 ✓；**本轮 57/60**（见决策） | **保留数字（锚定 08-15 报告）**；差异原因与后续动作见"决策 A" |
-| 4 | 安全拒答 8/8 | 两轮报告 `refusal_accuracy: 1.0`（8 条安全样本） | 报告 `by_category.safety` | 两轮均 8/8 | 一致，保留 |
-| 5 | 业务题非失败 48/52（92.31%） | 两轮报告 `business_non_failure_rate: 0.9231` | 报告 `metrics.business_non_failure_rate` | 两轮均 48/52；失败构成见协议文档 | 一致，保留 |
-| 6 | 端到端 P50/P95 9.21s/19.57s | 基线报告 `latency_seconds.p50/p95` | 报告 `metrics.latency_seconds` | 基线 9.21/19.57 ✓；本轮 10.74/26.44（含 2 次限流重试 36s 等待、协作类模型当日变慢、数据量 130→910） | **保留数字（锚定 08-15 报告）**；本轮口径不写入简历，理由见"决策 B" |
+| 2 | 100 条 v4 development + 30 条冻结 holdout | `evaluation/final/agent-live-development-final-v4.jsonl`（100 行：业务 70 + 运行时 30）+ `agent-live-holdout-final-v4.jsonl`（30 行） | `wc -l` + validator（`scripts/validate_final_evaluation.py`）+ manifest `development_cases/holdout_cases` | 100/30 确认；业务报告 case_count=70、运行时=30、holdout=30 | 一致，保留 |
+| 3 | 模式路由 67/70 | v4 业务报告 `agent_mode_accuracy: 0.9571` | `jq .metrics.agent_mode_accuracy`（或 json 解析） | 67/70（通用 12/知识 15/数据 20/协作 15/安全 8），3 例为协作/知识样本路由差异 | 一致，保留（v4 口径） |
+| 4 | 安全拒答 8/8 | v4 业务报告 `refusal_accuracy: 1.0`（8 条安全样本） | 报告 `by_category.safety` | 8/8，全部 refused | 一致，保留 |
+| 5 | 业务题非失败 55/58（94.83%） | v4 业务报告 `business_non_failure_rate: 0.9483` | 报告 `metrics.business_non_failure_rate` | 55/58；3 例外部 API 依赖失败保留分母并单独分类 | 一致，保留（v4 口径） |
+| 6 | 端到端 P50/P95 10.81s/30.03s | v4 业务报告 `latency_seconds.p50/p95` | 报告 `metrics.latency_seconds` | 10.807/30.032；70 条串行公网请求，6 次 429 限流重试累计 77s（已按 Retry-After 记录） | 一致，保留（v4 口径）；延迟含限流等待，面试说明口径 |
 | 7 | 工具选择 59/60（98.33%）※ | 两轮报告 `tool_selection_accuracy: 0.9833` | 报告 `metrics.tool_selection_accuracy` | 两轮均 59/60，失败样本相同（`collaboration-product-03`） | 一致；**注意：v23 文本中并无此数字**（docx/PDF 均无 `59/60`、`98.33` 字样），属任务清单要求核验的基线指标 |
 | 8 | 11 类故障注入 | `evaluation/fault_cases.jsonl`（11 行）+ 执行器测试 | `wc -l evaluation/fault_cases.jsonl`；pytest 套件绿 | 11 例确认 | 一致，保留 |
-| 9 | 三形态 10 例 Prompt 注入防护全部通过 | `evaluation/prompt_injection_cases.jsonl`（10 行：user_prompt 4 / evidence_content 3 / web_content 3）；`tests/test_prompt_injection_guards.py` | pytest 全绿；端到端探针 `evaluation/reports/runtime-probes-20260827T182851Z.json` | 确定性层 10/10 绿；**端到端 user_prompt 4/4 安全结局**（判据修正见协议文档修订留痕） | 一致，保留；对外表述注意分层（确定性层"全部通过"，端到端为"安全结局 4/4"） |
+| 9 | 三形态 10 例 Prompt 注入防护全部通过 | `evaluation/prompt_injection_cases.jsonl`（10 行：user_prompt 4 / evidence_content 3 / web_content 3）；`tests/test_prompt_injection_guards.py`；端到端探针 `evaluation/reports/runtime-probes-final-20260829T154318Z.json` | pytest 全绿；v4 manifest `runtime_probes` | 确定性层 10/10 绿；**端到端 user_prompt 4/4 安全结局**；runtime 注入用例全部 refused+safe+无泄露 | 一致，保留；对外表述注意分层（确定性层"全部通过"，端到端为"安全结局 4/4"） |
 | 10 | 八层失败归因（Model/Context/Tool/Skill/State/Permission/Memory/Runtime） | `src/retail_analytics_agent/tracing.py` `TraceErrorCategory`（8 个枚举值逐字对应）+ `evaluation_layers.py`；套件 `agent_harness_development.jsonl`（21）/`agent_harness_frozen.jsonl`（12） | 枚举比对；pytest 全绿 | 八层名称逐字一致；harness 套件全绿 | 一致，保留；不得表述为"端到端八层准确率"（协议边界） |
-| 11 | 五维预算边界（步骤/模型调用/工具调用/Token/截止时间）超限自动停机降级 | `agent_runtime.py` `AgentRunBudget`（max_steps/max_model_calls/max_tool_calls/token_budget/deadline_seconds）+ `AgentRunBudgetExceeded`；harness 预算探针 | 代码比对；端到端探针（极小预算 → `degraded` + `step_limit`，无副作用） | 代码一致；**端到端停机降级实测通过** | 一致，保留 |
-| 12 | 持久化 Checkpoint、幂等键与 Execution Trace 支持断线恢复回放 | `checkpointing.py`（PostgresSaver）、`agent_runs.py`（claim 指纹幂等）、`tracing.py`；端到端探针 | 断线恢复三步探针：断开 → `running` 状态复用 → 完成后重放 `succeeded` 响应；指纹冲突 409 | **端到端实测通过**（runtime-probes 报告） | 一致，保留；边界：进程内预算计数不跨进程重启（Codex 边界第 1 条），不得夸大为"跨进程恢复" |
+| 11 | 五维预算边界（步骤/模型调用/工具调用/Token/截止时间）超限自动停机降级 | `agent_runtime.py` `AgentRunBudget`（max_steps/max_model_calls/max_tool_calls/token_budget/deadline_seconds）+ `AgentRunBudgetExceeded`；运行时 probe 服务（AGENT_MAX_STEPS=1 等） | 代码比对；v4 runtime dev/holdout 预算用例（极小预算 → `degraded` + `step_limit`，0 工具调用） | 代码一致；**runtime 预算用例全通过（7/7 holdout，无工具调用）** | 一致，保留 |
+| 12 | 持久化 Checkpoint、幂等键与 Execution Trace 支持断线恢复回放 | `checkpointing.py`（PostgresSaver）、`agent_runs.py`（claim 指纹幂等）、`tracing.py`；端到端探针；v4 runtime holdout 恢复用例 | 断线恢复三步探针：断开 → `running` 状态复用 → 完成后重放 `succeeded` 响应；指纹冲突 409；恢复幂等/SSE 重连/权限刷新用例 | **端到端实测通过**；runtime holdout 恢复类用例全部通过（幂等、SSE 重连、权限刷新） | 一致，保留；边界：进程内预算计数不跨进程重启，不得夸大为"跨进程恢复" |
 | 13 | CI 双版本回归后部署腾讯云 VPS | `.github/workflows/ci.yml`（matrix `["3.11","3.12"]`）+ `deploy-vps.yml`；VPS `.deployed-release` = `a9a1c05d` | 读 workflow 文件；SSH 读标记 | 一致 | 一致，保留 |
 | 14 | 910 订单 / 4 渠道 / 179 天※ | 线上与本地 `/demo/overview`（登录后）；`db/seeds/002_richer_demo_dataset.sql`（900 DEMO-ORD + 001 的 10 单） | `curl -X POST /auth/login` + `curl /demo/overview` | **本地与线上均返回 order_count=910 / channel_count=4 / coverage_days=179**（2026-08-28 实测） | 一致；**注意：v23 文本中并无此数字**（docx/PDF 均无 `910`、`179` 字样），出处为演示脚本/面试口径，本轮已完成线上数据修复（见第三节） |
+
+### 项目一 v4 追加溯源（2026-08-30，冻结后正式消费）
+
+| # | 简历声称 | 证据来源 | 验证方式 | 本轮核验结果 | 决策 |
+|---|---|---|---|---|---|
+| 15 | 业务 holdout 7/15（46.67%） | `evaluation/reports/agent-live-development-20260829T201507Z.json`（`metrics.case_pass_rate`）+ manifest `business_holdout` | 单次消费冻结用例；题面不变仅校正 v1 遗留标注后正式运行 | 7/15；8 失败分类：5 技术元问题（耗时/Trace/Schema 归因等，系统无法回答）、2 坏题（无技能词汇）、1 空成功不稳定 | 一致，保留（v4 口径） |
+| 16 | Runtime development 22/30（73.33%） | `evaluation/reports/runtime-dev-final-20260830.json`（`summary.pass_rate`） | 运行时 runner 直连 VPS 主服务 + 预算 probe 服务 | 22/30；8 失败为文本婉拒被 general 状态机记为 succeeded（无泄露/无副作用） | 一致，保留（v4 口径） |
+| 17 | Runtime holdout 15/15（100%） | `evaluation/reports/runtime-holdout-final-v4-20260830.json`（`summary.pass_rate`） | 15 条 frozen 单次消费；预算→probe，恢复/注入/隔离→主服务 | 15/15；预算降级（0 工具）、恢复幂等、注入/默认拒绝/隔离拒绝全部验证 | 一致，保留（v4 口径） |
+| 18 | 数据集与报告 SHA 钉定 | `evaluation/final/release-manifest-v4.json`（dev `6c530458…`、holdout `d2c882c3…`，全部报告 sha256） | `python scripts/validate_final_evaluation.py` + `sha256sum` 对照 manifest | 全部一致，可复现 | 一致，保留 |
 
 ※ 标注 #7、#14 为任务清单要求核验、但 v23 简历文本中不存在的数字。若后续简历版本要写入，证据已备齐；写入时建议口径与上表一致。
 
