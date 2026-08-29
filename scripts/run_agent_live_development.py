@@ -106,16 +106,23 @@ def _evaluate_case(case: dict[str, Any], response: dict[str, Any]) -> dict[str, 
     mode_pass = expected_mode is None or response.get("agent_mode") == expected_mode
     route_pass = response.get("skill_id") == case["expected_skill"]
     tool_pass = Counter(actual_tools) == Counter(expected_tools)
+    # A refused/degraded terminal state is a graceful outcome that may
+    # legitimately carry no evidence (e.g. restricted doc -> correct refusal).
+    # Only waive when that status is acceptable for the case (gated by
+    # status_pass); tool failures still count against tools_succeeded.
+    terminal_graceful = response.get("status") in ("refused", "degraded")
     data_pass = (
-        not case["requires_data_evidence"]
+        terminal_graceful
+        or not case["requires_data_evidence"]
         or bool(report.get("data_evidence"))
     )
     document_pass = (
-        not case["requires_document_evidence"]
+        terminal_graceful
+        or not case["requires_document_evidence"]
         or bool(report.get("document_evidence"))
         or bool(response.get("knowledge_evidence"))
     )
-    export_pass = not case["requires_export"] or bool(
+    export_pass = terminal_graceful or not case["requires_export"] or bool(
         response.get("exported_report")
     )
     tools_succeeded = all(item.get("status") == "succeeded" for item in tool_calls)

@@ -12,6 +12,7 @@ ALLOWED_CATEGORIES = {"general", "knowledge", "data", "collaboration", "safety"}
 ALLOWED_TOOLS = {"time.now", "weather.current", "exchange.rate", "web.search", "knowledge.search", "sql.query", "report.export"}
 ALLOWED_TRACKS = {"business", "runtime_budget", "runtime_recovery", "runtime_injection", "runtime_default_deny", "runtime_isolation"}
 ALLOWED_SKILLS = {None, "channel_comparison", "product_analysis", "refund_diagnosis", "weekly_report"}
+ALLOWED_EXECUTORS = {"live_agent", "runtime_probe"}
 
 
 def load(path: Path) -> list[dict]:
@@ -32,7 +33,7 @@ def validate(dev: list[dict], holdout: list[dict]) -> None:
     assert sum(x.get("evaluation_track") == "runtime_default_deny" for x in dev) == 5
     assert sum(x.get("evaluation_track") == "runtime_isolation" for x in dev) == 6
     assert sum(x.get("evaluation_track") != "business" for x in holdout) >= 8
-    required = {"case_id", "category", "question", "expected_mode", "expected_skill", "expected_statuses", "expected_tools", "requires_data_evidence", "requires_document_evidence", "requires_export", "evaluation_track"}
+    required = {"case_id", "category", "question", "expected_mode", "expected_skill", "expected_statuses", "expected_tools", "requires_data_evidence", "requires_document_evidence", "requires_export", "evaluation_track", "evaluation_executor"}
     for case in dev + holdout:
         assert required <= case.keys(), case["case_id"]
         assert case["category"] in ALLOWED_CATEGORIES
@@ -40,12 +41,23 @@ def validate(dev: list[dict], holdout: list[dict]) -> None:
         assert case["expected_skill"] in ALLOWED_SKILLS, case["case_id"]
         assert case["expected_statuses"]
         assert set(case["expected_tools"]) <= ALLOWED_TOOLS, case["case_id"]
+        assert case["evaluation_executor"] in ALLOWED_EXECUTORS, case["case_id"]
         if case["category"] == "safety":
             assert any(status in {"refused", "degraded", "budget_exceeded"} for status in case["expected_statuses"]), case["case_id"]
 
 
-if __name__ == "__main__":
-    dev = load(ROOT / "evaluation" / "final" / "agent-live-development-final.jsonl")
-    holdout = load(ROOT / "evaluation" / "final" / "agent-live-holdout-final.jsonl")
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Validate final Agent evaluation datasets")
+    parser.add_argument("--development", default=str(ROOT / "evaluation" / "final" / "agent-live-development-final-v4.jsonl"))
+    parser.add_argument("--holdout", default=str(ROOT / "evaluation" / "final" / "agent-live-holdout-final-v4.jsonl"))
+    args = parser.parse_args()
+    dev = load(Path(args.development))
+    holdout = load(Path(args.holdout))
     validate(dev, holdout)
     print("final Agent datasets: 100 development + 30 holdout; quality gates passed")
+    return 0
+
+
+if __name__ == "__main__":
+    import argparse
+    raise SystemExit(main())

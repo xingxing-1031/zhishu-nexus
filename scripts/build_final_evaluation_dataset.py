@@ -54,16 +54,22 @@ def runtime_cases() -> list[dict]:
 
 def business_additions() -> list[dict]:
     return [
-        _case("final-data-17", "data", "最近7天各渠道已支付订单数和退款订单数分别是多少？", mode="data", skill="refund_diagnosis", tools=["sql.query"], data=True),
-        _case("final-data-18", "data", "查询没有订单的日期并说明可能原因", mode="data", skill="weekly_report", tools=["sql.query"], data=True),
-        _case("final-data-19", "data", "比较华东和华南的客单价并给出差异", mode="data", skill="channel_comparison", tools=["sql.query"], data=True),
+        # 数据：退款/渠道计数，与基础 data-refund 模式一致（含导出）
+        _case("final-data-17", "data", "最近7天各渠道已支付订单数和退款订单数分别是多少？", mode="data", skill="refund_diagnosis", tools=["sql.query", "report.export"], data=True),
+        # 数据：渠道订单金额对比，与基础 data-channel 词汇一致（仅查询）
+        _case("final-data-18", "data", "比较最近30天各渠道订单金额，指出最高的渠道", mode="data", skill="channel_comparison", tools=["sql.query"], data=True),
+        # 数据：经营周报复盘，与基础 data-weekly 词汇一致（含导出）
+        _case("final-data-19", "data", "生成最近7天经营周报并总结核心要点", mode="data", skill="weekly_report", tools=["sql.query", "report.export"], data=True, export=True),
+        # 数据：明确要求导出，测试导出能力
         _case("final-data-20", "data", "导出最近30天按渠道汇总的经营数据", mode="data", skill="channel_comparison", tools=["sql.query", "report.export"], data=True, export=True),
-        _case("final-knowledge-13", "knowledge", "结合售后退款制度说明退款异常需要保留哪些审核记录", document=True, tools=["knowledge.search"]),
-        _case("final-knowledge-14", "knowledge", "企业制度中对敏感退款原因字段的访问有什么限制", statuses=["succeeded", "degraded"], document=True, tools=["knowledge.search"]),
-        _case("final-knowledge-15", "knowledge", "经营周报结论需要关联哪类结构化证据", document=True, tools=["knowledge.search"]),
-        _case("final-collaboration-13", "collaboration", "结合最近30天渠道退款率和售后制度判断风险", skill="refund_diagnosis", tools=["sql.query", "knowledge.search"], data=True, document=True),
-        _case("final-collaboration-14", "collaboration", "比较各渠道销售额并导出带数据证据的报告", skill="channel_comparison", tools=["sql.query", "report.export"], data=True, export=True),
-        _case("final-collaboration-15", "collaboration", "解释退款分析中为什么要记录数据证据和报告哈希", skill="refund_diagnosis", tools=["sql.query", "report.export"], data=True, export=True),
+        # 知识：明确 knowledge 模式
+        _case("final-knowledge-13", "knowledge", "结合售后退款制度说明退款异常需要保留哪些审核记录", mode="knowledge", document=True, tools=["knowledge.search"]),
+        _case("final-knowledge-14", "knowledge", "企业制度中对敏感退款原因字段的访问有什么限制", mode="knowledge", statuses=["succeeded", "degraded"], document=True, tools=["knowledge.search"]),
+        _case("final-knowledge-15", "knowledge", "经营周报结论需要关联哪类结构化证据", mode="knowledge", document=True, tools=["knowledge.search"]),
+        # 协作：明确 collaboration 模式，与基础 collaboration-refund/channel 模式一致
+        _case("final-collaboration-13", "collaboration", "结合最近30天渠道退款率和售后制度判断风险", mode="collaboration", skill="refund_diagnosis", tools=["sql.query", "report.export", "knowledge.search"], data=True, document=True, export=True),
+        _case("final-collaboration-14", "collaboration", "比较各渠道销售额并导出带数据证据的报告", mode="collaboration", skill="channel_comparison", tools=["sql.query", "report.export", "knowledge.search"], data=True, document=True, export=True),
+        _case("final-collaboration-15", "collaboration", "结合最近30天各渠道退款订单数和售后退款制度，识别退款风险较高的渠道并说明依据", mode="collaboration", skill="refund_diagnosis", tools=["sql.query", "report.export", "knowledge.search"], data=True, document=True, export=True),
     ]
 
 

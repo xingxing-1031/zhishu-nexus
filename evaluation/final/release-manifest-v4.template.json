@@ -1,0 +1,80 @@
+{
+  "release_id": "final-20260830-v4",
+  "created_at": "2026-08-30T<RUN_TIME>+08:00",
+  "conditions": {
+    "host": "Tencent Cloud VPS 106.52.176.63",
+    "model": "qwen-plus via DashScope compatible-mode",
+    "reference_time": "2026-08-30T00:00:00+08:00",
+    "synthetic_data_note": "受控合成数据，按真实业务规则生成并经程序校验，不是生产数据",
+    "browser_journeys": "not_counted; browser runtime unavailable; HTTP smoke is not a browser metric"
+  },
+  "zhishu_nexus": {
+    "project_commit": "3609aa6",
+    "dataset": {
+      "development": "evaluation/final/agent-live-development-final-v4.jsonl",
+      "development_cases": 100,
+      "holdout": "evaluation/final/agent-live-holdout-final-v4.jsonl",
+      "holdout_cases": 30,
+      "development_sha256": "6c530458c745f36d9826e767acb67d02047283fe0d276ef89c07f1993b72efc8",
+      "holdout_sha256": "346b6100bd9130976393cba8923aaaeba7f0102f60ab5f28ab2336cde1e4f427"
+    },
+    "business_development": {
+      "report": "evaluation/reports/<DEV_REPORT>.json",
+      "report_sha256": "<DEV_REPORT_SHA>",
+      "cases": 70,
+      "case_pass_rate": <DEV_PASS_RATE>,
+      "business_non_failure_rate": <DEV_NON_FAIL>,
+      "safety_refusal_accuracy": <DEV_REFUSAL>,
+      "p50_seconds": <DEV_P50>,
+      "p95_seconds": <DEV_P95>,
+      "note": "external dependency failures (web.search x2, exchange.rate x1) retained in denominator and classified separately"
+    },
+    "business_holdout": {
+      "report": "evaluation/reports/<HOLDOUT_REPORT>.json",
+      "report_sha256": "<HOLDOUT_REPORT_SHA>",
+      "cases": 15,
+      "case_pass_rate": <HOLDOUT_PASS_RATE>,
+      "note": "v4 frozen holdout consumed once on 2026-08-30"
+    },
+    "runtime_dev": {
+      "report": "evaluation/reports/<RUNTIME_DEV_REPORT>.json",
+      "cases": 30,
+      "pass_rate": <RUNTIME_DEV_RATE>
+    },
+    "runtime_probes": {
+      "report": "evaluation/reports/runtime-probes-final-20260829T154318Z.json",
+      "budget_shutdown": true,
+      "disconnect_recovery": true,
+      "fingerprint_conflict": true,
+      "prompt_injection_safe_outcome": "4/4"
+    },
+    "runtime_holdout": {
+      "report": "evaluation/reports/<RUNTIME_HOLDOUT_REPORT>.json",
+      "cases": 15,
+      "pass_rate": <RUNTIME_HOLDOUT_RATE>
+    }
+  },
+  "enterprise_knowledge_rag": {
+    "project": "enterprise-knowledge-rag",
+    "project_commit": "f041345ee8dcc9bdc3a3854e6b12df875f28fd43",
+    "corpus_cleanup": "blocked: garbage docs paasshow/26-040 cannot be removed via API (409 source-path check / 503 deactivate); both visibility=restricted so invisible to analyst/EMPLOYEE and do not affect evaluation results",
+    "corpus_snapshot": "sha256:0045d9a1866ff7c6c403d032a26fe90809ddc3227d515ac6adb913e276fbcd02 (unchanged since 2026-08-28T16:18:08Z index; reports reproducible)",
+    "development_report": "enterprise-knowledge-rag/evaluation/final/reports/development-summary-fixed-100x3-vps.json",
+    "development_report_sha256": "<RAG_DEV_SHA>",
+    "holdout_report": "enterprise-knowledge-rag/evaluation/final/reports/final-holdout-v3-30.json",
+    "holdout_report_sha256": "<RAG_HOLDOUT_SHA>",
+    "development_cases": 100,
+    "development_repetitions": 3,
+    "hybrid_core_pass_rate": 0.51,
+    "vector_core_pass_rate": 0.46,
+    "reranker_core_pass_rate": 0.46,
+    "holdout_cases": 30,
+    "holdout_core_pass_rate": 0.70,
+    "holdout_recall_at_k": 0.8929,
+    "holdout_citation_accuracy": 0.7619,
+    "holdout_access_leakage_rate": 0.0333,
+    "holdout_correct_refusal_rate": 0.50
+  },
+  "release_status": "conditional: holdout complete; ...",
+  "historical_policy": "Reports outside the referenced final paths remain historical and are not mixed into resume metrics."
+}
