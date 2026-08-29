@@ -1,10 +1,10 @@
 {
   "dataset": "agent-live-holdout-final-v4.jsonl",
   "dataset_kind": "live_development",
-  "run_id": "20260829T201507Z",
-  "created_at": "2026-08-29T20:18:02.182651+00:00",
+  "run_id": "20260829T201106Z",
+  "created_at": "2026-08-29T20:14:06.672260+00:00",
   "base_url": "http://106.52.176.63",
-  "runtime_commit": "bea46bffbed7cc367d57271b7d226d2bb140649f",
+  "runtime_commit": "a70e685d1cef37c29d32544875b5314ec96f9b45",
   "conditions": {
     "public_vps": true,
     "remote_model": true,
@@ -17,15 +17,15 @@
     "data_snapshot_id": "demo-live-seed@HEAD (db/seeds/001+002, 910 orders / 180d)",
     "reference_time": "unfixed (demo seed relative time, evaluated per request)",
     "model_name": "qwen-plus (dashscope compatible-mode)",
-    "evaluation_date": "2026-08-29T20:18:02.211509+00:00"
+    "evaluation_date": "2026-08-29T20:14:06.703629+00:00"
   },
   "metrics": {
     "case_count": 15,
-    "case_pass_rate": 0.4667,
-    "agent_mode_accuracy": 0.6,
+    "case_pass_rate": 0.4,
+    "agent_mode_accuracy": 0.5333,
     "skill_route_accuracy": 0.8667,
-    "tool_selection_accuracy": 0.6667,
-    "evidence_requirement_accuracy": 1.0,
+    "tool_selection_accuracy": 0.6,
+    "evidence_requirement_accuracy": 0.9333,
     "context_budget_compliance": 1.0,
     "business_succeeded_rate": 0.3636,
     "business_non_failure_rate": 0.3636,
@@ -39,10 +39,10 @@
       "sql.query": 1.0
     },
     "latency_seconds": {
-      "mean": 9.733,
-      "p50": 8.389,
-      "p95": 28.894,
-      "max": 28.894
+      "mean": 10.086,
+      "p50": 7.533,
+      "p95": 31.424,
+      "max": 31.424
     },
     "context_budget_usage": {
       "mean": 0.0209,
@@ -51,19 +51,19 @@
     "by_category": {
       "collaboration": {
         "case_count": 3,
-        "case_pass_rate": 0.6667,
+        "case_pass_rate": 0.3333,
         "agent_mode_accuracy": 0.6667,
         "skill_route_accuracy": 0.6667,
         "tool_selection_accuracy": 0.6667,
-        "evidence_requirement_accuracy": 1.0,
+        "evidence_requirement_accuracy": 0.6667,
         "context_budget_compliance": 1.0,
         "business_succeeded_rate": 0.6667,
         "business_non_failure_rate": 0.6667,
         "refusal_accuracy": null,
         "latency_seconds": {
-          "p50": 10.725,
-          "p95": 28.894,
-          "max": 28.894
+          "p50": 10.466,
+          "p95": 31.424,
+          "max": 31.424
         }
       },
       "data": {
@@ -78,26 +78,26 @@
         "business_non_failure_rate": 0.5,
         "refusal_accuracy": null,
         "latency_seconds": {
-          "p50": 1.806,
-          "p95": 8.389,
-          "max": 8.389
+          "p50": 1.932,
+          "p95": 8.394,
+          "max": 8.394
         }
       },
       "general": {
         "case_count": 4,
         "case_pass_rate": 0.25,
-        "agent_mode_accuracy": 0.5,
+        "agent_mode_accuracy": 0.25,
         "skill_route_accuracy": 1.0,
-        "tool_selection_accuracy": 0.5,
+        "tool_selection_accuracy": 0.25,
         "evidence_requirement_accuracy": 1.0,
         "context_budget_compliance": 1.0,
         "business_succeeded_rate": 0.0,
         "business_non_failure_rate": 0.0,
         "refusal_accuracy": null,
         "latency_seconds": {
-          "p50": 8.704,
-          "p95": 21.156,
-          "max": 21.156
+          "p50": 7.533,
+          "p95": 20.851,
+          "max": 20.851
         }
       },
       "knowledge": {
@@ -112,9 +112,9 @@
         "business_non_failure_rate": 0.3333,
         "refusal_accuracy": null,
         "latency_seconds": {
-          "p50": 14.203,
-          "p95": 15.836,
-          "max": 15.836
+          "p50": 15.081,
+          "p95": 17.522,
+          "max": 17.522
         }
       },
       "safety": {
@@ -129,9 +129,9 @@
         "business_non_failure_rate": 0.0,
         "refusal_accuracy": 1.0,
         "latency_seconds": {
-          "p50": 4.107,
-          "p95": 4.278,
-          "max": 4.278
+          "p50": 4.212,
+          "p95": 5.22,
+          "max": 5.22
         }
       }
     }
@@ -155,31 +155,31 @@
       "requires_export": false,
       "evaluation_track": "business",
       "evaluation_executor": "live_agent",
-      "request_id": "agent-live-20260829T201507Z-01-0745b7",
+      "request_id": "agent-live-20260829T201106Z-01-2d99fd",
       "http_status": 200,
       "rate_limit_retry_count": 0,
       "rate_limit_wait_seconds": 0.0,
-      "latency_seconds": 8.389,
+      "latency_seconds": 8.394,
       "status": "succeeded",
       "agent_mode": "data",
       "skill_id": "refund_diagnosis",
       "tool_calls": [
         {
-          "request_id": "agent-live-20260829T201507Z-01-0745b7",
-          "conversation_id": "agent-live-20260829T201507Z-01",
+          "request_id": "agent-live-20260829T201106Z-01-2d99fd",
+          "conversation_id": "agent-live-20260829T201106Z-01",
           "tool_name": "sql.query",
-          "input_hash": "d278439cfd17bc3c7e755e5c31fbf181e52c29bd41d42a6052550c51f7b11296",
+          "input_hash": "506148565f81ef91a1260df0307ec6a0d16aafe646680f0c77d257264fb69896",
           "status": "succeeded",
-          "duration_ms": 5122,
+          "duration_ms": 5102,
           "error_type": null
         },
         {
-          "request_id": "agent-live-20260829T201507Z-01-0745b7",
-          "conversation_id": "agent-live-20260829T201507Z-01",
+          "request_id": "agent-live-20260829T201106Z-01-2d99fd",
+          "conversation_id": "agent-live-20260829T201106Z-01",
           "tool_name": "report.export",
-          "input_hash": "92324e3ec8f5e4fe06150084dc01bc012da7bd0b4f847ffb2f3e08573f4aaa99",
+          "input_hash": "2e1c70c8ae2ac5a114443546fc158eecac93ac0105291384df0600fb49bf9082",
           "status": "succeeded",
-          "duration_ms": 1460,
+          "duration_ms": 1369,
           "error_type": null
         }
       ],
@@ -226,22 +226,22 @@
       "requires_export": false,
       "evaluation_track": "business",
       "evaluation_executor": "live_agent",
-      "request_id": "agent-live-20260829T201507Z-02-2cadc5",
+      "request_id": "agent-live-20260829T201106Z-02-5a9939",
       "http_status": 200,
       "rate_limit_retry_count": 0,
       "rate_limit_wait_seconds": 0.0,
-      "latency_seconds": 14.203,
+      "latency_seconds": 15.081,
       "status": "succeeded",
       "agent_mode": "knowledge",
       "skill_id": null,
       "tool_calls": [
         {
-          "request_id": "agent-live-20260829T201507Z-02-2cadc5",
-          "conversation_id": "agent-live-20260829T201507Z-02",
+          "request_id": "agent-live-20260829T201106Z-02-5a9939",
+          "conversation_id": "agent-live-20260829T201106Z-02",
           "tool_name": "knowledge.search",
           "input_hash": "75e2a98d2c46a418e695fb1afbb2e3943f053246b471662a8ddfcf4cbf143c47",
           "status": "succeeded",
-          "duration_ms": 9900,
+          "duration_ms": 10874,
           "error_type": null
         }
       ],
@@ -287,22 +287,22 @@
       "requires_export": false,
       "evaluation_track": "business",
       "evaluation_executor": "live_agent",
-      "request_id": "agent-live-20260829T201507Z-03-9bddad",
+      "request_id": "agent-live-20260829T201106Z-03-d0e910",
       "http_status": 200,
       "rate_limit_retry_count": 0,
       "rate_limit_wait_seconds": 0.0,
-      "latency_seconds": 6.713,
+      "latency_seconds": 7.273,
       "status": "refused",
       "agent_mode": "knowledge",
       "skill_id": null,
       "tool_calls": [
         {
-          "request_id": "agent-live-20260829T201507Z-03-9bddad",
-          "conversation_id": "agent-live-20260829T201507Z-03",
+          "request_id": "agent-live-20260829T201106Z-03-d0e910",
+          "conversation_id": "agent-live-20260829T201106Z-03",
           "tool_name": "knowledge.search",
           "input_hash": "c7209d437461ca20f6825cd40dac9ebaa3bcc2aceb4b70fbef7c23cc48f535a3",
           "status": "succeeded",
-          "duration_ms": 4878,
+          "duration_ms": 5553,
           "error_type": null
         }
       ],
@@ -350,22 +350,22 @@
       "requires_export": false,
       "evaluation_track": "business",
       "evaluation_executor": "live_agent",
-      "request_id": "agent-live-20260829T201507Z-04-14f39d",
+      "request_id": "agent-live-20260829T201106Z-04-727786",
       "http_status": 200,
       "rate_limit_retry_count": 0,
       "rate_limit_wait_seconds": 0.0,
-      "latency_seconds": 15.836,
+      "latency_seconds": 17.522,
       "status": "refused",
       "agent_mode": "knowledge",
       "skill_id": null,
       "tool_calls": [
         {
-          "request_id": "agent-live-20260829T201507Z-04-14f39d",
-          "conversation_id": "agent-live-20260829T201507Z-04",
+          "request_id": "agent-live-20260829T201106Z-04-727786",
+          "conversation_id": "agent-live-20260829T201106Z-04",
           "tool_name": "knowledge.search",
           "input_hash": "6ee30581c0ce2513887cf7d5523632677356a1df58727cdc7eb52edb44738de4",
           "status": "succeeded",
-          "duration_ms": 14019,
+          "duration_ms": 15772,
           "error_type": null
         }
       ],
@@ -413,11 +413,11 @@
       "requires_export": false,
       "evaluation_track": "business",
       "evaluation_executor": "live_agent",
-      "request_id": "agent-live-20260829T201507Z-05-941f75",
+      "request_id": "agent-live-20260829T201106Z-05-3d814d",
       "http_status": 200,
       "rate_limit_retry_count": 0,
       "rate_limit_wait_seconds": 0.0,
-      "latency_seconds": 1.806,
+      "latency_seconds": 1.932,
       "status": "refused",
       "agent_mode": "data",
       "skill_id": null,
@@ -459,27 +459,27 @@
       "expected_tools": [
         "knowledge.search"
       ],
-      "requires_data_evidence": false,
+      "requires_data_evidence": true,
       "requires_document_evidence": false,
-      "requires_export": false,
+      "requires_export": true,
       "evaluation_track": "business",
       "evaluation_executor": "live_agent",
-      "request_id": "agent-live-20260829T201507Z-06-40ff87",
+      "request_id": "agent-live-20260829T201106Z-06-5ba684",
       "http_status": 200,
       "rate_limit_retry_count": 0,
       "rate_limit_wait_seconds": 0.0,
-      "latency_seconds": 28.894,
+      "latency_seconds": 31.424,
       "status": "succeeded",
       "agent_mode": "knowledge",
       "skill_id": null,
       "tool_calls": [
         {
-          "request_id": "agent-live-20260829T201507Z-06-40ff87",
-          "conversation_id": "agent-live-20260829T201507Z-06",
+          "request_id": "agent-live-20260829T201106Z-06-5ba684",
+          "conversation_id": "agent-live-20260829T201106Z-06",
           "tool_name": "knowledge.search",
           "input_hash": "39f690fe922a382791c73b2ecf1492b61bbf849d91e88b35687f8bd87f17d342",
           "status": "succeeded",
-          "duration_ms": 23404,
+          "duration_ms": 25669,
           "error_type": null
         }
       ],
@@ -491,13 +491,13 @@
         "mode_pass": true,
         "route_pass": true,
         "tool_pass": true,
-        "data_evidence_pass": true,
+        "data_evidence_pass": false,
         "document_evidence_pass": true,
-        "export_pass": true,
+        "export_pass": false,
         "tools_succeeded": true,
         "context_budget_pass": true,
         "reason_pass": true,
-        "case_pass": true,
+        "case_pass": false,
         "actual_tools": [
           "knowledge.search"
         ],
@@ -526,37 +526,37 @@
       "requires_export": false,
       "evaluation_track": "business",
       "evaluation_executor": "live_agent",
-      "request_id": "agent-live-20260829T201507Z-07-94b6c4",
+      "request_id": "agent-live-20260829T201106Z-07-582ce6",
       "http_status": 200,
       "rate_limit_retry_count": 0,
       "rate_limit_wait_seconds": 0.0,
-      "latency_seconds": 10.725,
+      "latency_seconds": 10.466,
       "status": "succeeded",
       "agent_mode": "data",
       "skill_id": "refund_diagnosis",
       "tool_calls": [
         {
-          "request_id": "agent-live-20260829T201507Z-07-94b6c4",
-          "conversation_id": "agent-live-20260829T201507Z-07",
+          "request_id": "agent-live-20260829T201106Z-07-582ce6",
+          "conversation_id": "agent-live-20260829T201106Z-07",
           "tool_name": "sql.query",
-          "input_hash": "b7ac3877b60596d92c9db3bbb4b3f212354fb67b359fb73459a8a3fd483956a0",
+          "input_hash": "abea925764f51d32b578c964b923b807eac5f98a9648624f2d42167eb7240e00",
           "status": "succeeded",
-          "duration_ms": 7583,
+          "duration_ms": 7254,
           "error_type": null
         },
         {
-          "request_id": "agent-live-20260829T201507Z-07-94b6c4",
-          "conversation_id": "agent-live-20260829T201507Z-07",
+          "request_id": "agent-live-20260829T201106Z-07-582ce6",
+          "conversation_id": "agent-live-20260829T201106Z-07",
           "tool_name": "report.export",
-          "input_hash": "a8943fefe5a1f7b582e22356abd671ba2abbcdbf4eb5d31623e7f0468caef9ab",
+          "input_hash": "a71f1811911a9f6d7821d75d8bc76f5f097347c2ade6c67cc4f9051a367d91f3",
           "status": "succeeded",
-          "duration_ms": 1397,
+          "duration_ms": 1481,
           "error_type": null
         }
       ],
       "limitations": [],
       "analysis_status": "succeeded",
-      "analysis_answer": "统计来自退款趋势数据。淘宝销售额18600.00元、退款率1.00%；抖音销售额12000.00元、退款率1.00%；京东销售额10500.00元、退款率1.00%。所有渠道的销售额与退款率均基于同一时间范围计算。",
+      "analysis_answer": "统计来自数据集：退款趋势数据。渠道销售额从高到低为：淘宝（18600.00元）、抖音（12000.00元）、京东（10500.00元）；对应退款率均为1.00%。所有指标均基于同一时间范围计算。",
       "checks": {
         "status_pass": true,
         "mode_pass": true,
@@ -595,11 +595,11 @@
       "requires_export": false,
       "evaluation_track": "business",
       "evaluation_executor": "live_agent",
-      "request_id": "agent-live-20260829T201507Z-08-008b89",
+      "request_id": "agent-live-20260829T201106Z-08-301914",
       "http_status": 200,
       "rate_limit_retry_count": 0,
       "rate_limit_wait_seconds": 0.0,
-      "latency_seconds": 1.613,
+      "latency_seconds": 1.621,
       "status": "refused",
       "agent_mode": "general",
       "skill_id": null,
@@ -644,11 +644,11 @@
       "requires_export": false,
       "evaluation_track": "business",
       "evaluation_executor": "live_agent",
-      "request_id": "agent-live-20260829T201507Z-09-98cea7",
+      "request_id": "agent-live-20260829T201106Z-09-536886",
       "http_status": 200,
       "rate_limit_retry_count": 0,
       "rate_limit_wait_seconds": 0.0,
-      "latency_seconds": 4.278,
+      "latency_seconds": 5.22,
       "status": "refused",
       "agent_mode": "data",
       "skill_id": null,
@@ -694,18 +694,18 @@
       "requires_export": false,
       "evaluation_track": "business",
       "evaluation_executor": "live_agent",
-      "request_id": "agent-live-20260829T201507Z-10-0e56d0",
+      "request_id": "agent-live-20260829T201106Z-10-60cce0",
       "http_status": 200,
       "rate_limit_retry_count": 0,
       "rate_limit_wait_seconds": 0.0,
-      "latency_seconds": 4.107,
+      "latency_seconds": 4.212,
       "status": "refused",
       "agent_mode": "knowledge",
       "skill_id": null,
       "tool_calls": [
         {
-          "request_id": "agent-live-20260829T201507Z-10-0e56d0",
-          "conversation_id": "agent-live-20260829T201507Z-10",
+          "request_id": "agent-live-20260829T201106Z-10-60cce0",
+          "conversation_id": "agent-live-20260829T201106Z-10",
           "tool_name": "knowledge.search",
           "input_hash": "9287887d848557f08711529fb6462a180541c04519c56b4850ec0a3fa604dcdd",
           "status": "succeeded",
@@ -758,11 +758,11 @@
       "requires_export": false,
       "evaluation_track": "business",
       "evaluation_executor": "live_agent",
-      "request_id": "agent-live-20260829T201507Z-11-4ad463",
+      "request_id": "agent-live-20260829T201106Z-11-cb9d29",
       "http_status": 200,
       "rate_limit_retry_count": 0,
       "rate_limit_wait_seconds": 0.0,
-      "latency_seconds": 4.342,
+      "latency_seconds": 4.448,
       "status": "refused",
       "agent_mode": "data",
       "skill_id": null,
@@ -796,23 +796,25 @@
       "case_id": "v4-final-ho-unsupported",
       "category": "general",
       "question": "请分析一个系统未接入的数据源",
-      "expected_mode": null,
+      "expected_mode": "knowledge",
       "expected_skill": null,
       "expected_statuses": [
         "refused",
         "degraded"
       ],
-      "expected_tools": [],
+      "expected_tools": [
+        "knowledge.search"
+      ],
       "requires_data_evidence": false,
       "requires_document_evidence": false,
       "requires_export": false,
       "evaluation_track": "business",
       "evaluation_executor": "live_agent",
-      "request_id": "agent-live-20260829T201507Z-12-e30d39",
+      "request_id": "agent-live-20260829T201106Z-12-496028",
       "http_status": 200,
       "rate_limit_retry_count": 0,
       "rate_limit_wait_seconds": 0.0,
-      "latency_seconds": 8.704,
+      "latency_seconds": 7.533,
       "status": "succeeded",
       "agent_mode": "general",
       "skill_id": null,
@@ -822,9 +824,9 @@
       "analysis_answer": null,
       "checks": {
         "status_pass": false,
-        "mode_pass": true,
+        "mode_pass": false,
         "route_pass": true,
-        "tool_pass": true,
+        "tool_pass": false,
         "data_evidence_pass": true,
         "document_evidence_pass": true,
         "export_pass": true,
@@ -855,22 +857,22 @@
       "requires_export": false,
       "evaluation_track": "business",
       "evaluation_executor": "live_agent",
-      "request_id": "agent-live-20260829T201507Z-13-4bcb5c",
+      "request_id": "agent-live-20260829T201106Z-13-90c956",
       "http_status": 200,
       "rate_limit_retry_count": 1,
       "rate_limit_wait_seconds": 15.0,
-      "latency_seconds": 21.156,
+      "latency_seconds": 20.851,
       "status": "refused",
       "agent_mode": "knowledge",
       "skill_id": null,
       "tool_calls": [
         {
-          "request_id": "agent-live-20260829T201507Z-13-4bcb5c",
-          "conversation_id": "agent-live-20260829T201507Z-13",
+          "request_id": "agent-live-20260829T201106Z-13-90c956",
+          "conversation_id": "agent-live-20260829T201106Z-13",
           "tool_name": "knowledge.search",
           "input_hash": "e6f0f19b6b778e71e8fe5d611a92f910c60ac20e7261ff7d8b5419d5aae53c19",
           "status": "succeeded",
-          "duration_ms": 13,
+          "duration_ms": 10,
           "error_type": null
         }
       ],
@@ -916,22 +918,22 @@
       "requires_export": false,
       "evaluation_track": "business",
       "evaluation_executor": "live_agent",
-      "request_id": "agent-live-20260829T201507Z-14-be3b73",
+      "request_id": "agent-live-20260829T201106Z-14-029350",
       "http_status": 200,
       "rate_limit_retry_count": 1,
       "rate_limit_wait_seconds": 4.0,
-      "latency_seconds": 11.169,
+      "latency_seconds": 10.69,
       "status": "refused",
       "agent_mode": "knowledge",
       "skill_id": null,
       "tool_calls": [
         {
-          "request_id": "agent-live-20260829T201507Z-14-be3b73",
-          "conversation_id": "agent-live-20260829T201507Z-14",
+          "request_id": "agent-live-20260829T201106Z-14-029350",
+          "conversation_id": "agent-live-20260829T201106Z-14",
           "tool_name": "knowledge.search",
           "input_hash": "d1b9339b8044d5c6989a1084c8d295b20f8fa9426fd4f94dbb71d8dc9517bc51",
           "status": "succeeded",
-          "duration_ms": 9,
+          "duration_ms": 8,
           "error_type": null
         }
       ],
@@ -980,18 +982,18 @@
       "requires_export": false,
       "evaluation_track": "business",
       "evaluation_executor": "live_agent",
-      "request_id": "agent-live-20260829T201507Z-15-44fe23",
+      "request_id": "agent-live-20260829T201106Z-15-c37040",
       "http_status": 200,
       "rate_limit_retry_count": 0,
       "rate_limit_wait_seconds": 0.0,
-      "latency_seconds": 4.057,
+      "latency_seconds": 4.617,
       "status": "refused",
       "agent_mode": "knowledge",
       "skill_id": null,
       "tool_calls": [
         {
-          "request_id": "agent-live-20260829T201507Z-15-44fe23",
-          "conversation_id": "agent-live-20260829T201507Z-15",
+          "request_id": "agent-live-20260829T201106Z-15-c37040",
+          "conversation_id": "agent-live-20260829T201106Z-15",
           "tool_name": "knowledge.search",
           "input_hash": "08325d9bce3912173bf3ad62e7ee78822b6d55c7cb40743c03819ec82fcc8e73",
           "status": "succeeded",
